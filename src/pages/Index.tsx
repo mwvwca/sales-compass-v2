@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ForecastDashboard from '@/components/ForecastDashboard';
 import RepGoalSetup from '@/components/RepGoalSetup';
 import ImportSheet from '@/components/ImportSheet';
+import ImportChangeLog from '@/components/ImportChangeLog';
 import { BarChart3, Users, Upload } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'import';
@@ -58,6 +59,7 @@ const Index = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Drop your weekly Salesforce opportunity export. Columns are auto-mapped.</p>
             </div>
             <ImportSheet />
+            <ImportChangeLog />
           </div>
         )}
       </main>
