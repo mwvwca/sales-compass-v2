@@ -1,16 +1,44 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
-import { Upload, Download, CheckCircle2, AlertCircle, ArrowDown, Sparkles } from 'lucide-react';
+import { Upload, Download, CheckCircle2, AlertCircle, ArrowDown, Sparkles, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { transformOutputToForecast, createForecastWorkbook, type ForecastRow } from '@/lib/transformSalesforce';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import ImportReview from './ImportReview';
+import type { Opportunity } from '@/types/forecast';
+
+function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opportunity[] {
+  const importDate = new Date().toISOString();
+  return rows.map((row, i) => {
+    const rawDate = row["Close Date"] || '';
+    let closeDate = '';
+    if (rawDate) {
+      const parsed = new Date(rawDate);
+      closeDate = isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
+    }
+    const probStr = row.Probability?.replace('%', '') || '0';
+    return {
+      id: row["Opportunity ID"] || `import-${Date.now()}-${i}`,
+      name: row["Opportunity Name"] || 'Unknown',
+      repId: '',
+      repName: row["Opportunity Owner"] || 'Unassigned',
+      amount: parseFloat(row.Amount?.replace(/[^0-9.-]/g, '') || '0') || 0,
+      closeDate,
+      stage: row.Stage || '',
+      classification: row.Stage?.toLowerCase().trim() === 'closed won' ? 'closed_won' as const : 'unclassified' as const,
+      probability: parseFloat(probStr) || 0,
+      importDate,
+    };
+  });
+}
 
 const SalesDataSync = () => {
   const [fileName, setFileName] = useState<string | null>(null);
   const [forecastData, setForecastData] = useState<ForecastRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(1);
+  const [showReview, setShowReview] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -61,7 +89,39 @@ const SalesDataSync = () => {
     setVersion((v) => v + 1);
   };
 
+  const handleSendToImport = () => {
+    setShowReview(true);
+  };
+
+  const importOpps = useMemo(() => {
+    if (!forecastData || !fileName) return [];
+    return forecastRowsToOpportunities(forecastData, fileName);
+  }, [forecastData, fileName]);
+
   const isReady = !!forecastData;
+
+  if (showReview && forecastData && fileName) {
+    return (
+      <div>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold">SFDC Data Sync</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Review and import converted opportunities
+          </p>
+        </div>
+        <ImportReview
+          incoming={importOpps}
+          fileName={`Converted: ${fileName}`}
+          onDone={() => {
+            setShowReview(false);
+            setForecastData(null);
+            setFileName(null);
+          }}
+          onCancel={() => setShowReview(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -140,14 +200,25 @@ const SalesDataSync = () => {
                 <p className="mt-1 text-xs text-muted-foreground">
                   Version <span className="font-medium text-foreground">v{version}</span> • timestamped
                 </p>
-                <Button
-                  onClick={handleDownload}
-                  size="sm"
-                  className="mt-4 gap-1.5"
-                >
-                  <ArrowDown className="h-3 w-3" />
-                  Download Forecast
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    onClick={handleDownload}
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                  >
+                    <ArrowDown className="h-3 w-3" />
+                    Download
+                  </Button>
+                  <Button
+                    onClick={handleSendToImport}
+                    size="sm"
+                    className="gap-1.5"
+                  >
+                    <Send className="h-3 w-3" />
+                    Send to Import
+                  </Button>
+                </div>
               </>
             ) : (
               <p className="mt-1 text-xs text-muted-foreground">Upload a file to get started</p>
