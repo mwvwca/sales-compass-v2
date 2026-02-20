@@ -3,6 +3,7 @@ import ForecastDashboard from '@/components/ForecastDashboard';
 import RepGoalSetup from '@/components/RepGoalSetup';
 import ImportSheet from '@/components/ImportSheet';
 import ImportChangeLog from '@/components/ImportChangeLog';
+import DataBackup from '@/components/DataBackup';
 import { BarChart3, Users, Upload } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'import';
@@ -22,6 +23,7 @@ const Index = () => {
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-semibold tracking-tight">FORECAST</h1>
           <span className="text-xs text-muted-foreground font-mono">offline</span>
+          <DataBackup />
         </div>
         <nav className="flex gap-0.5 bg-secondary rounded-md p-0.5">
           {tabs.map(t => (
