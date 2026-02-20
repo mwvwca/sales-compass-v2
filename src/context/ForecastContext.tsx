@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { Rep, Opportunity, ImportRecord } from '@/types/forecast';
+import type { Rep, Opportunity, ImportRecord, ChangeLogEntry } from '@/types/forecast';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
   opportunities: 'forecast_opportunities',
   imports: 'forecast_imports',
+  changelog: 'forecast_changelog',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -24,6 +25,7 @@ interface ForecastState {
   reps: Rep[];
   opportunities: Opportunity[];
   imports: ImportRecord[];
+  changelog: ChangeLogEntry[];
   loading: boolean;
 }
 
@@ -36,6 +38,7 @@ interface ForecastContextValue extends ForecastState {
   updateOpportunityAmount: (id: string, amount: number) => void;
   updateOpportunity: (id: string, updates: Partial<Omit<Opportunity, 'id'>>) => void;
   deleteOpportunity: (id: string) => void;
+  clearChangelog: () => void;
 }
 
 const ForecastContext = createContext<ForecastContextValue | null>(null);
@@ -45,15 +48,16 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     reps: loadFromStorage(STORAGE_KEYS.reps, []),
     opportunities: loadFromStorage(STORAGE_KEYS.opportunities, []),
     imports: loadFromStorage(STORAGE_KEYS.imports, []),
+    changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
     loading: false,
   });
 
-  // Persist to localStorage on every state change
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.reps, state.reps);
     saveToStorage(STORAGE_KEYS.opportunities, state.opportunities);
     saveToStorage(STORAGE_KEYS.imports, state.imports);
-  }, [state.reps, state.opportunities, state.imports]);
+    saveToStorage(STORAGE_KEYS.changelog, state.changelog);
+  }, [state.reps, state.opportunities, state.imports, state.changelog]);
 
   const addRep = useCallback((rep: Rep) => {
     setState(s => ({ ...s, reps: [...s.reps, rep] }));
@@ -74,16 +78,52 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
     setState(s => {
       const existingMap = new Map(s.opportunities.map(o => [o.id, o]));
+      const newChanges: ChangeLogEntry[] = [];
+
       const merged = opps.map(o => {
         const existing = existingMap.get(o.id);
         if (existing) {
+          // Log close date changes
+          if (existing.closeDate !== o.closeDate) {
+            newChanges.push({
+              id: crypto.randomUUID(),
+              importDate,
+              fileName,
+              opportunityId: o.id,
+              opportunityName: o.name,
+              repName: o.repName,
+              field: 'closeDate',
+              oldValue: existing.closeDate || '(empty)',
+              newValue: o.closeDate || '(empty)',
+            });
+          }
+          // Log amount changes
+          if (existing.amount !== o.amount) {
+            newChanges.push({
+              id: crypto.randomUUID(),
+              importDate,
+              fileName,
+              opportunityId: o.id,
+              opportunityName: o.name,
+              repName: o.repName,
+              field: 'amount',
+              oldValue: String(existing.amount),
+              newValue: String(o.amount),
+            });
+          }
           return { ...o, classification: existing.classification, previousClassification: existing.previousClassification, movedAt: existing.movedAt };
         }
         return o;
       });
+
       const importedIds = new Set(opps.map(o => o.id));
       const kept = s.opportunities.filter(o => !importedIds.has(o.id));
-      return { ...s, opportunities: [...kept, ...merged], imports: [...s.imports, record] };
+      return {
+        ...s,
+        opportunities: [...kept, ...merged],
+        imports: [...s.imports, record],
+        changelog: [...s.changelog, ...newChanges],
+      };
     });
   }, []);
 
@@ -111,8 +151,12 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, opportunities: s.opportunities.filter(o => o.id !== id) }));
   }, []);
 
+  const clearChangelog = useCallback(() => {
+    setState(s => ({ ...s, changelog: [] }));
+  }, []);
+
   return (
-    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity }}>
+    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, clearChangelog }}>
       {children}
     </ForecastContext.Provider>
   );

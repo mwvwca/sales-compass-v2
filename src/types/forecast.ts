@@ -26,6 +26,18 @@ export interface ImportRecord {
   opportunityCount: number;
 }
 
+export interface ChangeLogEntry {
+  id: string;
+  importDate: string;
+  fileName: string;
+  opportunityId: string;
+  opportunityName: string;
+  repName: string;
+  field: 'closeDate' | 'amount';
+  oldValue: string;
+  newValue: string;
+}
+
 export type Quarter = `${number}-Q${1 | 2 | 3 | 4}`;
 
 export function getQuarter(date: string): Quarter {
