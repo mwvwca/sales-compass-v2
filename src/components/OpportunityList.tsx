@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
-import { getMonthKey, getMonthLabel, getQuarterMonths, type Quarter } from '@/types/forecast';
+import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
 import { ArrowRightLeft, Check, X, Pencil, Search } from 'lucide-react';
 
 interface Props {
@@ -29,12 +29,22 @@ const classificationFilters: { key: Classification; label: string }[] = [
 export default function OpportunityList({ opportunities, quarter }: Props) {
   const { classifyOpportunity, updateOpportunity } = useForecast();
   const [selectedMonth, setSelectedMonth] = useState<string | 'all'>('all');
+  const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
 
   const months = getQuarterMonths(quarter);
+  const weeks: WeekRange[] = useMemo(() => {
+    if (selectedMonth === 'all') return [];
+    return getWeeksInMonth(selectedMonth);
+  }, [selectedMonth]);
+
+  const handleMonthChange = (m: string | 'all') => {
+    setSelectedMonth(m);
+    setSelectedWeek('all');
+  };
 
   const toggleFilter = (cls: Classification) => {
     setActiveFilters(prev => {
@@ -49,15 +59,25 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
     ? opportunities
     : opportunities.filter(o => getMonthKey(o.closeDate) === selectedMonth);
 
+  const weekFiltered = useMemo(() => {
+    if (selectedWeek === 'all' || weeks.length === 0) return monthFiltered;
+    const week = weeks[selectedWeek];
+    if (!week) return monthFiltered;
+    return monthFiltered.filter(o => {
+      const d = new Date(o.closeDate);
+      return d >= week.start && d <= week.end;
+    });
+  }, [monthFiltered, selectedWeek, weeks]);
+
   const searchFiltered = useMemo(() => {
-    if (!searchQuery.trim()) return monthFiltered;
+    if (!searchQuery.trim()) return weekFiltered;
     const q = searchQuery.toLowerCase();
-    return monthFiltered.filter(o =>
+    return weekFiltered.filter(o =>
       o.name.toLowerCase().includes(q) ||
       o.repName.toLowerCase().includes(q) ||
       o.stage.toLowerCase().includes(q)
     );
-  }, [monthFiltered, searchQuery]);
+  }, [weekFiltered, searchQuery]);
 
   const filtered = searchFiltered.filter(o => activeFilters.has(o.classification));
 
@@ -134,7 +154,7 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
           </div>
           <div className="flex gap-1 bg-secondary rounded-md p-0.5">
             <button
-              onClick={() => setSelectedMonth('all')}
+              onClick={() => handleMonthChange('all')}
               className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedMonth === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
             >
               All
@@ -142,13 +162,33 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
             {months.map(m => (
               <button
                 key={m}
-                onClick={() => setSelectedMonth(m)}
+                onClick={() => handleMonthChange(m)}
                 className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedMonth === m ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 {getMonthLabel(m)}
               </button>
             ))}
           </div>
+          {selectedMonth !== 'all' && weeks.length > 0 && (
+            <div className="flex gap-1 bg-secondary rounded-md p-0.5">
+              <button
+                onClick={() => setSelectedWeek('all')}
+                className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedWeek === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                All
+              </button>
+              {weeks.map((w, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedWeek(i)}
+                  className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedWeek === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
+                  title={`${w.start.toLocaleDateString()} – ${w.end.toLocaleDateString()}`}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {classificationFilters.map(f => {
