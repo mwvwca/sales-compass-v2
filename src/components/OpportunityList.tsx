@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, type Quarter } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search } from 'lucide-react';
 
 interface Props {
   opportunities: Opportunity[];
@@ -30,6 +30,7 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
   const { classifyOpportunity, updateOpportunity } = useForecast();
   const [selectedMonth, setSelectedMonth] = useState<string | 'all'>('all');
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
+  const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
 
@@ -48,7 +49,17 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
     ? opportunities
     : opportunities.filter(o => getMonthKey(o.closeDate) === selectedMonth);
 
-  const filtered = monthFiltered.filter(o => activeFilters.has(o.classification));
+  const searchFiltered = useMemo(() => {
+    if (!searchQuery.trim()) return monthFiltered;
+    const q = searchQuery.toLowerCase();
+    return monthFiltered.filter(o =>
+      o.name.toLowerCase().includes(q) ||
+      o.repName.toLowerCase().includes(q) ||
+      o.stage.toLowerCase().includes(q)
+    );
+  }, [monthFiltered, searchQuery]);
+
+  const filtered = searchFiltered.filter(o => activeFilters.has(o.classification));
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -112,6 +123,15 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Opportunities ({filtered.length})
           </h3>
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search..."
+              className="bg-secondary border border-border rounded px-2 pl-6 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-44"
+            />
+          </div>
           <div className="flex gap-1 bg-secondary rounded-md p-0.5">
             <button
               onClick={() => setSelectedMonth('all')}
