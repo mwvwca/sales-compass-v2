@@ -39,6 +39,7 @@ interface ForecastContextValue extends ForecastState {
   updateOpportunity: (id: string, updates: Partial<Omit<Opportunity, 'id'>>) => void;
   deleteOpportunity: (id: string) => void;
   clearChangelog: () => void;
+  restoreFromBackup: (data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[] }) => void;
 }
 
 const ForecastContext = createContext<ForecastContextValue | null>(null);
@@ -155,8 +156,12 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, changelog: [] }));
   }, []);
 
+  const restoreFromBackup = useCallback((data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[] }) => {
+    setState(s => ({ ...s, reps: data.reps, opportunities: data.opportunities, imports: data.imports, changelog: data.changelog }));
+  }, []);
+
   return (
-    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, clearChangelog }}>
+    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, clearChangelog, restoreFromBackup }}>
       {children}
     </ForecastContext.Provider>
   );
