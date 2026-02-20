@@ -4,9 +4,10 @@ import RepGoalSetup from '@/components/RepGoalSetup';
 import ImportSheet from '@/components/ImportSheet';
 import ImportChangeLog from '@/components/ImportChangeLog';
 import DataBackup from '@/components/DataBackup';
-import { BarChart3, Users, Upload } from 'lucide-react';
+import SalesDataSync from '@/components/SalesDataSync';
+import { BarChart3, Users, Upload, Settings } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import';
+type Tab = 'forecast' | 'goals' | 'import' | 'settings';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
@@ -15,6 +16,7 @@ const Index = () => {
     { id: 'forecast', label: 'Forecast', icon: <BarChart3 size={14} /> },
     { id: 'goals', label: 'Goals', icon: <Users size={14} /> },
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
+    { id: 'settings', label: 'Settings', icon: <Settings size={14} /> },
   ];
 
   return (
@@ -64,6 +66,7 @@ const Index = () => {
             <ImportChangeLog />
           </div>
         )}
+        {tab === 'settings' && <SalesDataSync />}
       </main>
     </div>
   );
