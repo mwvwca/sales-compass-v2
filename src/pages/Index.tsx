@@ -16,7 +16,7 @@ const Index = () => {
     { id: 'forecast', label: 'Forecast', icon: <BarChart3 size={14} /> },
     { id: 'goals', label: 'Goals', icon: <Users size={14} /> },
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
-    { id: 'settings', label: 'Settings', icon: <Settings size={14} /> },
+    { id: 'settings', label: 'Convert', icon: <Settings size={14} /> },
   ];
 
   return (
