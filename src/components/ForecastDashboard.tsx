@@ -112,7 +112,7 @@ export default function ForecastDashboard() {
       <div className="grid grid-cols-6 gap-3">
         {[
           { label: 'Quarterly Goal', value: fmt(totalGoal), sub: null },
-          { label: 'Total Pipe', value: fmt(totalCommit + totalUpside + totalClosedWon), sub: pct(totalCommit + totalUpside + totalClosedWon, totalGoal), color: 'text-foreground' },
+          { label: 'Total Pipe', value: fmt(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0)), sub: pct(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0), totalGoal), color: 'text-foreground' },
           { label: 'Closed Won', value: fmt(totalClosedWon), sub: pct(totalClosedWon, totalGoal), color: 'text-positive' },
           { label: 'Commit', value: fmt(totalCommit), sub: pct(totalCommit, totalGoal), color: 'text-commit' },
           { label: 'Upside', value: fmt(totalUpside), sub: pct(totalUpside, totalGoal), color: 'text-upside' },
