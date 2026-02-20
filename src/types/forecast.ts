@@ -66,3 +66,37 @@ export function getQuarterMonths(quarter: Quarter): string[] {
 export function getCurrentQuarter(): Quarter {
   return getQuarter(new Date().toISOString());
 }
+
+export interface WeekRange {
+  label: string;
+  start: Date;
+  end: Date;
+}
+
+/** Returns Mon–Fri week ranges for a given month key (e.g. "2025-01"). */
+export function getWeeksInMonth(monthKey: string): WeekRange[] {
+  const [year, month] = monthKey.split('-').map(Number);
+  const weeks: WeekRange[] = [];
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+
+  // Find the first Monday on or after the 1st
+  let cursor = new Date(firstDay);
+  const dow = cursor.getDay(); // 0=Sun
+  if (dow === 0) cursor.setDate(cursor.getDate() + 1);
+  else if (dow > 1) cursor.setDate(cursor.getDate() + (8 - dow));
+  // dow === 1 means it's already Monday
+
+  let weekNum = 1;
+  while (cursor <= lastDay) {
+    const start = new Date(cursor);
+    const friday = new Date(cursor);
+    friday.setDate(friday.getDate() + 4);
+    const end = friday > lastDay ? new Date(lastDay) : friday;
+    weeks.push({ label: `W${weekNum}`, start, end });
+    weekNum++;
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  return weeks;
+}
