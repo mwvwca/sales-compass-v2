@@ -115,14 +115,14 @@ export default function ForecastDashboard() {
       </div>
 
       {/* Summary Cards */}
-      <div className={`grid gap-3 ${showGoals ? 'grid-cols-6' : 'grid-cols-4'}`}>
+      <div className="grid grid-cols-6 gap-3">
         {[
-          ...(showGoals ? [{ label: 'Quarterly Goal', value: fmt(totalGoal), sub: null }] : []),
-          { label: 'Total Pipe', value: fmt(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0)), sub: showGoals ? pct(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0), totalGoal) : null, color: 'text-foreground' },
-          { label: 'Closed Won', value: fmt(totalClosedWon), sub: showGoals ? pct(totalClosedWon, totalGoal) : null, color: 'text-positive' },
-          { label: 'Commit', value: fmt(totalCommit), sub: showGoals ? pct(totalCommit, totalGoal) : null, color: 'text-commit' },
-          { label: 'Upside', value: fmt(totalUpside), sub: showGoals ? pct(totalUpside, totalGoal) : null, color: 'text-upside' },
-          ...(showGoals ? [{ label: 'Variance', value: fmt(totalClosedWon - totalGoal), sub: pct(totalClosedWon, totalGoal), color: totalClosedWon >= totalGoal ? 'text-positive' : 'text-negative' }] : []),
+          { label: 'Quarterly Goal', value: fmt(totalGoal), sub: null },
+          { label: 'Total Pipe', value: fmt(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0)), sub: pct(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0), totalGoal), color: 'text-foreground' },
+          { label: 'Closed Won', value: fmt(totalClosedWon), sub: pct(totalClosedWon, totalGoal), color: 'text-positive' },
+          { label: 'Commit', value: fmt(totalCommit), sub: pct(totalCommit, totalGoal), color: 'text-commit' },
+          { label: 'Upside', value: fmt(totalUpside), sub: pct(totalUpside, totalGoal), color: 'text-upside' },
+          { label: 'Variance', value: fmt(totalClosedWon - totalGoal), sub: pct(totalClosedWon, totalGoal), color: totalClosedWon >= totalGoal ? 'text-positive' : 'text-negative' },
         ].map(c => (
           <div key={c.label} className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
