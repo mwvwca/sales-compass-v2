@@ -162,7 +162,7 @@ export default function ForecastDashboard() {
                       const mUpside = data.byMonth[m]?.upside || 0;
                       return (
                         <td key={m} className="text-right px-3 py-2.5 font-mono text-xs">
-                          {showGoals && monthlyGoals && <div className="text-muted-foreground">Goal: {fmt(mGoal)}</div>}
+                          {showGoals && monthlyGoals && mGoal > 0 && <div className="text-muted-foreground">Goal: {fmt(mGoal)}</div>}
                           {mWon > 0 && <div className="text-positive">Won: {fmt(mWon)}</div>}
                           {mCommit > 0 && <div className="text-commit">Commit: {fmt(mCommit)}</div>}
                           {mUpside > 0 && <div className="text-upside">Upside: {fmt(mUpside)}</div>}
