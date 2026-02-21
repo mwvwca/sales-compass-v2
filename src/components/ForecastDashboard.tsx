@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
+import { Switch } from '@/components/ui/switch';
 
 export default function ForecastDashboard() {
   const { reps, opportunities } = useForecast();
   const [selectedQuarter, setSelectedQuarter] = useState<Quarter>(getCurrentQuarter());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
+  const [showGoals, setShowGoals] = useState(true);
 
   const quarters = useMemo(() => {
     const set = new Set<string>();
@@ -106,17 +108,21 @@ export default function ForecastDashboard() {
           <option value="all">All Reps</option>
           {repNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
+        <label className="flex items-center gap-2 ml-auto text-xs text-muted-foreground cursor-pointer">
+          <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
+          Goals
+        </label>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-6 gap-3">
+      <div className={`grid gap-3 ${showGoals ? 'grid-cols-6' : 'grid-cols-4'}`}>
         {[
-          { label: 'Quarterly Goal', value: fmt(totalGoal), sub: null },
-          { label: 'Total Pipe', value: fmt(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0)), sub: pct(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0), totalGoal), color: 'text-foreground' },
-          { label: 'Closed Won', value: fmt(totalClosedWon), sub: pct(totalClosedWon, totalGoal), color: 'text-positive' },
-          { label: 'Commit', value: fmt(totalCommit), sub: pct(totalCommit, totalGoal), color: 'text-commit' },
-          { label: 'Upside', value: fmt(totalUpside), sub: pct(totalUpside, totalGoal), color: 'text-upside' },
-          { label: 'Variance', value: fmt(totalClosedWon - totalGoal), sub: pct(totalClosedWon, totalGoal), color: totalClosedWon >= totalGoal ? 'text-positive' : 'text-negative' },
+          ...(showGoals ? [{ label: 'Quarterly Goal', value: fmt(totalGoal), sub: null }] : []),
+          { label: 'Total Pipe', value: fmt(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0)), sub: showGoals ? pct(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0), totalGoal) : null, color: 'text-foreground' },
+          { label: 'Closed Won', value: fmt(totalClosedWon), sub: showGoals ? pct(totalClosedWon, totalGoal) : null, color: 'text-positive' },
+          { label: 'Commit', value: fmt(totalCommit), sub: showGoals ? pct(totalCommit, totalGoal) : null, color: 'text-commit' },
+          { label: 'Upside', value: fmt(totalUpside), sub: showGoals ? pct(totalUpside, totalGoal) : null, color: 'text-upside' },
+          ...(showGoals ? [{ label: 'Variance', value: fmt(totalClosedWon - totalGoal), sub: pct(totalClosedWon, totalGoal), color: totalClosedWon >= totalGoal ? 'text-positive' : 'text-negative' }] : []),
         ].map(c => (
           <div key={c.label} className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
@@ -138,8 +144,8 @@ export default function ForecastDashboard() {
                     {getMonthLabel(m)}
                   </th>
                 ))}
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Goal</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Variance</th>
+                {showGoals && <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Goal</th>}
+                {showGoals && <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Variance</th>}
               </tr>
             </thead>
             <tbody>
@@ -156,17 +162,19 @@ export default function ForecastDashboard() {
                       const mUpside = data.byMonth[m]?.upside || 0;
                       return (
                         <td key={m} className="text-right px-3 py-2.5 font-mono text-xs">
-                          {monthlyGoals && <div className="text-muted-foreground">Goal: {fmt(mGoal)}</div>}
+                          {showGoals && monthlyGoals && <div className="text-muted-foreground">Goal: {fmt(mGoal)}</div>}
                           {mWon > 0 && <div className="text-positive">Won: {fmt(mWon)}</div>}
                           {mCommit > 0 && <div className="text-commit">Commit: {fmt(mCommit)}</div>}
                           {mUpside > 0 && <div className="text-upside">Upside: {fmt(mUpside)}</div>}
                         </td>
                       );
                     })}
-                    <td className="text-right px-4 py-2.5 font-mono">{data.goal ? fmt(data.goal) : '—'}</td>
-                    <td className={`text-right px-4 py-2.5 font-mono font-semibold ${variance >= 0 ? 'text-positive' : 'text-negative'}`}>
-                      {data.goal ? fmt(variance) : '—'}
-                    </td>
+                    {showGoals && <td className="text-right px-4 py-2.5 font-mono">{data.goal ? fmt(data.goal) : '—'}</td>}
+                    {showGoals && (
+                      <td className={`text-right px-4 py-2.5 font-mono font-semibold ${variance >= 0 ? 'text-positive' : 'text-negative'}`}>
+                        {data.goal ? fmt(variance) : '—'}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -184,10 +192,12 @@ export default function ForecastDashboard() {
                     </td>
                   );
                 })}
-                <td className="text-right px-4 py-3 font-mono">{fmt(totalGoal)}</td>
-                <td className={`text-right px-4 py-3 font-mono ${totalClosedWon >= totalGoal ? 'text-positive' : 'text-negative'}`}>
-                  {fmt(totalClosedWon - totalGoal)}
-                </td>
+                {showGoals && <td className="text-right px-4 py-3 font-mono">{fmt(totalGoal)}</td>}
+                {showGoals && (
+                  <td className={`text-right px-4 py-3 font-mono ${totalClosedWon >= totalGoal ? 'text-positive' : 'text-negative'}`}>
+                    {fmt(totalClosedWon - totalGoal)}
+                  </td>
+                )}
               </tr>
             </tbody>
           </table>
