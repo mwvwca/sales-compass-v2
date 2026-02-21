@@ -144,7 +144,7 @@ export default function ForecastDashboard() {
             </thead>
             <tbody>
               {Object.entries(summaryByRep).map(([name, data]) => {
-                const variance = data.commit + data.closed_won - data.goal;
+                const variance = data.closed_won - data.goal;
                 const monthlyGoals = data.goal ? getMonthlyGoals(data.goal, data.byMonth) : null;
                 return (
                   <tr key={name} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
