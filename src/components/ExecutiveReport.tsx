@@ -37,11 +37,7 @@ export default function ExecutiveReport() {
       };
     });
 
-    // Top deals - largest commit + closed_won deals
-    const topDeals = qOpps
-      .filter(o => o.classification === 'commit' || o.classification === 'closed_won' || o.classification === 'upside')
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 8);
+
 
     // Build plain text
     const lines: string[] = [];
@@ -67,12 +63,23 @@ export default function ExecutiveReport() {
     }
     lines.push('');
 
-    if (topDeals.length > 0) {
-      lines.push('Key Deals');
+    const wonDeals = qOpps.filter(o => o.classification === 'closed_won').sort((a, b) => b.amount - a.amount).slice(0, 5);
+    const commitDeals = qOpps.filter(o => o.classification === 'commit').sort((a, b) => b.amount - a.amount).slice(0, 5);
+
+    if (wonDeals.length > 0) {
+      lines.push('Closed Won');
       lines.push('─'.repeat(35));
-      for (const d of topDeals) {
-        const status = d.classification === 'closed_won' ? '✓ Won' : d.classification === 'commit' ? 'Commit' : 'Upside';
-        lines.push(`  ${fmt(d.amount).padEnd(12)} ${status.padEnd(8)} ${d.name} (${d.repName})`);
+      for (const d of wonDeals) {
+        lines.push(`  ${fmt(d.amount).padEnd(12)} ${d.name} (${d.repName})`);
+      }
+      lines.push('');
+    }
+
+    if (commitDeals.length > 0) {
+      lines.push('Commit Deals');
+      lines.push('─'.repeat(35));
+      for (const d of commitDeals) {
+        lines.push(`  ${fmt(d.amount).padEnd(12)} ${d.name} (${d.repName})`);
       }
       lines.push('');
     }
