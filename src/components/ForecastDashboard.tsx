@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
+import ExecutiveReport from './ExecutiveReport';
 import { Switch } from '@/components/ui/switch';
 
 export default function ForecastDashboard() {
@@ -108,10 +109,13 @@ export default function ForecastDashboard() {
           <option value="all">All Reps</option>
           {repNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
-        <label className="flex items-center gap-2 ml-auto text-xs text-muted-foreground cursor-pointer">
-          <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
-          Goals
-        </label>
+        <div className="flex items-center gap-3 ml-auto">
+          <ExecutiveReport />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
+            Goals
+          </label>
+        </div>
       </div>
 
       {/* Summary Cards */}
