@@ -79,7 +79,8 @@ export default function ExecutiveReport() {
       lines.push('Commit Deals');
       lines.push('─'.repeat(35));
       for (const d of commitDeals) {
-        lines.push(`  ${fmt(d.amount).padEnd(12)} ${d.name} (${d.repName})`);
+        const close = new Date(d.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        lines.push(`  ${fmt(d.amount).padEnd(12)} ${close.padEnd(8)} ${d.name} (${d.repName})`);
       }
       lines.push('');
     }
