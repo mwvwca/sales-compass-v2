@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { Check, Plus, RefreshCw, Minus } from 'lucide-react';
@@ -53,6 +53,13 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
     selected: items.filter(i => i.selected).length,
   }), [items]);
 
+  const [showUnchanged, setShowUnchanged] = useState(false);
+
+  const visibleItems = useMemo(() => {
+    if (showUnchanged) return items;
+    return items.filter(i => i.changeType !== 'unchanged');
+  }, [items, showUnchanged]);
+
   const handleApprove = () => {
     const selected = items.filter(i => i.selected).map(i => i.opportunity);
     if (selected.length > 0) {
@@ -77,9 +84,12 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
             </span>
           )}
           {counts.unchanged > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground bg-secondary px-2 py-0.5 rounded">
-              <Minus size={12} /> {counts.unchanged} unchanged
-            </span>
+            <button
+              onClick={() => setShowUnchanged(!showUnchanged)}
+              className="flex items-center gap-1 text-muted-foreground bg-secondary px-2 py-0.5 rounded hover:text-foreground transition-colors cursor-pointer"
+            >
+              <Minus size={12} /> {counts.unchanged} unchanged {showUnchanged ? '(hide)' : '(show)'}
+            </button>
           )}
         </div>
       </div>
@@ -114,7 +124,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
             </tr>
           </thead>
           <tbody>
-            {items.map(item => (
+            {visibleItems.map(item => (
               <tr
                 key={item.opportunity.id}
                 onClick={() => toggle(item.opportunity.id)}
