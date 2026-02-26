@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 
 export default function ForecastDashboard() {
   const { reps, opportunities } = useForecast();
-  const [selectedQuarter, setSelectedQuarter] = useState<Quarter>(getCurrentQuarter());
+  const [selectedQuarter, setSelectedQuarter] = useState<Quarter | 'full-year'>(getCurrentQuarter());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
   const [showGoals, setShowGoals] = useState(true);
 
@@ -19,17 +19,25 @@ export default function ForecastDashboard() {
     return Array.from(set).sort() as Quarter[];
   }, [reps, opportunities]);
 
-  const months = getQuarterMonths(selectedQuarter);
+  const fullYearQuarters = useMemo(() => {
+    if (selectedQuarter === 'full-year') {
+      const year = new Date().getFullYear();
+      return [`${year}-Q1`, `${year}-Q2`, `${year}-Q3`, `${year}-Q4`] as Quarter[];
+    }
+    return [selectedQuarter];
+  }, [selectedQuarter]);
+
+  const months = useMemo(() => fullYearQuarters.flatMap(q => getQuarterMonths(q)), [fullYearQuarters]);
 
   const filteredOpps = useMemo(() => {
     return opportunities.filter(o => {
       if (!o.closeDate) return false;
       const q = getQuarter(o.closeDate);
-      if (q !== selectedQuarter) return false;
+      if (!fullYearQuarters.includes(q)) return false;
       if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
       return true;
     });
-  }, [opportunities, selectedQuarter, selectedRep]);
+  }, [opportunities, fullYearQuarters, selectedRep]);
 
   const repNames = useMemo(() => {
     const names = new Set(opportunities.map(o => o.repName));
@@ -39,7 +47,8 @@ export default function ForecastDashboard() {
 
   const getRepGoal = (repName: string) => {
     const rep = reps.find(r => r.name === repName);
-    return rep?.quarterlyGoals[selectedQuarter] || 0;
+    if (!rep) return 0;
+    return fullYearQuarters.reduce((sum, q) => sum + (rep.quarterlyGoals[q] || 0), 0);
   };
 
   const summaryByRep = useMemo(() => {
@@ -72,7 +81,7 @@ export default function ForecastDashboard() {
   }, [filteredOpps, repNames, selectedRep, months]);
 
   const getMonthlyGoals = (goal: number, byMonth: Record<string, { closed_won: number }>) => {
-    const base = goal / 3;
+    const base = goal / months.length;
     const goals: Record<string, number> = {};
     let carryOver = 0;
     for (const m of months) {
@@ -103,6 +112,10 @@ export default function ForecastDashboard() {
               {q}
             </button>
           ))}
+          <button onClick={() => setSelectedQuarter('full-year')}
+            className={`px-3 py-1.5 text-xs font-mono rounded transition-colors ${selectedQuarter === 'full-year' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+            Full Year
+          </button>
         </div>
         <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
           className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
@@ -209,7 +222,7 @@ export default function ForecastDashboard() {
       )}
 
       {/* Opportunities */}
-      <OpportunityList opportunities={filteredOpps} quarter={selectedQuarter} />
+      <OpportunityList opportunities={filteredOpps} quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} />
     </div>
   );
 }
