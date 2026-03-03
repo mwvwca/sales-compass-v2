@@ -64,7 +64,7 @@ export default function ExecutiveReport() {
     lines.push('');
 
     const wonDeals = qOpps.filter(o => o.classification === 'closed_won').sort((a, b) => b.amount - a.amount).slice(0, 5);
-    const commitDeals = qOpps.filter(o => o.classification === 'commit').sort((a, b) => b.amount - a.amount).slice(0, 5);
+    const commitDeals = qOpps.filter(o => o.classification === 'commit').sort((a, b) => b.amount - a.amount);
 
     if (wonDeals.length > 0) {
       lines.push('Closed Won');
@@ -93,12 +93,16 @@ export default function ExecutiveReport() {
       for (const name of repNames) {
         const rOpps = qOpps.filter(o => o.repName === name);
         const rWon = rOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
+        const rWonCount = rOpps.filter(o => o.classification === 'closed_won').length;
         const rCommit = rOpps.filter(o => o.classification === 'commit').reduce((s, o) => s + o.amount, 0);
-        const rGoal = reps.find(r => r.name === name)?.quarterlyGoals[quarter] || 0;
+        const rTotal = rOpps.reduce((s, o) => s + o.amount, 0);
+        const rConv = rTotal > 0 ? `${Math.round((rWon / rTotal) * 100)}%` : 'N/A';
+        const rAsp = rWonCount > 0 ? fmt(rWon / rWonCount) : 'N/A';
         const parts: string[] = [];
         if (rWon > 0) parts.push(`Won ${fmt(rWon)}`);
         if (rCommit > 0) parts.push(`Commit ${fmt(rCommit)}`);
-        if (rGoal > 0) parts.push(`Goal ${fmt(rGoal)}`);
+        parts.push(`Conv ${rConv}`);
+        parts.push(`ASP ${rAsp}`);
         lines.push(`  ${name.padEnd(18)} ${parts.join(' · ')}`);
       }
     }
