@@ -40,15 +40,21 @@ export interface ChangeLogEntry {
 
 export type Quarter = `${number}-Q${1 | 2 | 3 | 4}`;
 
-export function getQuarter(date: string): Quarter {
+/** Parse a date string into year/month/day using UTC to avoid timezone shifts. */
+function parseDate(date: string): { year: number; month: number; day: number } {
   const d = new Date(date);
-  const q = Math.ceil((d.getMonth() + 1) / 3) as 1 | 2 | 3 | 4;
-  return `${d.getFullYear()}-Q${q}`;
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+
+export function getQuarter(date: string): Quarter {
+  const { year, month } = parseDate(date);
+  const q = Math.ceil(month / 3) as 1 | 2 | 3 | 4;
+  return `${year}-Q${q}`;
 }
 
 export function getMonthKey(date: string): string {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const { year, month } = parseDate(date);
+  return `${year}-${String(month).padStart(2, '0')}`;
 }
 
 export function getMonthLabel(monthKey: string): string {
