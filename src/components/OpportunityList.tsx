@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History } from 'lucide-react';
+import OpportunityHistory from './OpportunityHistory';
 
 type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification';
 type SortDir = 'asc' | 'desc';
@@ -39,6 +40,7 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string } | null>(null);
 
   const months = getQuarterMonths(quarter);
   const weeks: WeekRange[] = useMemo(() => {
@@ -108,6 +110,26 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
       return sortDir === 'desc' ? -cmp : cmp;
     });
   }, [classFiltered, sortField, sortDir]);
+
+  // Footer metrics
+  const footerMetrics = useMemo(() => {
+    const totalAmount = filtered.reduce((s, o) => s + o.amount, 0);
+    const wonAmount = filtered.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
+    const wonCount = filtered.filter(o => o.classification === 'closed_won').length;
+    const conversionRate = totalAmount > 0 ? (wonAmount / totalAmount) * 100 : 0;
+    const avgSalePrice = wonCount > 0 ? wonAmount / wonCount : 0;
+
+    // Per-rep metrics
+    const repMap = new Map<string, { total: number; won: number; wonCount: number }>();
+    for (const o of filtered) {
+      const entry = repMap.get(o.repName) || { total: 0, won: 0, wonCount: 0 };
+      entry.total += o.amount;
+      if (o.classification === 'closed_won') { entry.won += o.amount; entry.wonCount++; }
+      repMap.set(o.repName, entry);
+    }
+
+    return { totalAmount, wonAmount, wonCount, conversionRate, avgSalePrice, repMetrics: repMap };
+  }, [filtered]);
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ChevronsUpDown size={12} className="text-muted-foreground/50" />;
@@ -265,7 +287,7 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
                 <th onClick={() => toggleSort('closeDate')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Close <SortIcon field="closeDate" /></span></th>
                 <th onClick={() => toggleSort('stage')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Stage <SortIcon field="stage" /></span></th>
                 <th onClick={() => toggleSort('classification')} className="text-center px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1 justify-center">Classification <SortIcon field="classification" /></span></th>
-                <th className="w-8 px-2 py-2"></th>
+                <th className="w-16 px-2 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -328,17 +350,92 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
                           <button onClick={cancelEdit} className="text-negative hover:text-negative/80"><X size={14} /></button>
                         </div>
                       ) : (
-                        <button onClick={() => startEdit(opp)} className="text-muted-foreground hover:text-foreground transition-colors">
-                          <Pencil size={12} />
-                        </button>
+                        <div className="flex gap-1">
+                          <button onClick={() => setHistoryOpp({ id: opp.id, name: opp.name })} className="text-muted-foreground hover:text-foreground transition-colors" title="View history">
+                            <History size={12} />
+                          </button>
+                          <button onClick={() => startEdit(opp)} className="text-muted-foreground hover:text-foreground transition-colors">
+                            <Pencil size={12} />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
+            {/* Footer with totals and metrics */}
+            <tfoot>
+              <tr className="border-t-2 border-border bg-secondary/50">
+                <td className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Totals
+                </td>
+                <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                  {footerMetrics.repMetrics.size} reps
+                </td>
+                <td className="px-3 py-2.5 text-right font-mono font-semibold">
+                  {fmt(footerMetrics.totalAmount)}
+                </td>
+                <td colSpan={2} className="px-3 py-2.5">
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-muted-foreground">
+                      Conv Rate: <span className={`font-mono font-semibold ${footerMetrics.conversionRate > 0 ? 'text-positive' : 'text-muted-foreground'}`}>
+                        {footerMetrics.conversionRate.toFixed(1)}%
+                      </span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      Avg Sale: <span className={`font-mono font-semibold ${footerMetrics.avgSalePrice > 0 ? 'text-commit' : 'text-muted-foreground'}`}>
+                        {footerMetrics.avgSalePrice > 0 ? fmt(footerMetrics.avgSalePrice) : '—'}
+                      </span>
+                    </span>
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">
+                  {footerMetrics.wonCount} won
+                </td>
+                <td className="px-2 py-2.5"></td>
+              </tr>
+              {/* Per-rep breakdown when multiple reps */}
+              {footerMetrics.repMetrics.size > 1 && Array.from(footerMetrics.repMetrics.entries()).map(([rep, metrics]) => {
+                const convRate = metrics.total > 0 ? (metrics.won / metrics.total) * 100 : 0;
+                const asp = metrics.wonCount > 0 ? metrics.won / metrics.wonCount : 0;
+                return (
+                  <tr key={rep} className="border-t border-border bg-secondary/30">
+                    <td className="px-4 py-1.5 text-xs text-muted-foreground pl-8">
+                      {rep}
+                    </td>
+                    <td className="px-3 py-1.5"></td>
+                    <td className="px-3 py-1.5 text-right font-mono text-xs">
+                      {fmt(metrics.total)}
+                    </td>
+                    <td colSpan={2} className="px-3 py-1.5">
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-muted-foreground">
+                          Conv: <span className={`font-mono ${convRate > 0 ? 'text-positive' : 'text-muted-foreground'}`}>{convRate.toFixed(1)}%</span>
+                        </span>
+                        <span className="text-muted-foreground">
+                          ASP: <span className={`font-mono ${asp > 0 ? 'text-commit' : 'text-muted-foreground'}`}>{asp > 0 ? fmt(asp) : '—'}</span>
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5 text-center text-xs text-muted-foreground">
+                      {metrics.wonCount} won
+                    </td>
+                    <td className="px-2 py-1.5"></td>
+                  </tr>
+                );
+              })}
+            </tfoot>
           </table>
         </div>
+      )}
+
+      {historyOpp && (
+        <OpportunityHistory
+          opportunityId={historyOpp.id}
+          opportunityName={historyOpp.name}
+          onClose={() => setHistoryOpp(null)}
+        />
       )}
     </div>
   );

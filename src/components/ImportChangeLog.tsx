@@ -68,9 +68,13 @@ export default function ImportChangeLog() {
                     <td className="px-3 py-2 text-secondary-foreground">{entry.repName}</td>
                     <td className="px-3 py-2">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        entry.field === 'amount' ? 'bg-commit/10 text-commit' : 'bg-upside/10 text-upside'
+                        entry.field === 'amount' ? 'bg-commit/10 text-commit'
+                        : entry.field === 'closeDate' ? 'bg-upside/10 text-upside'
+                        : entry.field === 'stage' ? 'bg-positive/10 text-positive'
+                        : entry.field === 'classification' ? 'bg-secondary text-foreground'
+                        : 'bg-secondary text-muted-foreground'
                       }`}>
-                        {entry.field === 'amount' ? 'Amount' : 'Close Date'}
+                        {entry.field === 'amount' ? 'Amount' : entry.field === 'closeDate' ? 'Close Date' : entry.field === 'classification' ? 'Classification' : entry.field === 'stage' ? 'Stage' : entry.field}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-negative text-xs">

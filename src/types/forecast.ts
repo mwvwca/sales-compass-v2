@@ -33,9 +33,22 @@ export interface ChangeLogEntry {
   opportunityId: string;
   opportunityName: string;
   repName: string;
-  field: 'closeDate' | 'amount';
+  field: 'closeDate' | 'amount' | 'stage' | 'classification' | 'name' | 'repName';
   oldValue: string;
   newValue: string;
+}
+
+/** Snapshot of an opportunity captured at each import for history tracking. */
+export interface OpportunitySnapshot {
+  opportunityId: string;
+  importDate: string;
+  fileName: string;
+  amount: number;
+  closeDate: string;
+  stage: string;
+  classification: string;
+  name: string;
+  repName: string;
 }
 
 export type Quarter = `${number}-Q${1 | 2 | 3 | 4}`;
