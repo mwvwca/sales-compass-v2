@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { Rep, Opportunity, ImportRecord, ChangeLogEntry } from '@/types/forecast';
+import type { Rep, Opportunity, ImportRecord, ChangeLogEntry, OpportunitySnapshot } from '@/types/forecast';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
   opportunities: 'forecast_opportunities',
   imports: 'forecast_imports',
   changelog: 'forecast_changelog',
+  snapshots: 'forecast_snapshots',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -26,6 +27,7 @@ interface ForecastState {
   opportunities: Opportunity[];
   imports: ImportRecord[];
   changelog: ChangeLogEntry[];
+  snapshots: OpportunitySnapshot[];
   loading: boolean;
 }
 
@@ -39,7 +41,8 @@ interface ForecastContextValue extends ForecastState {
   updateOpportunity: (id: string, updates: Partial<Omit<Opportunity, 'id'>>) => void;
   deleteOpportunity: (id: string) => void;
   clearChangelog: () => void;
-  restoreFromBackup: (data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[] }) => void;
+  restoreFromBackup: (data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[]; snapshots?: OpportunitySnapshot[] }) => void;
+  getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
 }
 
 const ForecastContext = createContext<ForecastContextValue | null>(null);
@@ -50,6 +53,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     opportunities: loadFromStorage(STORAGE_KEYS.opportunities, []),
     imports: loadFromStorage(STORAGE_KEYS.imports, []),
     changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
+    snapshots: loadFromStorage(STORAGE_KEYS.snapshots, []),
     loading: false,
   });
 
@@ -58,7 +62,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.opportunities, state.opportunities);
     saveToStorage(STORAGE_KEYS.imports, state.imports);
     saveToStorage(STORAGE_KEYS.changelog, state.changelog);
-  }, [state.reps, state.opportunities, state.imports, state.changelog]);
+    saveToStorage(STORAGE_KEYS.snapshots, state.snapshots);
+  }, [state.reps, state.opportunities, state.imports, state.changelog, state.snapshots]);
 
   const addRep = useCallback((rep: Rep) => {
     setState(s => ({ ...s, reps: [...s.reps, rep] }));
@@ -80,38 +85,50 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => {
       const existingMap = new Map(s.opportunities.map(o => [o.id, o]));
       const newChanges: ChangeLogEntry[] = [];
+      const newSnapshots: OpportunitySnapshot[] = [];
 
       const merged = opps.map(o => {
         const existing = existingMap.get(o.id);
+
+        // Create snapshot for every imported opportunity
+        newSnapshots.push({
+          opportunityId: o.id,
+          importDate,
+          fileName,
+          amount: o.amount,
+          closeDate: o.closeDate,
+          stage: o.stage,
+          classification: existing ? existing.classification : o.classification,
+          name: o.name,
+          repName: o.repName,
+        });
+
         if (existing) {
-          // Log close date changes
-          if (existing.closeDate !== o.closeDate) {
-            newChanges.push({
-              id: crypto.randomUUID(),
-              importDate,
-              fileName,
-              opportunityId: o.id,
-              opportunityName: o.name,
-              repName: o.repName,
-              field: 'closeDate',
-              oldValue: existing.closeDate || '(empty)',
-              newValue: o.closeDate || '(empty)',
-            });
+          // Track all field changes
+          const fieldsToTrack: { field: ChangeLogEntry['field']; oldVal: string; newVal: string }[] = [
+            { field: 'closeDate', oldVal: existing.closeDate || '(empty)', newVal: o.closeDate || '(empty)' },
+            { field: 'amount', oldVal: String(existing.amount), newVal: String(o.amount) },
+            { field: 'stage', oldVal: existing.stage, newVal: o.stage },
+            { field: 'name', oldVal: existing.name, newVal: o.name },
+            { field: 'repName', oldVal: existing.repName, newVal: o.repName },
+          ];
+
+          for (const { field, oldVal, newVal } of fieldsToTrack) {
+            if (oldVal !== newVal) {
+              newChanges.push({
+                id: crypto.randomUUID(),
+                importDate,
+                fileName,
+                opportunityId: o.id,
+                opportunityName: o.name,
+                repName: o.repName,
+                field,
+                oldValue: oldVal,
+                newValue: newVal,
+              });
+            }
           }
-          // Log amount changes
-          if (existing.amount !== o.amount) {
-            newChanges.push({
-              id: crypto.randomUUID(),
-              importDate,
-              fileName,
-              opportunityId: o.id,
-              opportunityName: o.name,
-              repName: o.repName,
-              field: 'amount',
-              oldValue: String(existing.amount),
-              newValue: String(o.amount),
-            });
-          }
+
           return { ...o, classification: existing.classification, previousClassification: existing.previousClassification, movedAt: existing.movedAt };
         }
         return o;
@@ -124,20 +141,41 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         opportunities: [...kept, ...merged],
         imports: [...s.imports, record],
         changelog: [...s.changelog, ...newChanges],
+        snapshots: [...s.snapshots, ...newSnapshots],
       };
     });
   }, []);
 
   const classifyOpportunity = useCallback((id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified') => {
-    setState(s => ({
-      ...s,
-      opportunities: s.opportunities.map(o => {
-        if (o.id === id) {
-          return { ...o, previousClassification: o.classification, classification, movedAt: new Date().toISOString() };
-        }
-        return o;
-      }),
-    }));
+    setState(s => {
+      const opp = s.opportunities.find(o => o.id === id);
+      const newChanges: ChangeLogEntry[] = [];
+
+      if (opp && opp.classification !== classification) {
+        newChanges.push({
+          id: crypto.randomUUID(),
+          importDate: new Date().toISOString(),
+          fileName: '(manual)',
+          opportunityId: id,
+          opportunityName: opp.name,
+          repName: opp.repName,
+          field: 'classification',
+          oldValue: opp.classification,
+          newValue: classification,
+        });
+      }
+
+      return {
+        ...s,
+        opportunities: s.opportunities.map(o => {
+          if (o.id === id) {
+            return { ...o, previousClassification: o.classification, classification, movedAt: new Date().toISOString() };
+          }
+          return o;
+        }),
+        changelog: [...s.changelog, ...newChanges],
+      };
+    });
   }, []);
 
   const updateOpportunityAmount = useCallback((id: string, amount: number) => {
@@ -156,12 +194,18 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, changelog: [] }));
   }, []);
 
-  const restoreFromBackup = useCallback((data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[] }) => {
-    setState(s => ({ ...s, reps: data.reps, opportunities: data.opportunities, imports: data.imports, changelog: data.changelog }));
+  const restoreFromBackup = useCallback((data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[]; snapshots?: OpportunitySnapshot[] }) => {
+    setState(s => ({ ...s, reps: data.reps, opportunities: data.opportunities, imports: data.imports, changelog: data.changelog, snapshots: data.snapshots || s.snapshots }));
   }, []);
 
+  const getOpportunityHistory = useCallback((opportunityId: string): OpportunitySnapshot[] => {
+    return state.snapshots
+      .filter(s => s.opportunityId === opportunityId)
+      .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
+  }, [state.snapshots]);
+
   return (
-    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, clearChangelog, restoreFromBackup }}>
+    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, clearChangelog, restoreFromBackup, getOpportunityHistory }}>
       {children}
     </ForecastContext.Provider>
   );
