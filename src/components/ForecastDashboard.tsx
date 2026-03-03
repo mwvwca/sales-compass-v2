@@ -3,6 +3,7 @@ import { useForecast } from '@/context/ForecastContext';
 import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
+import ExecutiveReportVisual from './ExecutiveReportVisual';
 import { Switch } from '@/components/ui/switch';
 
 export default function ForecastDashboard() {
@@ -124,6 +125,7 @@ export default function ForecastDashboard() {
         </select>
         <div className="flex items-center gap-3 ml-auto">
           <ExecutiveReport />
+          <ExecutiveReportVisual />
           <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
             Goals
