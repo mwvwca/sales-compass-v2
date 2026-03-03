@@ -49,7 +49,19 @@ function excelDateToString(value: unknown): string {
   return String(value);
 }
 
-export function transformOutputToForecast(workbook: XLSX.WorkBook): ForecastRow[] {
+export interface SkippedRow {
+  rowNumber: number;
+  rawValues: string[];
+  reason: string;
+}
+
+export interface TransformResult {
+  rows: ForecastRow[];
+  skipped: SkippedRow[];
+  totalRawRows: number;
+}
+
+export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformResult {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rawData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
 
@@ -83,15 +95,31 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): ForecastRow[
   const stageCol = colMap["Stage"];
 
   const results: ForecastRow[] = [];
+  const skipped: SkippedRow[] = [];
+  const totalRawRows = rawData.length - headerRowIdx - 1;
 
   for (let i = headerRowIdx + 1; i < rawData.length; i++) {
     const row = rawData[i];
     const oppId = String(row[oppIdCol] ?? "").trim();
+    const rowNum = i + 1; // 1-indexed for user display
+    const rawValues = row.map(v => String(v ?? "").trim()).filter(Boolean);
 
-    if (!oppId || oppId.startsWith("Subtotal") || oppId === "Sum" || oppId === "Count" || /^\d+\/\d+\/\d+$/.test(oppId)) {
+    if (!oppId) {
+      if (rawValues.length > 0) {
+        skipped.push({ rowNumber: rowNum, rawValues, reason: "Empty Opportunity ID" });
+      }
+      continue;
+    }
+    if (oppId.startsWith("Subtotal") || oppId === "Sum" || oppId === "Count") {
+      skipped.push({ rowNumber: rowNum, rawValues, reason: `Summary row (${oppId})` });
+      continue;
+    }
+    if (/^\d+\/\d+\/\d+$/.test(oppId)) {
+      skipped.push({ rowNumber: rowNum, rawValues, reason: "ID looks like a date" });
       continue;
     }
     if (!oppId.match(/^[0-9a-zA-Z]{15,18}$/)) {
+      skipped.push({ rowNumber: rowNum, rawValues, reason: `Invalid ID format: "${oppId}" (expected 15-18 alphanumeric chars, got ${oppId.length})` });
       continue;
     }
 
@@ -110,7 +138,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): ForecastRow[
     });
   }
 
-  return results;
+  return { rows: results, skipped, totalRawRows };
 }
 
 export function createForecastWorkbook(rows: ForecastRow[], version: string): XLSX.WorkBook {

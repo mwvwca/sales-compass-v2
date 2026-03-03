@@ -1,9 +1,9 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
-import { Upload, Download, CheckCircle2, AlertCircle, ArrowDown, Sparkles, Send } from 'lucide-react';
+import { Upload, Download, CheckCircle2, AlertCircle, ArrowDown, Sparkles, Send, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { transformOutputToForecast, createForecastWorkbook, type ForecastRow } from '@/lib/transformSalesforce';
+import { transformOutputToForecast, createForecastWorkbook, type ForecastRow, type SkippedRow } from '@/lib/transformSalesforce';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ImportReview from './ImportReview';
 import type { Opportunity } from '@/types/forecast';
@@ -36,9 +36,12 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
 const SalesDataSync = () => {
   const [fileName, setFileName] = useState<string | null>(null);
   const [forecastData, setForecastData] = useState<ForecastRow[] | null>(null);
+  const [skippedRows, setSkippedRows] = useState<SkippedRow[]>([]);
+  const [totalRawRows, setTotalRawRows] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(1);
   const [showReview, setShowReview] = useState(false);
+  const [showSkipped, setShowSkipped] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -46,19 +49,23 @@ const SalesDataSync = () => {
 
     setError(null);
     setFileName(file.name);
+    setSkippedRows([]);
+    setShowSkipped(false);
 
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const rows = transformOutputToForecast(workbook);
-        if (rows.length === 0) {
+        const result = transformOutputToForecast(workbook);
+        if (result.rows.length === 0 && result.skipped.length === 0) {
           setError('No valid opportunity rows found in the file.');
           setForecastData(null);
           return;
         }
-        setForecastData(rows);
+        setForecastData(result.rows);
+        setSkippedRows(result.skipped);
+        setTotalRawRows(result.totalRawRows);
       } catch (err: any) {
         setError(err.message || 'Failed to parse file.');
         setForecastData(null);
@@ -287,6 +294,59 @@ const SalesDataSync = () => {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Reconciliation: Skipped Rows */}
+      {isReady && skippedRows.length > 0 && (
+        <div className="mt-4 overflow-hidden rounded-lg border border-border">
+          <button
+            onClick={() => setShowSkipped(!showSkipped)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-secondary/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+              <span className="text-xs font-medium">
+                {skippedRows.length} row{skippedRows.length !== 1 ? 's' : ''} skipped
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                ({forecastData.length} imported of {totalRawRows} total)
+              </span>
+            </div>
+            {showSkipped ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+          </button>
+          {showSkipped && (
+            <div className="border-t border-border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-secondary/50">
+                    <TableHead className="text-xs w-16">Row</TableHead>
+                    <TableHead className="text-xs">Reason</TableHead>
+                    <TableHead className="text-xs">Row Data</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {skippedRows.map((s, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-xs font-mono text-muted-foreground">{s.rowNumber}</TableCell>
+                      <TableCell className="text-xs text-yellow-600 dark:text-yellow-400">{s.reason}</TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground max-w-[400px] truncate font-mono">
+                        {s.rawValues.join(' | ')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* All imported summary */}
+      {isReady && skippedRows.length === 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-secondary/20 px-4 py-3 text-xs text-muted-foreground">
+          <CheckCircle2 className="h-3.5 w-3.5 text-positive" />
+          All {forecastData.length} rows imported successfully — no rows skipped.
         </div>
       )}
     </div>
