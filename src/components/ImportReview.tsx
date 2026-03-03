@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
-import { Check, Plus, RefreshCw, Minus } from 'lucide-react';
+import { Check, Plus, RefreshCw, Minus, Trash2 } from 'lucide-react';
 
 interface Props {
   incoming: Opportunity[];
@@ -10,7 +10,7 @@ interface Props {
   onCancel: () => void;
 }
 
-type ChangeType = 'new' | 'updated' | 'unchanged';
+type ChangeType = 'new' | 'updated' | 'unchanged' | 'removed';
 
 interface ReviewItem {
   opportunity: Opportunity;
@@ -21,12 +21,17 @@ interface ReviewItem {
 }
 
 export default function ImportReview({ incoming, fileName, onDone, onCancel }: Props) {
-  const { opportunities, importOpportunities } = useForecast();
+  const { opportunities, importOpportunities, deleteOpportunity } = useForecast();
 
   const existingMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
 
-  const [items, setItems] = useState<ReviewItem[]>(() =>
-    incoming.map(opp => {
+  // Reps present in the incoming file — only flag removals for these reps
+  const incomingRepNames = useMemo(() => new Set(incoming.map(o => o.repName)), [incoming]);
+  const incomingIds = useMemo(() => new Set(incoming.map(o => o.id)), [incoming]);
+
+  const [items, setItems] = useState<ReviewItem[]>(() => {
+    // Incoming items: new / updated / unchanged
+    const incomingItems: ReviewItem[] = incoming.map(opp => {
       const existing = existingMap.get(opp.id);
       if (!existing) {
         return { opportunity: opp, changeType: 'new' as ChangeType, changes: [], selected: true };
@@ -39,8 +44,21 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
       if (existing.name !== opp.name) changes.push(`Name: ${existing.name} → ${opp.name}`);
       const changeType: ChangeType = changes.length > 0 ? 'updated' : 'unchanged';
       return { opportunity: opp, existing, changeType, changes, selected: changes.length > 0 };
-    })
-  );
+    });
+
+    // Removed items: exist in app for reps in this import, but not in incoming list
+    const removedItems: ReviewItem[] = opportunities
+      .filter(o => incomingRepNames.has(o.repName) && !incomingIds.has(o.id))
+      .map(o => ({
+        opportunity: o,
+        existing: o,
+        changeType: 'removed' as ChangeType,
+        changes: ['No longer in import file'],
+        selected: false, // default deselected — user must opt in to remove
+      }));
+
+    return [...incomingItems, ...removedItems];
+  });
 
   const toggle = (id: string) => setItems(prev => prev.map(i => i.opportunity.id === id ? { ...i, selected: !i.selected } : i));
   const selectAll = (type: ChangeType) => setItems(prev => prev.map(i => i.changeType === type ? { ...i, selected: true } : i));
@@ -50,20 +68,32 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
     new: items.filter(i => i.changeType === 'new').length,
     updated: items.filter(i => i.changeType === 'updated').length,
     unchanged: items.filter(i => i.changeType === 'unchanged').length,
+    removed: items.filter(i => i.changeType === 'removed').length,
     selected: items.filter(i => i.selected).length,
+    removedSelected: items.filter(i => i.changeType === 'removed' && i.selected).length,
   }), [items]);
 
   const [showUnchanged, setShowUnchanged] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(true);
 
   const visibleItems = useMemo(() => {
-    if (showUnchanged) return items;
-    return items.filter(i => i.changeType !== 'unchanged');
-  }, [items, showUnchanged]);
+    return items.filter(i => {
+      if (i.changeType === 'unchanged' && !showUnchanged) return false;
+      if (i.changeType === 'removed' && !showRemoved) return false;
+      return true;
+    });
+  }, [items, showUnchanged, showRemoved]);
 
   const handleApprove = () => {
-    const selected = items.filter(i => i.selected).map(i => i.opportunity);
-    if (selected.length > 0) {
-      importOpportunities(selected, fileName);
+    // Import selected new/updated/unchanged
+    const toImport = items.filter(i => i.selected && i.changeType !== 'removed').map(i => i.opportunity);
+    if (toImport.length > 0) {
+      importOpportunities(toImport, fileName);
+    }
+    // Delete selected removed
+    const toRemove = items.filter(i => i.selected && i.changeType === 'removed');
+    for (const item of toRemove) {
+      deleteOpportunity(item.opportunity.id);
     }
     onDone();
   };
@@ -91,10 +121,18 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
               <Minus size={12} /> {counts.unchanged} unchanged {showUnchanged ? '(hide)' : '(show)'}
             </button>
           )}
+          {counts.removed > 0 && (
+            <button
+              onClick={() => setShowRemoved(!showRemoved)}
+              className="flex items-center gap-1 text-destructive bg-destructive/10 px-2 py-0.5 rounded hover:text-destructive/80 transition-colors cursor-pointer"
+            >
+              <Trash2 size={12} /> {counts.removed} removed {showRemoved ? '(hide)' : '(show)'}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex gap-2 text-xs">
+      <div className="flex gap-2 text-xs flex-wrap">
         {counts.new > 0 && (
           <div className="flex gap-1">
             <button onClick={() => selectAll('new')} className="text-muted-foreground hover:text-foreground underline">Select all new</button>
@@ -107,6 +145,13 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
             <button onClick={() => selectAll('updated')} className="text-muted-foreground hover:text-foreground underline">Select all updated</button>
             <span className="text-muted-foreground">/</span>
             <button onClick={() => deselectAll('updated')} className="text-muted-foreground hover:text-foreground underline">Deselect</button>
+          </div>
+        )}
+        {counts.removed > 0 && (
+          <div className="flex gap-1">
+            <button onClick={() => selectAll('removed')} className="text-muted-foreground hover:text-destructive underline">Select all removed</button>
+            <span className="text-muted-foreground">/</span>
+            <button onClick={() => deselectAll('removed')} className="text-muted-foreground hover:text-foreground underline">Deselect</button>
           </div>
         )}
       </div>
@@ -129,12 +174,18 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
                 key={item.opportunity.id}
                 onClick={() => toggle(item.opportunity.id)}
                 className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
-                  item.selected ? 'bg-secondary/20' : 'opacity-50'
+                  item.changeType === 'removed'
+                    ? item.selected ? 'bg-destructive/10' : 'opacity-50'
+                    : item.selected ? 'bg-secondary/20' : 'opacity-50'
                 } hover:bg-secondary/40`}
               >
                 <td className="px-3 py-2 text-center">
                   <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                    item.selected ? 'bg-foreground border-foreground' : 'border-border'
+                    item.selected
+                      ? item.changeType === 'removed'
+                        ? 'bg-destructive border-destructive'
+                        : 'bg-foreground border-foreground'
+                      : 'border-border'
                   }`}>
                     {item.selected && <Check size={10} className="text-background" />}
                   </div>
@@ -143,15 +194,16 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
                   {item.changeType === 'new' && <span className="text-xs text-positive bg-positive/10 px-1.5 py-0.5 rounded">New</span>}
                   {item.changeType === 'updated' && <span className="text-xs text-upside bg-upside/10 px-1.5 py-0.5 rounded">Updated</span>}
                   {item.changeType === 'unchanged' && <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">Same</span>}
+                  {item.changeType === 'removed' && <span className="text-xs text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">Removed</span>}
                 </td>
-                <td className="px-3 py-2 font-medium">{item.opportunity.name}</td>
+                <td className={`px-3 py-2 font-medium ${item.changeType === 'removed' ? 'line-through text-muted-foreground' : ''}`}>{item.opportunity.name}</td>
                 <td className="px-3 py-2 text-secondary-foreground">{item.opportunity.repName}</td>
                 <td className="px-3 py-2 text-right font-mono">{fmt(item.opportunity.amount)}</td>
                 <td className="px-3 py-2">
                   {item.changes.length > 0 ? (
                     <div className="space-y-0.5">
                       {item.changes.map((c, i) => (
-                        <div key={i} className="text-xs text-upside">{c}</div>
+                        <div key={i} className={`text-xs ${item.changeType === 'removed' ? 'text-destructive' : 'text-upside'}`}>{c}</div>
                       ))}
                     </div>
                   ) : (
@@ -165,7 +217,12 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
       </div>
 
       <div className="flex items-center justify-between pt-2">
-        <p className="text-xs text-muted-foreground">{counts.selected} of {items.length} selected</p>
+        <div className="text-xs text-muted-foreground space-y-0.5">
+          <p>{counts.selected} of {items.length} selected</p>
+          {counts.removedSelected > 0 && (
+            <p className="text-destructive">{counts.removedSelected} will be removed from app</p>
+          )}
+        </div>
         <div className="flex gap-2">
           <button onClick={onCancel} className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground border border-border rounded-md transition-colors">
             Cancel
@@ -175,7 +232,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
             disabled={counts.selected === 0}
             className="px-4 py-2 text-xs font-medium bg-foreground text-background rounded-md hover:bg-foreground/90 transition-colors disabled:opacity-50"
           >
-            Import {counts.selected} {counts.selected === 1 ? 'opportunity' : 'opportunities'}
+            Apply {counts.selected} {counts.selected === 1 ? 'change' : 'changes'}
           </button>
         </div>
       </div>
