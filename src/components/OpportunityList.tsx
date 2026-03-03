@@ -2,7 +2,10 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+
+type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification';
+type SortDir = 'asc' | 'desc';
 
 interface Props {
   opportunities: Opportunity[];
@@ -34,6 +37,8 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const months = getQuarterMonths(quarter);
   const weeks: WeekRange[] = useMemo(() => {
@@ -79,7 +84,35 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
     );
   }, [weekFiltered, searchQuery]);
 
-  const filtered = searchFiltered.filter(o => activeFilters.has(o.classification));
+  const classFiltered = searchFiltered.filter(o => activeFilters.has(o.classification));
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else { setSortField(null); setSortDir('asc'); }
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const classOrder: Record<string, number> = { closed_won: 0, commit: 1, upside: 2, unclassified: 3 };
+
+  const filtered = useMemo(() => {
+    if (!sortField) return classFiltered;
+    return [...classFiltered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'amount') cmp = a.amount - b.amount;
+      else if (sortField === 'classification') cmp = (classOrder[a.classification] ?? 9) - (classOrder[b.classification] ?? 9);
+      else cmp = String(a[sortField]).localeCompare(String(b[sortField]));
+      return sortDir === 'desc' ? -cmp : cmp;
+    });
+  }, [classFiltered, sortField, sortDir]);
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ChevronsUpDown size={12} className="text-muted-foreground/50" />;
+    return sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+  };
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -226,12 +259,12 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-secondary/50">
-                <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Opportunity</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
-                <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Close</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Stage</th>
-                <th className="text-center px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Classification</th>
+                <th onClick={() => toggleSort('name')} className="text-left px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Opportunity <SortIcon field="name" /></span></th>
+                <th onClick={() => toggleSort('repName')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Rep <SortIcon field="repName" /></span></th>
+                <th onClick={() => toggleSort('amount')} className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1 justify-end">Amount <SortIcon field="amount" /></span></th>
+                <th onClick={() => toggleSort('closeDate')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Close <SortIcon field="closeDate" /></span></th>
+                <th onClick={() => toggleSort('stage')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Stage <SortIcon field="stage" /></span></th>
+                <th onClick={() => toggleSort('classification')} className="text-center px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1 justify-center">Classification <SortIcon field="classification" /></span></th>
                 <th className="w-8 px-2 py-2"></th>
               </tr>
             </thead>
