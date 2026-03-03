@@ -10,7 +10,7 @@ export default function ForecastDashboard() {
   const { reps, opportunities } = useForecast();
   const [selectedQuarter, setSelectedQuarter] = useState<Quarter | 'full-year'>(getCurrentQuarter());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
-  const [showGoals, setShowGoals] = useState(true);
+  const [showGoals, setShowGoals] = useState(false);
 
   const quarters = useMemo(() => {
     const set = new Set<string>();
