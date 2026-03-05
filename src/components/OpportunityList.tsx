@@ -13,7 +13,7 @@ interface Props {
   quarter: Quarter;
 }
 
-type Classification = 'commit' | 'upside' | 'closed_won' | 'unclassified';
+type Classification = 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost';
 
 interface EditState {
   name: string;
@@ -30,6 +30,8 @@ const classificationFilters: { key: Classification; label: string }[] = [
   { key: 'unclassified', label: 'Unclassified' },
 ];
 
+// Filter out lost opps from the main list
+
 export default function OpportunityList({ opportunities, quarter }: Props) {
   const { classifyOpportunity, updateOpportunity } = useForecast();
   const [selectedMonth, setSelectedMonth] = useState<string | 'all'>('all');
@@ -41,6 +43,9 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string } | null>(null);
+
+  // Filter out lost/graveyard opps from the main list
+  const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost'), [opportunities]);
 
   const months = getQuarterMonths(quarter);
   const weeks: WeekRange[] = useMemo(() => {
@@ -63,8 +68,8 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
   };
 
   const monthFiltered = selectedMonth === 'all'
-    ? opportunities
-    : opportunities.filter(o => getMonthKey(o.closeDate) === selectedMonth);
+    ? activeOpportunities
+    : activeOpportunities.filter(o => getMonthKey(o.closeDate) === selectedMonth);
 
   const weekFiltered = useMemo(() => {
     if (selectedWeek === 'all' || weeks.length === 0) return monthFiltered;
@@ -114,21 +119,24 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
   // Footer metrics
   const footerMetrics = useMemo(() => {
     const totalAmount = filtered.reduce((s, o) => s + o.amount, 0);
+    const totalCount = filtered.length;
     const wonAmount = filtered.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
     const wonCount = filtered.filter(o => o.classification === 'closed_won').length;
     const conversionRate = totalAmount > 0 ? (wonAmount / totalAmount) * 100 : 0;
+    const countConvRate = totalCount > 0 ? (wonCount / totalCount) * 100 : 0;
     const avgSalePrice = wonCount > 0 ? wonAmount / wonCount : 0;
 
     // Per-rep metrics
-    const repMap = new Map<string, { total: number; won: number; wonCount: number }>();
+    const repMap = new Map<string, { total: number; won: number; wonCount: number; totalCount: number }>();
     for (const o of filtered) {
-      const entry = repMap.get(o.repName) || { total: 0, won: 0, wonCount: 0 };
+      const entry = repMap.get(o.repName) || { total: 0, won: 0, wonCount: 0, totalCount: 0 };
       entry.total += o.amount;
+      entry.totalCount++;
       if (o.classification === 'closed_won') { entry.won += o.amount; entry.wonCount++; }
       repMap.set(o.repName, entry);
     }
 
-    return { totalAmount, wonAmount, wonCount, conversionRate, avgSalePrice, repMetrics: repMap };
+    return { totalAmount, totalCount, wonAmount, wonCount, conversionRate, countConvRate, avgSalePrice, repMetrics: repMap };
   }, [filtered]);
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -379,8 +387,13 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
                 <td colSpan={2} className="px-3 py-2.5">
                   <div className="flex gap-4 text-xs">
                     <span className="text-muted-foreground">
-                      Conv Rate: <span className={`font-mono font-semibold ${footerMetrics.conversionRate > 0 ? 'text-positive' : 'text-muted-foreground'}`}>
+                      Conv $: <span className={`font-mono font-semibold ${footerMetrics.conversionRate > 0 ? 'text-positive' : 'text-muted-foreground'}`}>
                         {footerMetrics.conversionRate.toFixed(1)}%
+                      </span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      Conv #: <span className={`font-mono font-semibold ${footerMetrics.countConvRate > 0 ? 'text-positive' : 'text-muted-foreground'}`}>
+                        {footerMetrics.countConvRate.toFixed(1)}%
                       </span>
                     </span>
                     <span className="text-muted-foreground">
@@ -398,6 +411,7 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
               {/* Per-rep breakdown when multiple reps */}
               {footerMetrics.repMetrics.size > 1 && Array.from(footerMetrics.repMetrics.entries()).map(([rep, metrics]) => {
                 const convRate = metrics.total > 0 ? (metrics.won / metrics.total) * 100 : 0;
+                const countConv = metrics.totalCount > 0 ? (metrics.wonCount / metrics.totalCount) * 100 : 0;
                 const asp = metrics.wonCount > 0 ? metrics.won / metrics.wonCount : 0;
                 return (
                   <tr key={rep} className="border-t border-border bg-secondary/30">
@@ -411,7 +425,10 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
                     <td colSpan={2} className="px-3 py-1.5">
                       <div className="flex gap-4 text-xs">
                         <span className="text-muted-foreground">
-                          Conv: <span className={`font-mono ${convRate > 0 ? 'text-positive' : 'text-muted-foreground'}`}>{convRate.toFixed(1)}%</span>
+                          Conv $: <span className={`font-mono ${convRate > 0 ? 'text-positive' : 'text-muted-foreground'}`}>{convRate.toFixed(1)}%</span>
+                        </span>
+                        <span className="text-muted-foreground">
+                          Conv #: <span className={`font-mono ${countConv > 0 ? 'text-positive' : 'text-muted-foreground'}`}>{countConv.toFixed(1)}%</span>
                         </span>
                         <span className="text-muted-foreground">
                           ASP: <span className={`font-mono ${asp > 0 ? 'text-commit' : 'text-muted-foreground'}`}>{asp > 0 ? fmt(asp) : '—'}</span>

@@ -21,7 +21,7 @@ interface ReviewItem {
 }
 
 export default function ImportReview({ incoming, fileName, onDone, onCancel }: Props) {
-  const { opportunities, importOpportunities, deleteOpportunity } = useForecast();
+  const { opportunities, importOpportunities, archiveToGraveyard } = useForecast();
 
   const existingMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
 
@@ -90,10 +90,10 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
     if (toImport.length > 0) {
       importOpportunities(toImport, fileName);
     }
-    // Delete selected removed
+    // Archive selected removed to graveyard (instead of hard delete)
     const toRemove = items.filter(i => i.selected && i.changeType === 'removed');
     for (const item of toRemove) {
-      deleteOpportunity(item.opportunity.id);
+      archiveToGraveyard(item.opportunity.id, 'Removed from import file');
     }
     onDone();
   };

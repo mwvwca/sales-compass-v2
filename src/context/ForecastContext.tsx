@@ -36,7 +36,9 @@ interface ForecastContextValue extends ForecastState {
   updateRep: (rep: Rep) => void;
   deleteRep: (id: string) => void;
   importOpportunities: (opps: Opportunity[], fileName: string) => void;
-  classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified') => void;
+  classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost') => void;
+  archiveToGraveyard: (id: string, reason?: string) => void;
+  restoreFromGraveyard: (id: string) => void;
   updateOpportunityAmount: (id: string, amount: number) => void;
   updateOpportunity: (id: string, updates: Partial<Omit<Opportunity, 'id'>>) => void;
   deleteOpportunity: (id: string) => void;
@@ -146,7 +148,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const classifyOpportunity = useCallback((id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified') => {
+  const classifyOpportunity = useCallback((id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost') => {
     setState(s => {
       const opp = s.opportunities.find(o => o.id === id);
       const newChanges: ChangeLogEntry[] = [];
@@ -190,6 +192,24 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, opportunities: s.opportunities.filter(o => o.id !== id) }));
   }, []);
 
+  const archiveToGraveyard = useCallback((id: string, reason?: string) => {
+    setState(s => ({
+      ...s,
+      opportunities: s.opportunities.map(o =>
+        o.id === id ? { ...o, previousClassification: o.classification, classification: 'lost' as const, lostDate: new Date().toISOString(), lostReason: reason || 'Removed from import' } : o
+      ),
+    }));
+  }, []);
+
+  const restoreFromGraveyard = useCallback((id: string) => {
+    setState(s => ({
+      ...s,
+      opportunities: s.opportunities.map(o =>
+        o.id === id ? { ...o, classification: (o.previousClassification && o.previousClassification !== 'lost' ? o.previousClassification : 'unclassified') as any, lostDate: undefined, lostReason: undefined } : o
+      ),
+    }));
+  }, []);
+
   const clearChangelog = useCallback(() => {
     setState(s => ({ ...s, changelog: [] }));
   }, []);
@@ -205,7 +225,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   }, [state.snapshots]);
 
   return (
-    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, clearChangelog, restoreFromBackup, getOpportunityHistory }}>
+    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, archiveToGraveyard, restoreFromGraveyard, clearChangelog, restoreFromBackup, getOpportunityHistory }}>
       {children}
     </ForecastContext.Provider>
   );
