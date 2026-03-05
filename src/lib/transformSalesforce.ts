@@ -12,11 +12,13 @@ export interface ForecastRow {
 
 const STAGE_PROBABILITY_MAP: Record<string, string> = {
   "closed won": "100%",
+  "closed lost": "0%",
   "purchasing": "90%",
   "commercial": "75%",
   "technical": "50%",
   "discovery": "25%",
   "qualified": "5%",
+  "omitted": "0%",
 };
 
 function parseStage(rawStage: string): { stage: string; probability: string } {
