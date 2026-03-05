@@ -18,6 +18,9 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
       closeDate = isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
     }
     const probStr = row.Probability?.replace('%', '') || '0';
+    const stageLower = (row.Stage || '').toLowerCase().trim();
+    const isClosedWon = stageLower === 'closed won';
+    const isClosedLost = stageLower === 'closed lost' || stageLower === 'omitted';
     return {
       id: row["Opportunity ID"] || `import-${Date.now()}-${i}`,
       name: row["Opportunity Name"] || 'Unknown',
@@ -26,9 +29,10 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
       amount: parseFloat(row.Amount?.replace(/[^0-9.-]/g, '') || '0') || 0,
       closeDate,
       stage: row.Stage || '',
-      classification: row.Stage?.toLowerCase().trim() === 'closed won' ? 'closed_won' as const : 'unclassified' as const,
+      classification: isClosedWon ? 'closed_won' as const : isClosedLost ? 'lost' as const : 'unclassified' as const,
       probability: parseFloat(probStr) || 0,
       importDate,
+      ...(isClosedLost ? { lostDate: importDate, lostReason: 'Closed Lost in Salesforce' } : {}),
     };
   });
 }
@@ -277,7 +281,8 @@ const SalesDataSync = () => {
                     <TableCell className="text-xs">{row["Close Date"]}</TableCell>
                     <TableCell>
                       <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                        row.Stage === 'Closed Won' ? 'bg-foreground/10 text-foreground' :
+                        row.Stage.toLowerCase().trim() === 'closed won' ? 'bg-foreground/10 text-foreground' :
+                        row.Stage.toLowerCase().trim() === 'closed lost' ? 'bg-destructive/10 text-destructive' :
                         'bg-secondary text-muted-foreground'
                       }`}>
                         {row.Stage}
