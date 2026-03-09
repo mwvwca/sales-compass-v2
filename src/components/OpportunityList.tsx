@@ -33,7 +33,7 @@ const classificationFilters: { key: Classification; label: string }[] = [
 
 // Filter out lost opps from the main list
 
-export default function OpportunityList({ opportunities, quarter }: Props) {
+export default function OpportunityList({ opportunities, lostOpportunities = [], quarter }: Props) {
   const { classifyOpportunity, updateOpportunity } = useForecast();
   const [selectedMonth, setSelectedMonth] = useState<string | 'all'>('all');
   const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
