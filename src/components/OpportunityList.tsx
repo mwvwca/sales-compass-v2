@@ -117,17 +117,21 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     });
   }, [classFiltered, sortField, sortDir]);
 
-  // Footer metrics
+  // Footer metrics (conversion rates include lost opportunities in denominator)
   const footerMetrics = useMemo(() => {
+    const lostAmount = lostOpportunities.reduce((s, o) => s + o.amount, 0);
+    const lostCount = lostOpportunities.length;
     const totalAmount = filtered.reduce((s, o) => s + o.amount, 0);
     const totalCount = filtered.length;
+    const allAmount = totalAmount + lostAmount;
+    const allCount = totalCount + lostCount;
     const wonAmount = filtered.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
     const wonCount = filtered.filter(o => o.classification === 'closed_won').length;
-    const conversionRate = totalAmount > 0 ? (wonAmount / totalAmount) * 100 : 0;
-    const countConvRate = totalCount > 0 ? (wonCount / totalCount) * 100 : 0;
+    const conversionRate = allAmount > 0 ? (wonAmount / allAmount) * 100 : 0;
+    const countConvRate = allCount > 0 ? (wonCount / allCount) * 100 : 0;
     const avgSalePrice = wonCount > 0 ? wonAmount / wonCount : 0;
 
-    // Per-rep metrics
+    // Per-rep metrics (including lost opps per rep in denominator)
     const repMap = new Map<string, { total: number; won: number; wonCount: number; totalCount: number }>();
     for (const o of filtered) {
       const entry = repMap.get(o.repName) || { total: 0, won: 0, wonCount: 0, totalCount: 0 };
@@ -136,9 +140,15 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       if (o.classification === 'closed_won') { entry.won += o.amount; entry.wonCount++; }
       repMap.set(o.repName, entry);
     }
+    for (const o of lostOpportunities) {
+      const entry = repMap.get(o.repName) || { total: 0, won: 0, wonCount: 0, totalCount: 0 };
+      entry.total += o.amount;
+      entry.totalCount++;
+      repMap.set(o.repName, entry);
+    }
 
     return { totalAmount, totalCount, wonAmount, wonCount, conversionRate, countConvRate, avgSalePrice, repMetrics: repMap };
-  }, [filtered]);
+  }, [filtered, lostOpportunities]);
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ChevronsUpDown size={12} className="text-muted-foreground/50" />;
