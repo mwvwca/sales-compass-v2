@@ -10,6 +10,7 @@ type SortDir = 'asc' | 'desc';
 
 interface Props {
   opportunities: Opportunity[];
+  lostOpportunities?: Opportunity[];
   quarter: Quarter;
 }
 
