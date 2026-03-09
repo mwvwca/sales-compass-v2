@@ -86,7 +86,14 @@ export default function ImportSheet() {
             amount: parseFloat(row[mapping.amount || ''] || '0') || 0,
             closeDate,
             stage: String(row[mapping.stage || ''] || '').trim(),
-            classification: String(row[mapping.stage || ''] || '').toLowerCase().trim() === 'closed won' ? 'closed_won' : 'unclassified',
+            classification: (() => {
+              const stageLower = String(row[mapping.stage || ''] || '').toLowerCase().trim();
+              if (stageLower === 'closed won') return 'closed_won' as const;
+              if (stageLower === 'closed lost') return 'lost' as const;
+              return 'unclassified' as const;
+            })(),
+            lostDate: String(row[mapping.stage || ''] || '').toLowerCase().trim() === 'closed lost' ? importDate : undefined,
+            lostReason: String(row[mapping.stage || ''] || '').toLowerCase().trim() === 'closed lost' ? 'Closed Lost in Salesforce' : undefined,
             probability: parseFloat(row[mapping.probability || ''] || '0') || 0,
             importDate,
           };
