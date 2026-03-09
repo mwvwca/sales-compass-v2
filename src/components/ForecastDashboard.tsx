@@ -42,6 +42,17 @@ export default function ForecastDashboard() {
     });
   }, [opportunities, fullYearQuarters, selectedRep]);
 
+  const lostOpps = useMemo(() => {
+    return opportunities.filter(o => {
+      if (!o.closeDate) return false;
+      if (o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost') return false;
+      const q = getQuarter(o.closeDate);
+      if (!fullYearQuarters.includes(q)) return false;
+      if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
+      return true;
+    });
+  }, [opportunities, fullYearQuarters, selectedRep]);
+
   const repNames = useMemo(() => {
     const names = new Set(opportunities.map(o => o.repName));
     reps.forEach(r => names.add(r.name));
