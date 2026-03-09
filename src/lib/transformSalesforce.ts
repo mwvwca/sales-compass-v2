@@ -21,13 +21,17 @@ const STAGE_PROBABILITY_MAP: Record<string, string> = {
   "omitted": "0%",
 };
 
+function titleCase(str: string): string {
+  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
+}
+
 function parseStage(rawStage: string): { stage: string; probability: string } {
   if (!rawStage) return { stage: "", probability: "" };
   const trimmed = rawStage.trim();
 
   const match = trimmed.match(/^(.+?)\s+(\d+)%?$/);
   if (match) {
-    const stageName = match[1].trim();
+    const stageName = titleCase(match[1].trim());
     const prob = match[2] + "%";
     return { stage: stageName, probability: prob };
   }
@@ -35,11 +39,11 @@ function parseStage(rawStage: string): { stage: string; probability: string } {
   const lower = trimmed.toLowerCase();
   for (const [key, prob] of Object.entries(STAGE_PROBABILITY_MAP)) {
     if (lower === key || lower.startsWith(key)) {
-      return { stage: trimmed, probability: prob };
+      return { stage: titleCase(trimmed), probability: prob };
     }
   }
 
-  return { stage: trimmed, probability: "" };
+  return { stage: titleCase(trimmed), probability: "" };
 }
 
 function excelDateToString(value: unknown): string {
