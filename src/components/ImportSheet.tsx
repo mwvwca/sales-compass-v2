@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { Opportunity } from '@/types/forecast';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import * as XLSX from '@e965/xlsx';
 import ImportReview from './ImportReview';
 
 interface ColumnMapping {
