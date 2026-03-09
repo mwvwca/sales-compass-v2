@@ -45,7 +45,7 @@ export default function OpportunityList({ opportunities, quarter }: Props) {
   const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string } | null>(null);
 
   // Filter out lost/graveyard opps from the main list
-  const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost'), [opportunities]);
+  const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost'), [opportunities]);
 
   const months = getQuarterMonths(quarter);
   const weeks: WeekRange[] = useMemo(() => {
