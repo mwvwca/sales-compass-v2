@@ -34,6 +34,7 @@ export default function ForecastDashboard() {
     return opportunities.filter(o => {
       if (!o.closeDate) return false;
       if (o.classification === 'lost') return false;
+      if (o.stage.toLowerCase().trim() === 'closed lost') return false;
       const q = getQuarter(o.closeDate);
       if (!fullYearQuarters.includes(q)) return false;
       if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
