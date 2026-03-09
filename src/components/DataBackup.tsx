@@ -91,7 +91,7 @@ export default function DataBackup() {
           });
           return;
         }
-        restoreFromBackup(result.data);
+        restoreFromBackup(result.data as any);
         toast({ title: 'Restored', description: `Data restored from ${file.name}` });
       } catch {
         toast({ title: 'Error', description: 'Could not parse backup file.', variant: 'destructive' });
