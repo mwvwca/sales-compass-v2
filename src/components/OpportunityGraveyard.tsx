@@ -118,9 +118,9 @@ export default function OpportunityGraveyard() {
       {repGroups.size > 1 && (
         <div className="flex flex-wrap gap-2">
           {Array.from(repGroups.entries()).map(([rep, data]) => (
-            <span key={rep} className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded-md font-medium">
+            <button key={rep} onClick={() => setSearchQuery(searchQuery === rep ? '' : rep)} className={`text-xs px-2 py-1 rounded-md font-medium transition-colors ${searchQuery === rep ? 'bg-destructive text-destructive-foreground' : 'bg-destructive/10 text-destructive hover:bg-destructive/20'}`}>
               {rep}: {data.count} opps · {fmt(data.amount)}
-            </span>
+            </button>
           ))}
         </div>
       )}
@@ -165,7 +165,9 @@ export default function OpportunityGraveyard() {
             {sorted.map(opp => (
               <tr key={opp.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                 <td className="px-4 py-2.5 font-medium">{opp.name}</td>
-                <td className="px-3 py-2.5 text-muted-foreground">{opp.repName}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">
+                  <button onClick={() => setSearchQuery(opp.repName)} className="hover:underline hover:text-foreground transition-colors">{opp.repName}</button>
+                </td>
                 <td className="px-3 py-2.5 text-right font-mono">{fmt(opp.amount)}</td>
                 <td className="px-3 py-2.5 text-muted-foreground">{opp.stage}</td>
                 <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">
