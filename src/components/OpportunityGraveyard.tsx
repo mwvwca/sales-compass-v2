@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
-import { getQuarter, getCurrentQuarter, type Quarter } from '@/types/forecast';
-import { RotateCcw, Trash2, Search } from 'lucide-react';
+import { RotateCcw, Trash2, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,10 +12,15 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
+type SortField = 'name' | 'repName' | 'amount' | 'stage' | 'lostDate';
+type SortDir = 'asc' | 'desc' | null;
+
 export default function OpportunityGraveyard() {
   const { opportunities, restoreFromGraveyard, deleteOpportunity } = useForecast();
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
 
   const lostOpps = useMemo(() => {
     return opportunities
@@ -33,11 +37,40 @@ export default function OpportunityGraveyard() {
     );
   }, [lostOpps, searchQuery]);
 
+  const sorted = useMemo(() => {
+    if (!sortField || !sortDir) return filtered;
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'name': cmp = a.name.localeCompare(b.name); break;
+        case 'repName': cmp = a.repName.localeCompare(b.repName); break;
+        case 'amount': cmp = a.amount - b.amount; break;
+        case 'stage': cmp = a.stage.localeCompare(b.stage); break;
+        case 'lostDate': cmp = new Date(a.lostDate || a.importDate).getTime() - new Date(b.lostDate || b.importDate).getTime(); break;
+      }
+      return sortDir === 'desc' ? -cmp : cmp;
+    });
+  }, [filtered, sortField, sortDir]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else if (sortDir === 'desc') { setSortField(null); setSortDir(null); }
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
+  };
+
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
   const totalLostValue = lostOpps.reduce((s, o) => s + o.amount, 0);
 
-  // Group by rep
   const repGroups = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>();
     for (const o of lostOpps) {
@@ -60,6 +93,8 @@ export default function OpportunityGraveyard() {
       </div>
     );
   }
+
+  const thClass = "text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors select-none";
 
   return (
     <div className="space-y-4">
@@ -107,17 +142,27 @@ export default function OpportunityGraveyard() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/50">
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Opportunity</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
-              <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last Stage</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Lost Date</th>
+              <th className={`${thClass} px-4`} onClick={() => handleSort('name')}>
+                <span className="flex items-center gap-1">Opportunity <SortIcon field="name" /></span>
+              </th>
+              <th className={thClass} onClick={() => handleSort('repName')}>
+                <span className="flex items-center gap-1">Rep <SortIcon field="repName" /></span>
+              </th>
+              <th className={`${thClass} text-right`} onClick={() => handleSort('amount')}>
+                <span className="flex items-center justify-end gap-1">Amount <SortIcon field="amount" /></span>
+              </th>
+              <th className={thClass} onClick={() => handleSort('stage')}>
+                <span className="flex items-center gap-1">Last Stage <SortIcon field="stage" /></span>
+              </th>
+              <th className={thClass} onClick={() => handleSort('lostDate')}>
+                <span className="flex items-center gap-1">Lost Date <SortIcon field="lostDate" /></span>
+              </th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
               <th className="text-center px-2 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(opp => (
+            {sorted.map(opp => (
               <tr key={opp.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                 <td className="px-4 py-2.5 font-medium">{opp.name}</td>
                 <td className="px-3 py-2.5 text-muted-foreground">{opp.repName}</td>
