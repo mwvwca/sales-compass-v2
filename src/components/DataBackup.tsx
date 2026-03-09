@@ -3,6 +3,59 @@ import { Button } from '@/components/ui/button';
 import { Download, Upload } from 'lucide-react';
 import { useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { z } from 'zod';
+
+const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost']);
+
+const repSchema = z.object({
+  id: z.string(),
+  name: z.string().max(200),
+  quarterlyGoals: z.record(z.string(), z.number().finite().min(0)),
+});
+
+const opportunitySchema = z.object({
+  id: z.string(),
+  name: z.string().max(500),
+  repId: z.string(),
+  repName: z.string().max(200),
+  amount: z.number().finite().min(0),
+  closeDate: z.string(),
+  stage: z.string().max(200),
+  classification: classificationEnum,
+  probability: z.number().finite().min(0).max(100),
+  importDate: z.string(),
+  previousClassification: classificationEnum.optional(),
+  lostDate: z.string().optional(),
+  lostReason: z.string().max(500).optional(),
+  movedAt: z.string().optional(),
+});
+
+const importRecordSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  fileName: z.string().max(500),
+  opportunityCount: z.number().finite().min(0),
+});
+
+const changeLogSchema = z.object({
+  id: z.string(),
+  importDate: z.string(),
+  fileName: z.string().max(500),
+  opportunityId: z.string(),
+  opportunityName: z.string().max(500),
+  repName: z.string().max(200),
+  field: z.enum(['closeDate', 'amount', 'stage', 'classification', 'name', 'repName']),
+  oldValue: z.string(),
+  newValue: z.string(),
+});
+
+const backupSchema = z.object({
+  reps: z.array(repSchema).max(1000),
+  opportunities: z.array(opportunitySchema).max(10000),
+  imports: z.array(importRecordSchema).max(1000).optional(),
+  changelog: z.array(changeLogSchema).max(50000).optional(),
+  exportedAt: z.string().optional(),
+});
 
 export default function DataBackup() {
   const { reps, opportunities, imports, changelog, restoreFromBackup } = useForecast();
@@ -27,12 +80,18 @@ export default function DataBackup() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const data = JSON.parse(ev.target?.result as string);
-        if (!data.reps || !data.opportunities) {
-          toast({ title: 'Invalid backup', description: 'File does not contain valid forecast data.', variant: 'destructive' });
+        const raw = JSON.parse(ev.target?.result as string);
+        const result = backupSchema.safeParse(raw);
+        if (!result.success) {
+          const firstError = result.error.issues[0];
+          toast({
+            title: 'Invalid backup',
+            description: `Validation failed: ${firstError.path.join('.')} — ${firstError.message}`,
+            variant: 'destructive',
+          });
           return;
         }
-        restoreFromBackup(data);
+        restoreFromBackup(result.data as any);
         toast({ title: 'Restored', description: `Data restored from ${file.name}` });
       } catch {
         toast({ title: 'Error', description: 'Could not parse backup file.', variant: 'destructive' });

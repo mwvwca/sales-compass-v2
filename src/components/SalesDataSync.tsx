@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
-import * as XLSX from 'xlsx';
+import * as XLSX from '@e965/xlsx';
 import { Upload, Download, CheckCircle2, AlertCircle, ArrowDown, Sparkles, Send, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { transformOutputToForecast, createForecastWorkbook, type ForecastRow, type SkippedRow } from '@/lib/transformSalesforce';
