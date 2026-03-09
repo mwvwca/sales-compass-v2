@@ -118,9 +118,9 @@ export default function OpportunityGraveyard() {
       {repGroups.size > 1 && (
         <div className="flex flex-wrap gap-2">
           {Array.from(repGroups.entries()).map(([rep, data]) => (
-            <span key={rep} className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded-md font-medium">
+            <button key={rep} onClick={() => setSearchQuery(searchQuery === rep ? '' : rep)} className={`text-xs px-2 py-1 rounded-md font-medium transition-colors ${searchQuery === rep ? 'bg-destructive text-destructive-foreground' : 'bg-destructive/10 text-destructive hover:bg-destructive/20'}`}>
               {rep}: {data.count} opps · {fmt(data.amount)}
-            </span>
+            </button>
           ))}
         </div>
       )}
