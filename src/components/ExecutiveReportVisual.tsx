@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter } from '@/types/forecast';
+import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import { Download, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
