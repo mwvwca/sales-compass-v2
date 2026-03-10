@@ -6,11 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
-export default function ExecutiveReport() {
+interface Props {
+  quarter?: Quarter;
+  selectedRep?: string | 'all';
+}
+
+export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'all' }: Props = {}) {
   const { reps, opportunities } = useForecast();
   const [copied, setCopied] = useState(false);
 
-  const quarter = getCurrentQuarter();
+  const quarter = quarterProp || getCurrentQuarter();
   const months = getQuarterMonths(quarter);
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
