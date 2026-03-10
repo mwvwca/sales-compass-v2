@@ -13,11 +13,16 @@ const COLORS = {
   unclassified: '#6b7280',
 };
 
-export default function ExecutiveReportVisual() {
+interface Props {
+  quarter?: Quarter;
+  selectedRep?: string | 'all';
+}
+
+export default function ExecutiveReportVisual({ quarter: quarterProp, selectedRep = 'all' }: Props = {}) {
   const { reps, opportunities } = useForecast();
   const printRef = useRef<HTMLDivElement>(null);
 
-  const quarter = getCurrentQuarter();
+  const quarter = quarterProp || getCurrentQuarter();
   const months = getQuarterMonths(quarter);
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
