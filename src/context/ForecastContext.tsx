@@ -115,11 +115,23 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    // Prune snapshots before saving to prevent localStorage overflow
+    const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
+    if (prunedSnapshots.length !== state.snapshots.length) {
+      setState(s => ({ ...s, snapshots: prunedSnapshots }));
+      return; // Will re-trigger this effect with pruned data
+    }
     saveToStorage(STORAGE_KEYS.reps, state.reps);
     saveToStorage(STORAGE_KEYS.opportunities, state.opportunities);
     saveToStorage(STORAGE_KEYS.imports, state.imports);
     saveToStorage(STORAGE_KEYS.changelog, state.changelog);
     saveToStorage(STORAGE_KEYS.snapshots, state.snapshots);
+
+    // Warn if approaching localStorage limits
+    const sizeKB = getStorageSizeKB();
+    if (sizeKB > 4000) {
+      console.warn(`[Forecast] localStorage usage: ${sizeKB}KB / ~5000KB. Consider exporting a backup.`);
+    }
   }, [state.reps, state.opportunities, state.imports, state.changelog, state.snapshots]);
 
   const addRep = useCallback((rep: Rep) => {
