@@ -139,8 +139,8 @@ export default function ForecastDashboard() {
           {repNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
         <div className="flex items-center gap-3 ml-auto">
-          <ExecutiveReport />
-          <ExecutiveReportVisual />
+          <ExecutiveReport quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
+          <ExecutiveReportVisual quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
           <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
             Goals
