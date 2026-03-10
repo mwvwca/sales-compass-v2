@@ -61,7 +61,8 @@ export default function ForecastDashboard() {
   }, [opportunities, reps]);
 
   const getRepGoal = (repName: string) => {
-    const rep = reps.find(r => r.name === repName);
+    // Case-insensitive rep matching for goals
+    const rep = reps.find(r => normalizeRepName(r.name) === normalizeRepName(repName));
     if (!rep) return 0;
     return fullYearQuarters.reduce((sum, q) => sum + (rep.quarterlyGoals[q] || 0), 0);
   };
