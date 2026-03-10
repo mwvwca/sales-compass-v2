@@ -131,7 +131,18 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          return { ...o, classification: existing.classification, previousClassification: existing.previousClassification, movedAt: existing.movedAt };
+          // Stage-derived terminal classifications (closed_won / lost) override existing
+          const resolvedClassification =
+            (o.classification === 'closed_won' || o.classification === 'lost')
+              ? o.classification
+              : existing.classification;
+
+          return {
+            ...o,
+            classification: resolvedClassification,
+            previousClassification: existing.classification !== resolvedClassification ? existing.classification : existing.previousClassification,
+            movedAt: existing.classification !== resolvedClassification ? new Date().toISOString() : existing.movedAt,
+          };
         }
         return o;
       });

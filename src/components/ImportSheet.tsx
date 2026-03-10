@@ -79,7 +79,7 @@ export default function ImportSheet() {
           }
 
           return {
-            id: String(row[mapping.id || ''] || `import-${Date.now()}-${i}`),
+            id: String(row[mapping.id || ''] || `import-${Date.now()}-${i}`).trim(),
             name: String(row[mapping.name || ''] || 'Unknown'),
             repId: '',
             repName: String(row[mapping.repName || ''] || 'Unassigned'),
