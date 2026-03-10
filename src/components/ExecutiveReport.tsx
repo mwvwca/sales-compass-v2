@@ -114,7 +114,7 @@ export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'a
     }
 
     return lines.join('\n');
-  }, [opportunities, reps, quarter, months]);
+  }, [opportunities, reps, quarter, months, selectedRep]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(report);

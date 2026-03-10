@@ -92,7 +92,7 @@ export default function ExecutiveReportVisual({ quarter: quarterProp, selectedRe
       convRate: totalPipe > 0 ? Math.round((closedWon / totalPipe) * 100) : 0,
       asp: closedWonCount > 0 ? closedWon / closedWonCount : 0,
     };
-  }, [opportunities, reps, quarter, months]);
+  }, [opportunities, reps, quarter, months, selectedRep]);
 
   const handlePrint = () => {
     const content = printRef.current;
