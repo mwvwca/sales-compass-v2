@@ -50,13 +50,29 @@ interface ForecastContextValue extends ForecastState {
 const ForecastContext = createContext<ForecastContextValue | null>(null);
 
 export function ForecastProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<ForecastState>({
-    reps: loadFromStorage(STORAGE_KEYS.reps, []),
-    opportunities: loadFromStorage(STORAGE_KEYS.opportunities, []),
-    imports: loadFromStorage(STORAGE_KEYS.imports, []),
-    changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
-    snapshots: loadFromStorage(STORAGE_KEYS.snapshots, []),
-    loading: false,
+  const [state, setState] = useState<ForecastState>(() => {
+    const opportunities = loadFromStorage<Opportunity[]>(STORAGE_KEYS.opportunities, []);
+    
+    // One-time migration: fix classification for opps where stage is Closed Won/Lost but classification doesn't match
+    const migrated = opportunities.map(o => {
+      const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
+      if (stageNorm === 'closed won' && o.classification !== 'closed_won') {
+        return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
+      }
+      if (stageNorm === 'closed lost' && o.classification !== 'lost') {
+        return { ...o, previousClassification: o.classification, classification: 'lost' as const, lostDate: o.lostDate || new Date().toISOString(), lostReason: o.lostReason || 'Closed Lost in Salesforce', movedAt: new Date().toISOString() };
+      }
+      return o;
+    });
+
+    return {
+      reps: loadFromStorage(STORAGE_KEYS.reps, []),
+      opportunities: migrated,
+      imports: loadFromStorage(STORAGE_KEYS.imports, []),
+      changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
+      snapshots: loadFromStorage(STORAGE_KEYS.snapshots, []),
+      loading: false,
+    };
   });
 
   useEffect(() => {

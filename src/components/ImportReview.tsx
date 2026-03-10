@@ -42,6 +42,12 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
       if (existing.stage.trim() !== opp.stage.trim()) changes.push(`Stage: ${existing.stage} → ${opp.stage}`);
       if (existing.repName !== opp.repName) changes.push(`Rep: ${existing.repName} → ${opp.repName}`);
       if (existing.name !== opp.name) changes.push(`Name: ${existing.name} → ${opp.name}`);
+      // Detect classification mismatch: stage says Closed Won/Lost but classification doesn't match
+      const stageNorm = opp.stage.toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
+      const expectedClass = stageNorm === 'closed won' ? 'closed_won' : stageNorm === 'closed lost' ? 'lost' : null;
+      if (expectedClass && existing.classification !== expectedClass) {
+        changes.push(`Classification: ${existing.classification} → ${expectedClass}`);
+      }
       const changeType: ChangeType = changes.length > 0 ? 'updated' : 'unchanged';
       return { opportunity: opp, existing, changeType, changes, selected: changes.length > 0 };
     });
