@@ -22,7 +22,8 @@ export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'a
   const pct = (n: number, d: number) => d === 0 ? 'N/A' : `${Math.round((n / d) * 100)}%`;
 
   const report = useMemo(() => {
-    const qOpps = opportunities.filter(o => o.closeDate && getQuarter(o.closeDate) === quarter);
+    let qOpps = opportunities.filter(o => o.closeDate && getQuarter(o.closeDate) === quarter);
+    if (selectedRep !== 'all') qOpps = qOpps.filter(o => o.repName === selectedRep);
 
     const totalGoal = reps.reduce((s, r) => s + (r.quarterlyGoals[quarter] || 0), 0);
     const closedWon = qOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
