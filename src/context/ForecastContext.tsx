@@ -22,6 +22,45 @@ function saveToStorage<T>(key: string, data: T) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+const MAX_SNAPSHOTS = 5000; // Cap snapshots to prevent localStorage overflow
+
+function getStorageSizeKB(): number {
+  let total = 0;
+  for (const key of Object.values(STORAGE_KEYS)) {
+    const item = localStorage.getItem(key);
+    if (item) total += item.length * 2; // UTF-16 = 2 bytes per char
+  }
+  return Math.round(total / 1024);
+}
+
+function pruneSnapshots(snapshots: OpportunitySnapshot[], limit: number): OpportunitySnapshot[] {
+  if (snapshots.length <= limit) return snapshots;
+  // Keep the most recent snapshots per opportunity (latest import wins)
+  const byOpp = new Map<string, OpportunitySnapshot[]>();
+  for (const s of snapshots) {
+    const arr = byOpp.get(s.opportunityId) || [];
+    arr.push(s);
+    byOpp.set(s.opportunityId, arr);
+  }
+  // Sort each group by date desc, keep last 3 per opp
+  const pruned: OpportunitySnapshot[] = [];
+  for (const arr of byOpp.values()) {
+    arr.sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    pruned.push(...arr.slice(0, 3));
+  }
+  // If still over limit, keep most recent overall
+  if (pruned.length > limit) {
+    pruned.sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    return pruned.slice(0, limit);
+  }
+  return pruned;
+}
+
+/** Normalize a rep name for matching purposes */
+export function normalizeRepName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 interface ForecastState {
   reps: Rep[];
   opportunities: Opportunity[];
@@ -76,11 +115,23 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    // Prune snapshots before saving to prevent localStorage overflow
+    const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
+    if (prunedSnapshots.length !== state.snapshots.length) {
+      setState(s => ({ ...s, snapshots: prunedSnapshots }));
+      return; // Will re-trigger this effect with pruned data
+    }
     saveToStorage(STORAGE_KEYS.reps, state.reps);
     saveToStorage(STORAGE_KEYS.opportunities, state.opportunities);
     saveToStorage(STORAGE_KEYS.imports, state.imports);
     saveToStorage(STORAGE_KEYS.changelog, state.changelog);
     saveToStorage(STORAGE_KEYS.snapshots, state.snapshots);
+
+    // Warn if approaching localStorage limits
+    const sizeKB = getStorageSizeKB();
+    if (sizeKB > 4000) {
+      console.warn(`[Forecast] localStorage usage: ${sizeKB}KB / ~5000KB. Consider exporting a backup.`);
+    }
   }, [state.reps, state.opportunities, state.imports, state.changelog, state.snapshots]);
 
   const addRep = useCallback((rep: Rep) => {

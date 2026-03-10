@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter } from '@/types/forecast';
+import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import { Download, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -13,18 +13,24 @@ const COLORS = {
   unclassified: '#6b7280',
 };
 
-export default function ExecutiveReportVisual() {
+interface Props {
+  quarter?: Quarter;
+  selectedRep?: string | 'all';
+}
+
+export default function ExecutiveReportVisual({ quarter: quarterProp, selectedRep = 'all' }: Props = {}) {
   const { reps, opportunities } = useForecast();
   const printRef = useRef<HTMLDivElement>(null);
 
-  const quarter = getCurrentQuarter();
+  const quarter = quarterProp || getCurrentQuarter();
   const months = getQuarterMonths(quarter);
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   const pct = (n: number, d: number) => d === 0 ? '—' : `${Math.round((n / d) * 100)}%`;
 
   const data = useMemo(() => {
-    const qOpps = opportunities.filter(o => o.closeDate && getQuarter(o.closeDate) === quarter);
+    let qOpps = opportunities.filter(o => o.closeDate && getQuarter(o.closeDate) === quarter);
+    if (selectedRep !== 'all') qOpps = qOpps.filter(o => o.repName === selectedRep);
 
     const totalGoal = reps.reduce((s, r) => s + (r.quarterlyGoals[quarter] || 0), 0);
     const closedWon = qOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
@@ -86,7 +92,7 @@ export default function ExecutiveReportVisual() {
       convRate: totalPipe > 0 ? Math.round((closedWon / totalPipe) * 100) : 0,
       asp: closedWonCount > 0 ? closedWon / closedWonCount : 0,
     };
-  }, [opportunities, reps, quarter, months]);
+  }, [opportunities, reps, quarter, months, selectedRep]);
 
   const handlePrint = () => {
     const content = printRef.current;

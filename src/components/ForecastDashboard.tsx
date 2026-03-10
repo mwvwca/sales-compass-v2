@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
+import { normalizeRepName } from '@/context/ForecastContext';
 import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
@@ -60,7 +61,8 @@ export default function ForecastDashboard() {
   }, [opportunities, reps]);
 
   const getRepGoal = (repName: string) => {
-    const rep = reps.find(r => r.name === repName);
+    // Case-insensitive rep matching for goals
+    const rep = reps.find(r => normalizeRepName(r.name) === normalizeRepName(repName));
     if (!rep) return 0;
     return fullYearQuarters.reduce((sum, q) => sum + (rep.quarterlyGoals[q] || 0), 0);
   };
@@ -137,8 +139,8 @@ export default function ForecastDashboard() {
           {repNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
         <div className="flex items-center gap-3 ml-auto">
-          <ExecutiveReport />
-          <ExecutiveReportVisual />
+          <ExecutiveReport quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
+          <ExecutiveReportVisual quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
           <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
             Goals

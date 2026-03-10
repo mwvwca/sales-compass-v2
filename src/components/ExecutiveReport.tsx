@@ -6,18 +6,24 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
-export default function ExecutiveReport() {
+interface Props {
+  quarter?: Quarter;
+  selectedRep?: string | 'all';
+}
+
+export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'all' }: Props = {}) {
   const { reps, opportunities } = useForecast();
   const [copied, setCopied] = useState(false);
 
-  const quarter = getCurrentQuarter();
+  const quarter = quarterProp || getCurrentQuarter();
   const months = getQuarterMonths(quarter);
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   const pct = (n: number, d: number) => d === 0 ? 'N/A' : `${Math.round((n / d) * 100)}%`;
 
   const report = useMemo(() => {
-    const qOpps = opportunities.filter(o => o.closeDate && getQuarter(o.closeDate) === quarter);
+    let qOpps = opportunities.filter(o => o.closeDate && getQuarter(o.closeDate) === quarter);
+    if (selectedRep !== 'all') qOpps = qOpps.filter(o => o.repName === selectedRep);
 
     const totalGoal = reps.reduce((s, r) => s + (r.quarterlyGoals[quarter] || 0), 0);
     const closedWon = qOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
@@ -108,7 +114,7 @@ export default function ExecutiveReport() {
     }
 
     return lines.join('\n');
-  }, [opportunities, reps, quarter, months]);
+  }, [opportunities, reps, quarter, months, selectedRep]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(report);
