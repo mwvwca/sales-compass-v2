@@ -5,6 +5,7 @@ import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQua
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
 import ExecutiveReportVisual from './ExecutiveReportVisual';
+import PipelineCoverage from './PipelineCoverage';
 import { Switch } from '@/components/ui/switch';
 
 export default function ForecastDashboard() {
