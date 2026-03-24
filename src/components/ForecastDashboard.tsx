@@ -167,6 +167,15 @@ export default function ForecastDashboard() {
         ))}
       </div>
 
+      {/* Pipeline Coverage */}
+      <PipelineCoverage
+        opportunities={filteredOpps}
+        allOpportunities={opportunities.filter(o => selectedRep === 'all' || o.repName === selectedRep)}
+        totalGoal={totalGoal}
+        selectedQuarter={selectedQuarter}
+        fullYearQuarters={fullYearQuarters}
+      />
+
       {/* Forecast Table */}
       {Object.keys(summaryByRep).length > 0 && (
         <div className="border border-border rounded-lg overflow-x-auto">
