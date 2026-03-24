@@ -5,6 +5,7 @@ import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQua
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
 import ExecutiveReportVisual from './ExecutiveReportVisual';
+import PipelineCoverage from './PipelineCoverage';
 import { Switch } from '@/components/ui/switch';
 
 export default function ForecastDashboard() {
@@ -165,6 +166,15 @@ export default function ForecastDashboard() {
           </div>
         ))}
       </div>
+
+      {/* Pipeline Coverage */}
+      <PipelineCoverage
+        opportunities={filteredOpps}
+        allOpportunities={opportunities.filter(o => selectedRep === 'all' || o.repName === selectedRep)}
+        totalGoal={totalGoal}
+        selectedQuarter={selectedQuarter}
+        fullYearQuarters={fullYearQuarters}
+      />
 
       {/* Forecast Table */}
       {Object.keys(summaryByRep).length > 0 && (
