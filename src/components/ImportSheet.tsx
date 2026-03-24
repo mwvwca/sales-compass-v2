@@ -54,15 +54,48 @@ export default function ImportSheet() {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet);
+        // Read as array-of-arrays to find the header row (Salesforce exports may have metadata rows above)
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-        if (rows.length === 0) {
+        if (rawRows.length === 0) {
           setError('No data found in the file.');
           return;
         }
 
-        const headers = Object.keys(rows[0]);
+        // Search for a header row containing known column names
+        let headerRowIdx = -1;
+        for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
+          const cells = rawRows[i].map((c: any) => String(c).toLowerCase().trim());
+          if (cells.some(c => c === 'opportunity id' || c === 'opportunity name')) {
+            headerRowIdx = i;
+            break;
+          }
+        }
+
+        // Fallback: use first row as header
+        if (headerRowIdx < 0) headerRowIdx = 0;
+
+        const headers = rawRows[headerRowIdx].map((c: any) => String(c).trim());
         const mapping = autoMap(headers);
+
+        // Build rows as objects from headerRowIdx + 1 onward
+        const rows: Record<string, any>[] = [];
+        for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
+          const obj: Record<string, any> = {};
+          let hasValue = false;
+          for (let j = 0; j < headers.length; j++) {
+            if (headers[j]) {
+              obj[headers[j]] = rawRows[i]?.[j] ?? '';
+              if (String(rawRows[i]?.[j] ?? '').trim()) hasValue = true;
+            }
+          }
+          if (hasValue) rows.push(obj);
+        }
+
+        if (rows.length === 0) {
+          setError('No data rows found after header.');
+          return;
+        }
 
         if (!mapping.id && !mapping.name) {
           setError('Could not find Opportunity ID or Name column. Ensure your export has standard Salesforce column names.');
