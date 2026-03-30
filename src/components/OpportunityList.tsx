@@ -2,8 +2,11 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote } from 'lucide-react';
 import OpportunityHistory from './OpportunityHistory';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 
 type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification';
 type SortDir = 'asc' | 'desc';
@@ -35,6 +38,8 @@ const classificationFilters: { key: Classification; label: string }[] = [
 
 export default function OpportunityList({ opportunities, lostOpportunities = [], quarter }: Props) {
   const { classifyOpportunity, updateOpportunity } = useForecast();
+  const [notesOpp, setNotesOpp] = useState<{ id: string; name: string } | null>(null);
+  const [notesText, setNotesText] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<string | 'all'>(() => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -378,8 +383,15 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                           <button onClick={() => setHistoryOpp({ id: opp.id, name: opp.name })} className="text-muted-foreground hover:text-foreground transition-colors" title="View history">
                             <History size={12} />
                           </button>
-                          <button onClick={() => startEdit(opp)} className="text-muted-foreground hover:text-foreground transition-colors">
+                          <button onClick={() => startEdit(opp)} className="text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                             <Pencil size={12} />
+                          </button>
+                          <button
+                            onClick={() => { setNotesOpp({ id: opp.id, name: opp.name }); setNotesText(opp.notes || ''); }}
+                            className={`transition-colors ${opp.notes ? 'text-upside hover:text-upside/80' : 'text-muted-foreground hover:text-foreground'}`}
+                            title={opp.notes ? 'View/edit notes' : 'Add notes'}
+                          >
+                            <StickyNote size={12} />
                           </button>
                         </div>
                       )}
@@ -470,6 +482,29 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
           onClose={() => setHistoryOpp(null)}
         />
       )}
+
+      <Dialog open={!!notesOpp} onOpenChange={(open) => { if (!open) setNotesOpp(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Notes — {notesOpp?.name}</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={notesText}
+            onChange={(e) => setNotesText(e.target.value)}
+            placeholder="Add notes about this opportunity..."
+            className="min-h-[120px] text-sm"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setNotesOpp(null)}>Cancel</Button>
+            <Button size="sm" onClick={() => {
+              if (notesOpp) {
+                updateOpportunity(notesOpp.id, { notes: notesText });
+                setNotesOpp(null);
+              }
+            }}>Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

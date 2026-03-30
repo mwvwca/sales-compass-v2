@@ -206,6 +206,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
           return {
             ...o,
+            notes: existing.notes,
             classification: resolvedClassification,
             previousClassification: existing.classification !== resolvedClassification ? existing.classification : existing.previousClassification,
             movedAt: existing.classification !== resolvedClassification ? new Date().toISOString() : existing.movedAt,

@@ -19,6 +19,7 @@ export interface Opportunity {
   lostDate?: string;
   lostReason?: string;
   movedAt?: string;
+  notes?: string;
 }
 
 export interface ImportRecord {
