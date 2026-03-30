@@ -361,7 +361,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                       {isEditing ? (
                         <input value={editState.stage} onChange={e => setEditState(s => ({ ...s, stage: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} />
                       ) : (
-                        <span className="text-secondary-foreground">{opp.stage}</span>
+                        <span className="text-secondary-foreground">{formatStageWithPct(opp.stage)}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5">
