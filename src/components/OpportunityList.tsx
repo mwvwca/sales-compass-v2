@@ -383,8 +383,15 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                           <button onClick={() => setHistoryOpp({ id: opp.id, name: opp.name })} className="text-muted-foreground hover:text-foreground transition-colors" title="View history">
                             <History size={12} />
                           </button>
-                          <button onClick={() => startEdit(opp)} className="text-muted-foreground hover:text-foreground transition-colors">
+                          <button onClick={() => startEdit(opp)} className="text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                             <Pencil size={12} />
+                          </button>
+                          <button
+                            onClick={() => { setNotesOpp({ id: opp.id, name: opp.name }); setNotesText(opp.notes || ''); }}
+                            className={`transition-colors ${opp.notes ? 'text-upside hover:text-upside/80' : 'text-muted-foreground hover:text-foreground'}`}
+                            title={opp.notes ? 'View/edit notes' : 'Add notes'}
+                          >
+                            <StickyNote size={12} />
                           </button>
                         </div>
                       )}
