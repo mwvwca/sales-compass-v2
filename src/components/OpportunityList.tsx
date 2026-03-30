@@ -2,8 +2,11 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote } from 'lucide-react';
 import OpportunityHistory from './OpportunityHistory';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 
 type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification';
 type SortDir = 'asc' | 'desc';
