@@ -41,11 +41,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
 
   const currentQuarter = getCurrentQuarter();
 
-  // All opps (including lost) for the selected quarter/rep
-  const allOpps = useMemo(() => {
-    const { reps: _r, ...rest } = useForecast.arguments || {};
-    return opportunities;
-  }, [opportunities]);
+  const allOpps = opportunities;
 
   // ─── Deal Risk Scoring ───
   const riskFlags = useMemo((): RiskFlag[] => {
