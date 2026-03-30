@@ -35,7 +35,12 @@ const classificationFilters: { key: Classification; label: string }[] = [
 
 export default function OpportunityList({ opportunities, lostOpportunities = [], quarter }: Props) {
   const { classifyOpportunity, updateOpportunity } = useForecast();
-  const [selectedMonth, setSelectedMonth] = useState<string | 'all'>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string | 'all'>(() => {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const months = getQuarterMonths(quarter);
+    return months.includes(currentMonth) ? currentMonth : 'all';
+  });
   const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
   const [searchQuery, setSearchQuery] = useState('');
