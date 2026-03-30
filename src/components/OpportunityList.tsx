@@ -38,6 +38,8 @@ const classificationFilters: { key: Classification; label: string }[] = [
 
 export default function OpportunityList({ opportunities, lostOpportunities = [], quarter }: Props) {
   const { classifyOpportunity, updateOpportunity } = useForecast();
+  const [notesOpp, setNotesOpp] = useState<{ id: string; name: string } | null>(null);
+  const [notesText, setNotesText] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<string | 'all'>(() => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
