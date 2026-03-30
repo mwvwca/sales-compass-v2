@@ -249,6 +249,13 @@ export default function ForecastDashboard() {
         </div>
       )}
 
+      {/* Sales Intelligence */}
+      <SalesIntelligence
+        opportunities={[...filteredOpps, ...lostOpps]}
+        selectedQuarter={selectedQuarter}
+        selectedRep={selectedRep}
+      />
+
       {/* Opportunities */}
       <OpportunityList opportunities={filteredOpps} lostOpportunities={lostOpps} quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} />
     </div>
