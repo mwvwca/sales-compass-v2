@@ -482,6 +482,29 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
           onClose={() => setHistoryOpp(null)}
         />
       )}
+
+      <Dialog open={!!notesOpp} onOpenChange={(open) => { if (!open) setNotesOpp(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Notes — {notesOpp?.name}</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={notesText}
+            onChange={(e) => setNotesText(e.target.value)}
+            placeholder="Add notes about this opportunity..."
+            className="min-h-[120px] text-sm"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setNotesOpp(null)}>Cancel</Button>
+            <Button size="sm" onClick={() => {
+              if (notesOpp) {
+                updateOpportunity(notesOpp.id, { notes: notesText });
+                setNotesOpp(null);
+              }
+            }}>Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
