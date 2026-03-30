@@ -3,6 +3,7 @@ import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
 import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote } from 'lucide-react';
+import { formatStageWithPct } from '@/lib/utils';
 import OpportunityHistory from './OpportunityHistory';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -361,7 +362,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                       {isEditing ? (
                         <input value={editState.stage} onChange={e => setEditState(s => ({ ...s, stage: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} />
                       ) : (
-                        <span className="text-secondary-foreground">{opp.stage}</span>
+                        <span className="text-secondary-foreground">{formatStageWithPct(opp.stage)}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5">

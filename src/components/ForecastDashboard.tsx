@@ -6,6 +6,7 @@ import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
 import ExecutiveReportVisual from './ExecutiveReportVisual';
 import PipelineCoverage from './PipelineCoverage';
+import SalesIntelligence from './SalesIntelligence';
 import { Switch } from '@/components/ui/switch';
 
 export default function ForecastDashboard() {
@@ -247,6 +248,13 @@ export default function ForecastDashboard() {
           </table>
         </div>
       )}
+
+      {/* Sales Intelligence */}
+      <SalesIntelligence
+        opportunities={[...filteredOpps, ...lostOpps]}
+        selectedQuarter={selectedQuarter}
+        selectedRep={selectedRep}
+      />
 
       {/* Opportunities */}
       <OpportunityList opportunities={filteredOpps} lostOpportunities={lostOpps} quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} />
