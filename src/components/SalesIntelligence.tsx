@@ -282,7 +282,6 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
     });
   }, [allOpps, snapshots]);
 
-  const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
   const levelColors = {
     high: 'text-negative bg-negative/10 border-negative/30',
