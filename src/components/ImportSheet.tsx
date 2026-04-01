@@ -28,6 +28,8 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   'stage name': 'stage',
   'probability': 'probability',
   'probability (%)': 'probability',
+  'forecast': 'forecast',
+  'upside': 'upsideFlag',
 };
 
 function autoMap(headers: string[]): Partial<ColumnMapping> {
