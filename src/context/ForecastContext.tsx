@@ -235,7 +235,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const classifyOpportunity = useCallback((id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost') => {
+  const classifyOpportunity = useCallback((id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted') => {
     setState(s => {
       const opp = s.opportunities.find(o => o.id === id);
       const newChanges: ChangeLogEntry[] = [];
