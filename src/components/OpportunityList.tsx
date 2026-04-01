@@ -285,6 +285,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
               commit: active ? 'bg-commit/20 text-commit border-commit/40' : 'text-muted-foreground border-border',
               upside: active ? 'bg-upside/20 text-upside border-upside/40' : 'text-muted-foreground border-border',
               unclassified: active ? 'bg-secondary text-foreground border-foreground/20' : 'text-muted-foreground border-border',
+              omitted: active ? 'bg-muted text-muted-foreground border-muted-foreground/40' : 'text-muted-foreground border-border',
             };
             return (
               <button
