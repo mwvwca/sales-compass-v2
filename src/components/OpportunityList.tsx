@@ -129,11 +129,12 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     });
   }, [classFiltered, sortField, sortDir]);
 
-  // Footer metrics (conversion rates include lost opportunities in denominator)
+  // Footer metrics (exclude omitted from totals; conversion rates include lost in denominator)
   const footerMetrics = useMemo(() => {
+    const countable = filtered.filter(o => o.classification !== 'omitted');
     const lostAmount = lostOpportunities.reduce((s, o) => s + o.amount, 0);
     const lostCount = lostOpportunities.length;
-    const totalAmount = filtered.reduce((s, o) => s + o.amount, 0);
+    const totalAmount = countable.reduce((s, o) => s + o.amount, 0);
     const totalCount = filtered.length;
     const allAmount = totalAmount + lostAmount;
     const allCount = totalCount + lostCount;
