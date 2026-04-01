@@ -19,7 +19,7 @@ export default function PipelineCoverage({ opportunities, allOpportunities, tota
   const metrics = useMemo(() => {
     // Active pipeline (excludes closed won and lost)
     const activeOpps = opportunities.filter(o =>
-      o.classification !== 'closed_won' && o.classification !== 'lost' &&
+      o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted' &&
       o.stage.toLowerCase().trim() !== 'closed lost' && o.stage.toLowerCase().trim() !== 'closed won'
     );
 

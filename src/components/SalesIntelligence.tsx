@@ -214,7 +214,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
 
   // ─── Close Date Prediction ───
   const closeDatePredictions = useMemo(() => {
-    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost');
+    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted');
     
     // Calculate avg days per stage from won deals
     const stageTimings = new Map<string, number[]>();
