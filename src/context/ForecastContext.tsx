@@ -75,7 +75,7 @@ interface ForecastContextValue extends ForecastState {
   updateRep: (rep: Rep) => void;
   deleteRep: (id: string) => void;
   importOpportunities: (opps: Opportunity[], fileName: string) => void;
-  classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost') => void;
+  classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted') => void;
   archiveToGraveyard: (id: string, reason?: string) => void;
   restoreFromGraveyard: (id: string) => void;
   updateOpportunityAmount: (id: string, amount: number) => void;
