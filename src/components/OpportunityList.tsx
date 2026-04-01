@@ -326,8 +326,9 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
             <tbody>
               {filtered.map(opp => {
                 const isEditing = editingId === opp.id;
+                const isOmitted = opp.classification === 'omitted';
                 return (
-                  <tr key={opp.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                  <tr key={opp.id} className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${isOmitted ? 'opacity-40' : ''}`}>
                     <td className="px-4 py-2.5">
                       {isEditing ? (
                         <input value={editState.name} onChange={e => setEditState(s => ({ ...s, name: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} autoFocus />
