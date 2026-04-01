@@ -146,7 +146,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
 
     // Per-rep metrics (including lost opps per rep in denominator)
     const repMap = new Map<string, { total: number; won: number; wonCount: number; totalCount: number }>();
-    for (const o of filtered) {
+    for (const o of countable) {
       const entry = repMap.get(o.repName) || { total: 0, won: 0, wonCount: 0, totalCount: 0 };
       entry.total += o.amount;
       entry.totalCount++;
