@@ -8,6 +8,8 @@ export interface ForecastRow {
   "Close Date": string;
   Stage: string;
   Probability: string;
+  Forecast?: string;
+  Upside?: string;
 }
 
 const STAGE_PROBABILITY_MAP: Record<string, string> = {
