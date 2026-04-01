@@ -396,7 +396,14 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                             className={`transition-colors ${opp.notes ? 'text-upside hover:text-upside/80' : 'text-muted-foreground hover:text-foreground'}`}
                             title={opp.notes ? 'View/edit notes' : 'Add notes'}
                           >
-                            <StickyNote size={12} />
+                          <StickyNote size={12} />
+                          </button>
+                          <button
+                            onClick={() => classifyOpportunity(opp.id, isOmitted ? 'unclassified' : 'omitted')}
+                            className={`transition-colors ${isOmitted ? 'text-foreground hover:text-foreground/80' : 'text-muted-foreground hover:text-foreground'}`}
+                            title={isOmitted ? 'Restore opportunity' : 'Omit opportunity'}
+                          >
+                            {isOmitted ? <Eye size={12} /> : <EyeOff size={12} />}
                           </button>
                         </div>
                       )}
