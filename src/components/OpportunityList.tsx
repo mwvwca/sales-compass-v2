@@ -49,7 +49,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     return months.includes(currentMonth) ? currentMonth : 'all';
   });
   const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
-  const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
+  const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified', 'omitted']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
