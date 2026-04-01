@@ -57,7 +57,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string } | null>(null);
 
-  // Filter out lost/graveyard opps from the main list
+  // Filter out lost/graveyard opps from the main list (but keep omitted — they show greyed out)
   const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost'), [opportunities]);
 
   const months = getQuarterMonths(quarter);
