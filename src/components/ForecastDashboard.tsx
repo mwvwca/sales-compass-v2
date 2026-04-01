@@ -172,6 +172,37 @@ export default function ForecastDashboard() {
   const activeHud = hudMetrics[hudView];
   const hudLabel = hudView === 'monthly' ? 'Monthly' : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
 
+  return (
+    <div className="space-y-6">
+      {/* Controls */}
+      <div className="flex items-center gap-3">
+        <div className="flex gap-1 bg-secondary rounded-md p-0.5">
+          {quarters.map(q => (
+            <button key={q} onClick={() => setSelectedQuarter(q)}
+              className={`px-3 py-1.5 text-xs font-mono rounded transition-colors ${q === selectedQuarter ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+              {q}
+            </button>
+          ))}
+          <button onClick={() => setSelectedQuarter('full-year')}
+            className={`px-3 py-1.5 text-xs font-mono rounded transition-colors ${selectedQuarter === 'full-year' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+            Full Year
+          </button>
+        </div>
+        <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
+          className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+          <option value="all">All Reps</option>
+          {repNames.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <div className="flex items-center gap-3 ml-auto">
+          <ExecutiveReport quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
+          <ExecutiveReportVisual quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
+            Goals
+          </label>
+        </div>
+      </div>
+
       {/* Summary Cards */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
