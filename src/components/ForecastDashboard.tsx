@@ -121,53 +121,86 @@ export default function ForecastDashboard() {
   const totalClosedWon = Object.values(summaryByRep).reduce((s, r) => s + r.closed_won, 0);
   const totalGoal = Object.values(summaryByRep).reduce((s, r) => s + r.goal, 0);
 
-  return (
-    <div className="space-y-6">
-      {/* Controls */}
-      <div className="flex items-center gap-3">
-        <div className="flex gap-1 bg-secondary rounded-md p-0.5">
-          {quarters.map(q => (
-            <button key={q} onClick={() => setSelectedQuarter(q)}
-              className={`px-3 py-1.5 text-xs font-mono rounded transition-colors ${q === selectedQuarter ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
-              {q}
-            </button>
-          ))}
-          <button onClick={() => setSelectedQuarter('full-year')}
-            className={`px-3 py-1.5 text-xs font-mono rounded transition-colors ${selectedQuarter === 'full-year' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
-            Full Year
-          </button>
-        </div>
-        <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
-          className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-          <option value="all">All Reps</option>
-          {repNames.map(n => <option key={n} value={n}>{n}</option>)}
-        </select>
-        <div className="flex items-center gap-3 ml-auto">
-          <ExecutiveReport quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
-          <ExecutiveReportVisual quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} selectedRep={selectedRep} />
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-            <Switch checked={showGoals} onCheckedChange={setShowGoals} className="scale-75" />
-            Goals
-          </label>
-        </div>
-      </div>
+  // HUD scoped metrics
+  const hudMetrics = useMemo(() => {
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const currentQ = getCurrentQuarter();
+    const year = now.getFullYear();
+    const annualQuarters = [`${year}-Q1`, `${year}-Q2`, `${year}-Q3`, `${year}-Q4`] as Quarter[];
+
+    const calcForOpps = (opps: typeof opportunities, goalAmount: number) => {
+      const pipe = opps.filter(o => o.classification !== 'omitted').reduce((s, o) => s + o.amount, 0);
+      const won = opps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
+      const commit = opps.filter(o => o.classification === 'commit').reduce((s, o) => s + o.amount, 0);
+      const upside = opps.filter(o => o.classification === 'upside').reduce((s, o) => s + o.amount, 0);
+      return { pipe, won, commit, upside, goal: goalAmount, variance: won - goalAmount };
+    };
+
+    const getGoalForQuarters = (qs: Quarter[]) => {
+      const activeReps = selectedRep === 'all' ? repNames : [selectedRep];
+      return activeReps.reduce((sum, name) => {
+        const rep = reps.find(r => normalizeRepName(r.name) === normalizeRepName(name));
+        if (!rep) return sum;
+        return sum + qs.reduce((s, q) => s + (rep.quarterlyGoals[q] || 0), 0);
+      }, 0);
+    };
+
+    const baseFilter = (o: typeof opportunities[0]) => {
+      if (!o.closeDate) return false;
+      if (o.classification === 'lost' || o.stage.toLowerCase().trim() === 'closed lost') return false;
+      if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
+      return true;
+    };
+
+    // Monthly: current month only, goal = quarterly goal / 3
+    const monthlyOpps = opportunities.filter(o => baseFilter(o) && getMonthKey(o.closeDate) === currentMonthKey);
+    const monthlyGoal = getGoalForQuarters([currentQ]) / 3;
+    const monthly = calcForOpps(monthlyOpps, monthlyGoal);
+
+    // Quarterly: current quarter
+    const quarterlyOpps = opportunities.filter(o => baseFilter(o) && getQuarter(o.closeDate) === currentQ);
+    const quarterly = calcForOpps(quarterlyOpps, getGoalForQuarters([currentQ]));
+
+    // Annual: full year
+    const annualOpps = opportunities.filter(o => baseFilter(o) && annualQuarters.includes(getQuarter(o.closeDate)));
+    const annual = calcForOpps(annualOpps, getGoalForQuarters(annualQuarters));
+
+    return { monthly, quarterly, annual };
+  }, [opportunities, reps, repNames, selectedRep]);
+
+  const activeHud = hudMetrics[hudView];
+  const hudLabel = hudView === 'monthly' ? 'Monthly' : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-6 gap-3">
-        {[
-          { label: 'Quarterly Goal', value: fmt(totalGoal), sub: null },
-          { label: 'Total Pipe', value: fmt(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0)), sub: pct(Object.values(summaryByRep).reduce((s, r) => s + r.total, 0), totalGoal), color: 'text-foreground' },
-          { label: 'Closed Won', value: fmt(totalClosedWon), sub: pct(totalClosedWon, totalGoal), color: 'text-positive' },
-          { label: 'Commit', value: fmt(totalCommit), sub: pct(totalCommit, totalGoal), color: 'text-commit' },
-          { label: 'Upside', value: fmt(totalUpside), sub: pct(totalUpside, totalGoal), color: 'text-upside' },
-          { label: 'Variance', value: fmt(totalClosedWon - totalGoal), sub: pct(totalClosedWon, totalGoal), color: totalClosedWon >= totalGoal ? 'text-positive' : 'text-negative' },
-        ].map(c => (
-          <div key={c.label} className="bg-card border border-border rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
-            <p className={`text-xl font-mono font-semibold ${c.color || ''}`}>{c.value}</p>
-            {c.sub && <p className={`text-xs font-mono mt-0.5 ${c.color || 'text-muted-foreground'}`}>{c.sub} of goal</p>}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="flex bg-secondary rounded-md p-0.5">
+            {(['monthly', 'quarterly', 'annual'] as const).map(v => (
+              <button key={v} onClick={() => setHudView(v)}
+                className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${v === hudView ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                {v === 'monthly' ? 'M' : v === 'quarterly' ? 'Q' : 'Y'}
+              </button>
+            ))}
           </div>
-        ))}
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{hudLabel} View</span>
+        </div>
+        <div className="grid grid-cols-6 gap-3">
+          {[
+            { label: `${hudLabel} Goal`, value: fmt(activeHud.goal), sub: null },
+            { label: 'Total Pipe', value: fmt(activeHud.pipe), sub: pct(activeHud.pipe, activeHud.goal), color: 'text-foreground' },
+            { label: 'Closed Won', value: fmt(activeHud.won), sub: pct(activeHud.won, activeHud.goal), color: 'text-positive' },
+            { label: 'Commit', value: fmt(activeHud.commit), sub: pct(activeHud.commit, activeHud.goal), color: 'text-commit' },
+            { label: 'Upside', value: fmt(activeHud.upside), sub: pct(activeHud.upside, activeHud.goal), color: 'text-upside' },
+            { label: 'Variance', value: fmt(activeHud.variance), sub: pct(activeHud.won, activeHud.goal), color: activeHud.variance >= 0 ? 'text-positive' : 'text-negative' },
+          ].map(c => (
+            <div key={c.label} className="bg-card border border-border rounded-lg p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
+              <p className={`text-xl font-mono font-semibold ${c.color || ''}`}>{c.value}</p>
+              {c.sub && <p className={`text-xs font-mono mt-0.5 ${c.color || 'text-muted-foreground'}`}>{c.sub} of goal</p>}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Pipeline Coverage */}
