@@ -138,8 +138,8 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     const totalCount = countable.length;
     const allAmount = totalAmount + lostAmount;
     const allCount = totalCount + lostCount;
-    const wonAmount = filtered.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
-    const wonCount = filtered.filter(o => o.classification === 'closed_won').length;
+    const wonAmount = countable.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
+    const wonCount = countable.filter(o => o.classification === 'closed_won').length;
     const conversionRate = allAmount > 0 ? (wonAmount / allAmount) * 100 : 0;
     const countConvRate = allCount > 0 ? (wonCount / allCount) * 100 : 0;
     const avgSalePrice = wonCount > 0 ? wonAmount / wonCount : 0;
