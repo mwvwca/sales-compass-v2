@@ -169,6 +169,8 @@ export function createForecastWorkbook(rows: ForecastRow[], version: string): XL
     { wch: 14 },
     { wch: 16 },
     { wch: 12 },
+    { wch: 10 },
+    { wch: 10 },
   ];
 
   const wb = XLSX.utils.book_new();
