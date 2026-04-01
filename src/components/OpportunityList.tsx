@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye } from 'lucide-react';
 import { formatStageWithPct } from '@/lib/utils';
 import OpportunityHistory from './OpportunityHistory';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -18,7 +18,7 @@ interface Props {
   quarter: Quarter;
 }
 
-type Classification = 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost';
+type Classification = 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted';
 
 interface EditState {
   name: string;
@@ -33,6 +33,7 @@ const classificationFilters: { key: Classification; label: string }[] = [
   { key: 'commit', label: 'Commit' },
   { key: 'upside', label: 'Upside' },
   { key: 'unclassified', label: 'Unclassified' },
+  { key: 'omitted', label: 'Omitted' },
 ];
 
 // Filter out lost opps from the main list
@@ -48,7 +49,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     return months.includes(currentMonth) ? currentMonth : 'all';
   });
   const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
-  const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
+  const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified', 'omitted']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
@@ -56,7 +57,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string } | null>(null);
 
-  // Filter out lost/graveyard opps from the main list
+  // Filter out lost/graveyard opps from the main list (but keep omitted — they show greyed out)
   const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost'), [opportunities]);
 
   const months = getQuarterMonths(quarter);
@@ -115,7 +116,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     }
   };
 
-  const classOrder: Record<string, number> = { closed_won: 0, commit: 1, upside: 2, unclassified: 3 };
+  const classOrder: Record<string, number> = { closed_won: 0, commit: 1, upside: 2, unclassified: 3, omitted: 4 };
 
   const filtered = useMemo(() => {
     if (!sortField) return classFiltered;
@@ -128,23 +129,24 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     });
   }, [classFiltered, sortField, sortDir]);
 
-  // Footer metrics (conversion rates include lost opportunities in denominator)
+  // Footer metrics (exclude omitted from totals; conversion rates include lost in denominator)
   const footerMetrics = useMemo(() => {
+    const countable = filtered.filter(o => o.classification !== 'omitted');
     const lostAmount = lostOpportunities.reduce((s, o) => s + o.amount, 0);
     const lostCount = lostOpportunities.length;
-    const totalAmount = filtered.reduce((s, o) => s + o.amount, 0);
-    const totalCount = filtered.length;
+    const totalAmount = countable.reduce((s, o) => s + o.amount, 0);
+    const totalCount = countable.length;
     const allAmount = totalAmount + lostAmount;
     const allCount = totalCount + lostCount;
-    const wonAmount = filtered.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
-    const wonCount = filtered.filter(o => o.classification === 'closed_won').length;
+    const wonAmount = countable.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
+    const wonCount = countable.filter(o => o.classification === 'closed_won').length;
     const conversionRate = allAmount > 0 ? (wonAmount / allAmount) * 100 : 0;
     const countConvRate = allCount > 0 ? (wonCount / allCount) * 100 : 0;
     const avgSalePrice = wonCount > 0 ? wonAmount / wonCount : 0;
 
     // Per-rep metrics (including lost opps per rep in denominator)
     const repMap = new Map<string, { total: number; won: number; wonCount: number; totalCount: number }>();
-    for (const o of filtered) {
+    for (const o of countable) {
       const entry = repMap.get(o.repName) || { total: 0, won: 0, wonCount: 0, totalCount: 0 };
       entry.total += o.amount;
       entry.totalCount++;
@@ -283,6 +285,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
               commit: active ? 'bg-commit/20 text-commit border-commit/40' : 'text-muted-foreground border-border',
               upside: active ? 'bg-upside/20 text-upside border-upside/40' : 'text-muted-foreground border-border',
               unclassified: active ? 'bg-secondary text-foreground border-foreground/20' : 'text-muted-foreground border-border',
+              omitted: active ? 'bg-muted text-muted-foreground border-muted-foreground/40' : 'text-muted-foreground border-border',
             };
             return (
               <button
@@ -323,8 +326,9 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
             <tbody>
               {filtered.map(opp => {
                 const isEditing = editingId === opp.id;
+                const isOmitted = opp.classification === 'omitted';
                 return (
-                  <tr key={opp.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                  <tr key={opp.id} className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${isOmitted ? 'opacity-40' : ''}`}>
                     <td className="px-4 py-2.5">
                       {isEditing ? (
                         <input value={editState.name} onChange={e => setEditState(s => ({ ...s, name: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} autoFocus />
@@ -392,7 +396,14 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                             className={`transition-colors ${opp.notes ? 'text-upside hover:text-upside/80' : 'text-muted-foreground hover:text-foreground'}`}
                             title={opp.notes ? 'View/edit notes' : 'Add notes'}
                           >
-                            <StickyNote size={12} />
+                          <StickyNote size={12} />
+                          </button>
+                          <button
+                            onClick={() => classifyOpportunity(opp.id, isOmitted ? 'unclassified' : 'omitted')}
+                            className={`transition-colors ${isOmitted ? 'text-foreground hover:text-foreground/80' : 'text-muted-foreground hover:text-foreground'}`}
+                            title={isOmitted ? 'Restore opportunity' : 'Omit opportunity'}
+                          >
+                            {isOmitted ? <Eye size={12} /> : <EyeOff size={12} />}
                           </button>
                         </div>
                       )}

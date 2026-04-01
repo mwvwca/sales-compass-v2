@@ -157,7 +157,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
   // ─── Pipeline Health Recommendations ───
   const recommendations = useMemo((): PipelineRec[] => {
     const recs: PipelineRec[] = [];
-    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost');
+    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted');
 
     // Check coverage per rep
     for (const stat of winLossStats) {
@@ -214,7 +214,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
 
   // ─── Close Date Prediction ───
   const closeDatePredictions = useMemo(() => {
-    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost');
+    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted');
     
     // Calculate avg days per stage from won deals
     const stageTimings = new Map<string, number[]>();

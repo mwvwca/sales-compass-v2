@@ -5,7 +5,7 @@ import { useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
 
-const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost']);
+const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted']);
 
 const repSchema = z.object({
   id: z.string(),

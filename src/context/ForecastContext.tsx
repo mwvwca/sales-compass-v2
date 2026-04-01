@@ -75,7 +75,7 @@ interface ForecastContextValue extends ForecastState {
   updateRep: (rep: Rep) => void;
   deleteRep: (id: string) => void;
   importOpportunities: (opps: Opportunity[], fileName: string) => void;
-  classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost') => void;
+  classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted') => void;
   archiveToGraveyard: (id: string, reason?: string) => void;
   restoreFromGraveyard: (id: string) => void;
   updateOpportunityAmount: (id: string, amount: number) => void;
@@ -199,10 +199,18 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           }
 
           // Stage-derived terminal classifications (closed_won / lost) override existing
-          const resolvedClassification =
-            (o.classification === 'closed_won' || o.classification === 'lost')
-              ? o.classification
-              : existing.classification;
+          // But if existing is 'omitted', preserve that (sticky omit)
+          let resolvedClassification = existing.classification;
+          if (existing.classification === 'omitted') {
+            // Sticky: keep omitted status across imports
+            resolvedClassification = 'omitted';
+          } else if (o.classification === 'closed_won' || o.classification === 'lost') {
+            resolvedClassification = o.classification;
+          } else if (o.classification === 'commit' || o.classification === 'upside') {
+            // Forecast/Upside flags from import override existing non-terminal classification
+            resolvedClassification = o.classification;
+          }
+          // Otherwise keep existing classification
 
           return {
             ...o,
@@ -227,7 +235,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const classifyOpportunity = useCallback((id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost') => {
+  const classifyOpportunity = useCallback((id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted') => {
     setState(s => {
       const opp = s.opportunities.find(o => o.id === id);
       const newChanges: ChangeLogEntry[] = [];

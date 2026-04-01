@@ -8,6 +8,8 @@ export interface ForecastRow {
   "Close Date": string;
   Stage: string;
   Probability: string;
+  Forecast?: string;
+  Upside?: string;
 }
 
 const STAGE_PROBABILITY_MAP: Record<string, string> = {
@@ -99,6 +101,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
   const amountCol = colMap["Amount"];
   const closeDateCol = colMap["Close Date"];
   const stageCol = colMap["Stage"];
+  const forecastCol = colMap["Forecast"];
+  const upsideCol = colMap["Upside"];
 
   const results: ForecastRow[] = [];
   const skipped: SkippedRow[] = [];
@@ -133,6 +137,9 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
     const { stage, probability } = parseStage(rawStageValue);
     const amountRaw = String(row[amountCol] ?? "").trim();
 
+    const forecastVal = forecastCol !== undefined ? String(row[forecastCol] ?? "").trim().toUpperCase() : "";
+    const upsideVal = upsideCol !== undefined ? String(row[upsideCol] ?? "").trim().toUpperCase() : "";
+
     results.push({
       "Opportunity ID": oppId,
       "Opportunity Name": String(row[oppNameCol] ?? "").trim(),
@@ -141,6 +148,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       "Close Date": excelDateToString(row[closeDateCol]),
       Stage: stage,
       Probability: probability,
+      Forecast: forecastVal === "TRUE" ? "TRUE" : "",
+      Upside: upsideVal === "TRUE" ? "TRUE" : "",
     });
   }
 
@@ -149,7 +158,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
 
 export function createForecastWorkbook(rows: ForecastRow[], version: string): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows, {
-    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability"],
+    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside"],
   });
 
   ws["!cols"] = [
@@ -160,6 +169,8 @@ export function createForecastWorkbook(rows: ForecastRow[], version: string): XL
     { wch: 14 },
     { wch: 16 },
     { wch: 12 },
+    { wch: 10 },
+    { wch: 10 },
   ];
 
   const wb = XLSX.utils.book_new();
