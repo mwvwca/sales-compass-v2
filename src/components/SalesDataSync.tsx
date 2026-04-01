@@ -21,6 +21,8 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
     const stageLower = (row.Stage || '').toLowerCase().trim();
     const isClosedWon = stageLower === 'closed won';
     const isClosedLost = stageLower === 'closed lost' || stageLower === 'omitted';
+    const isForecast = row.Forecast === 'TRUE';
+    const isUpside = row.Upside === 'TRUE';
     return {
       id: row["Opportunity ID"] || `import-${Date.now()}-${i}`,
       name: row["Opportunity Name"] || 'Unknown',
@@ -29,7 +31,11 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
       amount: parseFloat(row.Amount?.replace(/[^0-9.-]/g, '') || '0') || 0,
       closeDate,
       stage: row.Stage || '',
-      classification: isClosedWon ? 'closed_won' as const : isClosedLost ? 'lost' as const : 'unclassified' as const,
+      classification: isClosedWon ? 'closed_won' as const
+        : isClosedLost ? 'lost' as const
+        : isForecast ? 'commit' as const
+        : isUpside ? 'upside' as const
+        : 'unclassified' as const,
       probability: parseFloat(probStr) || 0,
       importDate,
       ...(isClosedLost ? { lostDate: importDate, lostReason: 'Closed Lost in Salesforce' } : {}),
