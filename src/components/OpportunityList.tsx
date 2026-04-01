@@ -298,9 +298,19 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
             );
           })}
           {moved.length > 0 && (
-            <span className="ml-2 text-xs text-upside flex items-center gap-1">
+            <button
+              onClick={() => {
+                // Enable only the classifications that have moved items, so they're visible
+                const movedClassifications = new Set(moved.map(o => o.classification));
+                setActiveFilters(movedClassifications);
+                setSearchQuery('');
+                setSelectedMonth('all');
+                setSelectedWeek('all');
+              }}
+              className="ml-2 text-xs text-upside flex items-center gap-1 hover:underline cursor-pointer transition-colors hover:text-upside/80"
+            >
               <ArrowRightLeft size={12} /> {moved.length} moved
-            </span>
+            </button>
           )}
         </div>
       </div>
