@@ -116,7 +116,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     }
   };
 
-  const classOrder: Record<string, number> = { closed_won: 0, commit: 1, upside: 2, unclassified: 3 };
+  const classOrder: Record<string, number> = { closed_won: 0, commit: 1, upside: 2, unclassified: 3, omitted: 4 };
 
   const filtered = useMemo(() => {
     if (!sortField) return classFiltered;
