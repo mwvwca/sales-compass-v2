@@ -36,7 +36,7 @@ export default function ForecastDashboard() {
   const filteredOpps = useMemo(() => {
     return opportunities.filter(o => {
       if (!o.closeDate) return false;
-      if (o.classification === 'lost' || o.classification === 'omitted') return false;
+      if (o.classification === 'lost') return false;
       if (o.stage.toLowerCase().trim() === 'closed lost') return false;
       const q = getQuarter(o.closeDate);
       if (!fullYearQuarters.includes(q)) return false;
@@ -81,6 +81,7 @@ export default function ForecastDashboard() {
     }
 
     for (const opp of filteredOpps) {
+      if (opp.classification === 'omitted') continue;
       const name = opp.repName;
       if (!summary[name]) continue;
       const monthKey = getMonthKey(opp.closeDate);
