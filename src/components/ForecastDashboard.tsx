@@ -81,6 +81,7 @@ export default function ForecastDashboard() {
     }
 
     for (const opp of filteredOpps) {
+      if (opp.classification === 'omitted') continue;
       const name = opp.repName;
       if (!summary[name]) continue;
       const monthKey = getMonthKey(opp.closeDate);
