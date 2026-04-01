@@ -137,6 +137,9 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
     const { stage, probability } = parseStage(rawStageValue);
     const amountRaw = String(row[amountCol] ?? "").trim();
 
+    const forecastVal = forecastCol !== undefined ? String(row[forecastCol] ?? "").trim().toUpperCase() : "";
+    const upsideVal = upsideCol !== undefined ? String(row[upsideCol] ?? "").trim().toUpperCase() : "";
+
     results.push({
       "Opportunity ID": oppId,
       "Opportunity Name": String(row[oppNameCol] ?? "").trim(),
@@ -145,6 +148,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       "Close Date": excelDateToString(row[closeDateCol]),
       Stage: stage,
       Probability: probability,
+      Forecast: forecastVal === "TRUE" ? "TRUE" : "",
+      Upside: upsideVal === "TRUE" ? "TRUE" : "",
     });
   }
 
