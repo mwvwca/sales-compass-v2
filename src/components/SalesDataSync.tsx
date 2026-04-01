@@ -275,6 +275,8 @@ const SalesDataSync = () => {
                   <TableHead className="text-xs">Close Date</TableHead>
                   <TableHead className="text-xs">Stage</TableHead>
                   <TableHead className="text-xs">Prob.</TableHead>
+                  <TableHead className="text-xs">Forecast</TableHead>
+                  <TableHead className="text-xs">Upside</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
