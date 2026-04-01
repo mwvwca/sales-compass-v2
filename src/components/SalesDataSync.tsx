@@ -297,6 +297,8 @@ const SalesDataSync = () => {
                       </span>
                     </TableCell>
                     <TableCell className="text-xs font-medium">{row.Probability}</TableCell>
+                    <TableCell className="text-xs">{row.Forecast === 'TRUE' ? '✓' : ''}</TableCell>
+                    <TableCell className="text-xs">{row.Upside === 'TRUE' ? '✓' : ''}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
