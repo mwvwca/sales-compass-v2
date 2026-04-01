@@ -18,7 +18,7 @@ interface Props {
   quarter: Quarter;
 }
 
-type Classification = 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost';
+type Classification = 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted';
 
 interface EditState {
   name: string;
