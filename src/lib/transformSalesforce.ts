@@ -101,6 +101,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
   const amountCol = colMap["Amount"];
   const closeDateCol = colMap["Close Date"];
   const stageCol = colMap["Stage"];
+  const forecastCol = colMap["Forecast"];
+  const upsideCol = colMap["Upside"];
 
   const results: ForecastRow[] = [];
   const skipped: SkippedRow[] = [];
