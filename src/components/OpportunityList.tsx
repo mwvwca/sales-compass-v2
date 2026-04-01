@@ -33,6 +33,7 @@ const classificationFilters: { key: Classification; label: string }[] = [
   { key: 'commit', label: 'Commit' },
   { key: 'upside', label: 'Upside' },
   { key: 'unclassified', label: 'Unclassified' },
+  { key: 'omitted', label: 'Omitted' },
 ];
 
 // Filter out lost opps from the main list
