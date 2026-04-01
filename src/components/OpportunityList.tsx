@@ -135,7 +135,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     const lostAmount = lostOpportunities.reduce((s, o) => s + o.amount, 0);
     const lostCount = lostOpportunities.length;
     const totalAmount = countable.reduce((s, o) => s + o.amount, 0);
-    const totalCount = filtered.length;
+    const totalCount = countable.length;
     const allAmount = totalAmount + lostAmount;
     const allCount = totalCount + lostCount;
     const wonAmount = filtered.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
