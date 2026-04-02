@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import type { Opportunity } from '@/types/forecast';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
-import { isTruthyForecastFlag, isTruthyUpsideFlag } from '@/lib/forecastClassification';
+import { getImportedClassification } from '@/lib/forecastClassification';
 import ImportReview from './ImportReview';
 
 interface ColumnMapping {
@@ -13,9 +13,12 @@ interface ColumnMapping {
   closeDate: string;
   stage: string;
   probability: string;
+  forecast?: string;
+  forecastCategory?: string;
+  upsideFlag?: string;
 }
 
-const DEFAULT_MAPPINGS: Record<string, string> = {
+const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'opportunity id': 'id',
   'opportunity name': 'name',
   'opportunity owner': 'repName',
@@ -30,7 +33,10 @@ const DEFAULT_MAPPINGS: Record<string, string> = {
   'probability': 'probability',
   'probability (%)': 'probability',
   'forecast': 'forecast',
+  'forecasted deal': 'forecast',
+  'forecast category': 'forecastCategory',
   'upside': 'upsideFlag',
+  'upside deal': 'upsideFlag',
 };
 
 function autoMap(headers: string[]): Partial<ColumnMapping> {
