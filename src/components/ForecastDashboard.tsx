@@ -105,7 +105,7 @@ export default function ForecastDashboard() {
     for (const name of activeReps) {
       summary[name] = {
         commit: 0, upside: 0, closed_won: 0, total: 0, goal: getRepGoal(name),
-        byMonth: Object.fromEntries(months.map(m => [m, { commit: 0, upside: 0, closed_won: 0, total: 0 }])),
+        byMonth: Object.fromEntries(displayMonths.map(m => [m, { commit: 0, upside: 0, closed_won: 0, total: 0 }])),
       };
     }
 
