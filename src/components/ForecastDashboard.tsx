@@ -124,10 +124,15 @@ export default function ForecastDashboard() {
   // HUD scoped metrics
   const hudMetrics = useMemo(() => {
     const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const currentQ = getCurrentQuarter();
-    const year = now.getFullYear();
+    const activeQ = selectedQuarter === 'full-year' ? currentQ : selectedQuarter;
+    const year = activeQ.split('-Q')[0];
     const annualQuarters = [`${year}-Q1`, `${year}-Q2`, `${year}-Q3`, `${year}-Q4`] as Quarter[];
+
+    // For monthly, use first month of selected quarter (or current month if it's within the selected quarter)
+    const activeQMonths = getQuarterMonths(activeQ);
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthlyKey = activeQMonths.includes(currentMonthKey) ? currentMonthKey : activeQMonths[0];
 
     const calcForOpps = (opps: typeof opportunities, goalAmount: number) => {
       const pipe = opps.filter(o => o.classification !== 'omitted').reduce((s, o) => s + o.amount, 0);
@@ -153,14 +158,14 @@ export default function ForecastDashboard() {
       return true;
     };
 
-    // Monthly: current month only, goal = quarterly goal / 3
-    const monthlyOpps = opportunities.filter(o => baseFilter(o) && getMonthKey(o.closeDate) === currentMonthKey);
-    const monthlyGoal = getGoalForQuarters([currentQ]) / 3;
+    // Monthly: scoped to the selected quarter's relevant month
+    const monthlyOpps = opportunities.filter(o => baseFilter(o) && getMonthKey(o.closeDate) === monthlyKey);
+    const monthlyGoal = getGoalForQuarters([activeQ]) / 3;
     const monthly = calcForOpps(monthlyOpps, monthlyGoal);
 
-    // Quarterly: current quarter
-    const quarterlyOpps = opportunities.filter(o => baseFilter(o) && getQuarter(o.closeDate) === currentQ);
-    const quarterly = calcForOpps(quarterlyOpps, getGoalForQuarters([currentQ]));
+    // Quarterly: use selected quarter, not always current
+    const quarterlyOpps = opportunities.filter(o => baseFilter(o) && getQuarter(o.closeDate) === activeQ);
+    const quarterly = calcForOpps(quarterlyOpps, getGoalForQuarters([activeQ]));
 
     // Annual: full year
     const annualOpps = opportunities.filter(o => baseFilter(o) && annualQuarters.includes(getQuarter(o.closeDate)));
