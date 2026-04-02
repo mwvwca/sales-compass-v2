@@ -176,7 +176,7 @@ export default function ForecastDashboard() {
   }, [opportunities, reps, repNames, selectedRep, selectedQuarter, selectedMonth]);
 
   const activeHud = hudMetrics[hudView];
-  const hudLabel = hudView === 'monthly' ? 'Monthly' : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
+  const hudLabel = hudView === 'monthly' ? getMonthLabel(hudMetrics.monthlyKey) : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
 
   return (
     <div className="space-y-6">
