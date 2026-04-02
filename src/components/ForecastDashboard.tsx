@@ -342,12 +342,15 @@ export default function ForecastDashboard() {
                     <td className="px-4 py-2.5 font-medium">{name}</td>
                     {months.map(m => {
                       const mGoal = monthlyGoals?.[m] || 0;
+                      const mPipe = data.byMonth[m]?.total || 0;
                       const mWon = data.byMonth[m]?.closed_won || 0;
                       const mCommit = data.byMonth[m]?.commit || 0;
                       const mUpside = data.byMonth[m]?.upside || 0;
+                      const hasClassifiedValue = mWon > 0 || mCommit > 0 || mUpside > 0;
                       return (
                         <td key={m} className="text-right px-3 py-2.5 font-mono text-xs">
                           {showGoals && monthlyGoals && mGoal > 0 && <div className="text-muted-foreground">Goal: {fmt(mGoal)}</div>}
+                          {!hasClassifiedValue && mPipe > 0 && <div className="text-foreground">Pipe: {fmt(mPipe)}</div>}
                           {mWon > 0 && <div className="text-positive">Won: {fmt(mWon)}</div>}
                           {mCommit > 0 && <div className="text-commit">Commit: {fmt(mCommit)}</div>}
                           {mUpside > 0 && <div className="text-upside">Upside: {fmt(mUpside)}</div>}
@@ -366,11 +369,14 @@ export default function ForecastDashboard() {
               <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
                 <td className="px-4 py-3">Total</td>
                 {months.map(m => {
+                  const mPipe = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.total || 0), 0);
                   const mCommit = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.commit || 0), 0);
                   const mUpside = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.upside || 0), 0);
                   const mWon = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.closed_won || 0), 0);
+                  const hasClassifiedValue = mWon > 0 || mCommit > 0 || mUpside > 0;
                   return (
                     <td key={m} className="text-right px-3 py-3 font-mono text-xs">
+                      {!hasClassifiedValue && mPipe > 0 && <div className="text-foreground">Pipe: {fmt(mPipe)}</div>}
                       {mWon > 0 && <div className="text-positive">Won: {fmt(mWon)}</div>}
                       {mCommit > 0 && <div className="text-commit">Commit: {fmt(mCommit)}</div>}
                       {mUpside > 0 && <div className="text-upside">Upside: {fmt(mUpside)}</div>}
