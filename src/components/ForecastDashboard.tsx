@@ -15,6 +15,7 @@ export default function ForecastDashboard() {
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
   const [showGoals, setShowGoals] = useState(false);
   const [hudView, setHudView] = useState<'monthly' | 'quarterly' | 'annual'>('quarterly');
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
   const quarters = useMemo(() => {
     const set = new Set<string>();
@@ -129,10 +130,10 @@ export default function ForecastDashboard() {
     const year = activeQ.split('-Q')[0];
     const annualQuarters = [`${year}-Q1`, `${year}-Q2`, `${year}-Q3`, `${year}-Q4`] as Quarter[];
 
-    // For monthly, use first month of selected quarter (or current month if it's within the selected quarter)
+    // For monthly, use selectedMonth if set, otherwise current month or first month of quarter
     const activeQMonths = getQuarterMonths(activeQ);
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const monthlyKey = activeQMonths.includes(currentMonthKey) ? currentMonthKey : activeQMonths[0];
+    const monthlyKey = selectedMonth && activeQMonths.includes(selectedMonth) ? selectedMonth : (activeQMonths.includes(currentMonthKey) ? currentMonthKey : activeQMonths[0]);
 
     const calcForOpps = (opps: typeof opportunities, goalAmount: number) => {
       const pipe = opps.filter(o => o.classification !== 'omitted').reduce((s, o) => s + o.amount, 0);
@@ -171,11 +172,11 @@ export default function ForecastDashboard() {
     const annualOpps = opportunities.filter(o => baseFilter(o) && annualQuarters.includes(getQuarter(o.closeDate)));
     const annual = calcForOpps(annualOpps, getGoalForQuarters(annualQuarters));
 
-    return { monthly, quarterly, annual };
-  }, [opportunities, reps, repNames, selectedRep, selectedQuarter]);
+    return { monthly, quarterly, annual, monthlyKey, activeQMonths };
+  }, [opportunities, reps, repNames, selectedRep, selectedQuarter, selectedMonth]);
 
   const activeHud = hudMetrics[hudView];
-  const hudLabel = hudView === 'monthly' ? 'Monthly' : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
+  const hudLabel = hudView === 'monthly' ? getMonthLabel(hudMetrics.monthlyKey) : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
 
   return (
     <div className="space-y-6">
@@ -219,6 +220,16 @@ export default function ForecastDashboard() {
               </button>
             ))}
           </div>
+          {hudView === 'monthly' && (
+            <div className="flex bg-secondary rounded-md p-0.5">
+              {hudMetrics.activeQMonths.map(m => (
+                <button key={m} onClick={() => setSelectedMonth(m)}
+                  className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${m === hudMetrics.monthlyKey ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {getMonthLabel(m)}
+                </button>
+              ))}
+            </div>
+          )}
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{hudLabel} View</span>
         </div>
         <div className="grid grid-cols-6 gap-3">
