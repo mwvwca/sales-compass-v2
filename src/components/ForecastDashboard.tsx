@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { normalizeRepName } from '@/lib/repUtils';
-import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, getWeeksInMonth, type Quarter } from '@/types/forecast';
+import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, getWeeksInMonth, getDateAtUtcStart, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
 import ExecutiveReportVisual from './ExecutiveReportVisual';
@@ -65,9 +65,9 @@ export default function ForecastDashboard() {
     if (hudView !== 'monthly') return filteredOpps;
     return filteredOpps.filter(o => {
       if (getMonthKey(o.closeDate) !== activeMonthKey) return false;
-      if (selectedWeek !== null && activeWeekRanges[selectedWeek]) {
-        const week = activeWeekRanges[selectedWeek];
-        const d = new Date(o.closeDate);
+        if (selectedWeek !== null && activeWeekRanges[selectedWeek]) {
+          const week = activeWeekRanges[selectedWeek];
+          const d = getDateAtUtcStart(o.closeDate);
         if (d < week.start || d > week.end) return false;
       }
       return true;
@@ -197,7 +197,7 @@ export default function ForecastDashboard() {
     if (selectedWeek !== null && weeksInMonth[selectedWeek]) {
       const week = weeksInMonth[selectedWeek];
       displayOpps = monthlyOpps.filter(o => {
-        const d = new Date(o.closeDate);
+        const d = getDateAtUtcStart(o.closeDate);
         return d >= week.start && d <= week.end;
       });
       displayGoal = monthlyGoal / weeksInMonth.length;

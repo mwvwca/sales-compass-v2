@@ -73,6 +73,11 @@ export function getMonthKey(date: string): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
+export function getDateAtUtcStart(date: string): Date {
+  const { year, month, day } = parseDate(date);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
 export function getMonthLabel(monthKey: string): string {
   const [year, month] = monthKey.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1);
