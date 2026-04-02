@@ -126,10 +126,10 @@ export default function ForecastDashboard() {
       }
     }
     return summary;
-  }, [filteredOpps, repNames, selectedRep, months]);
+  }, [filteredOpps, repNames, selectedRep, displayMonths]);
 
   const getMonthlyGoals = (goal: number, byMonth: Record<string, { closed_won: number }>) => {
-    const base = goal / months.length;
+    const base = goal / displayMonths.length;
     const goals: Record<string, number> = {};
     let carryOver = 0;
     for (const m of months) {
