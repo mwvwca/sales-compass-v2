@@ -48,12 +48,6 @@ export default function ForecastDashboard() {
 
   const activeWeekRanges = useMemo(() => getWeeksInMonth(activeMonthKey), [activeMonthKey]);
 
-  const displayMonths = useMemo(() => {
-    if (hudView === 'monthly') return [activeMonthKey];
-    return months;
-  }, [hudView, activeMonthKey, months]);
-
-
   const filteredOpps = useMemo(() => {
     return opportunities.filter(o => {
       if (!o.closeDate) return false;
@@ -79,11 +73,6 @@ export default function ForecastDashboard() {
       return true;
     });
   }, [filteredOpps, hudView, activeMonthKey, selectedWeek, activeWeekRanges]);
-
-  const repViewOpps = useMemo(() => {
-    if (hudView !== 'monthly') return filteredOpps;
-    return hudFilteredOpps;
-  }, [filteredOpps, hudFilteredOpps, hudView]);
 
   const lostOpps = useMemo(() => {
     return opportunities.filter(o => {
@@ -116,11 +105,11 @@ export default function ForecastDashboard() {
     for (const name of activeReps) {
       summary[name] = {
         commit: 0, upside: 0, closed_won: 0, total: 0, goal: getRepGoal(name),
-        byMonth: Object.fromEntries(displayMonths.map(m => [m, { commit: 0, upside: 0, closed_won: 0, total: 0 }])),
+        byMonth: Object.fromEntries(months.map(m => [m, { commit: 0, upside: 0, closed_won: 0, total: 0 }])),
       };
     }
 
-    for (const opp of repViewOpps) {
+    for (const opp of filteredOpps) {
       if (opp.classification === 'omitted') continue;
       const name = opp.repName;
       if (!summary[name]) continue;
@@ -137,13 +126,13 @@ export default function ForecastDashboard() {
       }
     }
     return summary;
-  }, [repViewOpps, repNames, selectedRep, displayMonths]);
+  }, [filteredOpps, repNames, selectedRep, months]);
 
   const getMonthlyGoals = (goal: number, byMonth: Record<string, { closed_won: number }>) => {
-    const base = goal / displayMonths.length;
+    const base = goal / months.length;
     const goals: Record<string, number> = {};
     let carryOver = 0;
-    for (const m of displayMonths) {
+    for (const m of months) {
       goals[m] = base + carryOver;
       const won = byMonth[m]?.closed_won || 0;
       const miss = goals[m] - won;
@@ -335,11 +324,9 @@ export default function ForecastDashboard() {
             <thead>
               <tr className="border-b border-border bg-secondary/50">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
-                {displayMonths.map(m => (
-                  <th key={m} className="text-right px-3 py-2.5 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider" colSpan={1}>
-                    {hudView === 'monthly' && selectedWeek !== null && activeWeekRanges[selectedWeek]
-                      ? `${getMonthLabel(m)} ${activeWeekRanges[selectedWeek].label}`
-                      : getMonthLabel(m)}
+                {months.map(m => (
+                  <th key={m} className={`text-right px-3 py-2.5 text-xs font-mono font-medium uppercase tracking-wider ${hudView === 'monthly' && m === activeMonthKey ? 'text-foreground bg-secondary' : 'text-muted-foreground'}`} colSpan={1}>
+                    {getMonthLabel(m)}
                   </th>
                 ))}
                 {showGoals && <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Goal</th>}
@@ -353,7 +340,7 @@ export default function ForecastDashboard() {
                 return (
                   <tr key={name} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                     <td className="px-4 py-2.5 font-medium">{name}</td>
-                    {displayMonths.map(m => {
+                    {months.map(m => {
                       const mGoal = monthlyGoals?.[m] || 0;
                       const mWon = data.byMonth[m]?.closed_won || 0;
                       const mCommit = data.byMonth[m]?.commit || 0;
@@ -378,7 +365,7 @@ export default function ForecastDashboard() {
               })}
               <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
                 <td className="px-4 py-3">Total</td>
-                {displayMonths.map(m => {
+                {months.map(m => {
                   const mCommit = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.commit || 0), 0);
                   const mUpside = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.upside || 0), 0);
                   const mWon = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.closed_won || 0), 0);
