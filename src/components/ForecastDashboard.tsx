@@ -132,7 +132,7 @@ export default function ForecastDashboard() {
     const base = goal / displayMonths.length;
     const goals: Record<string, number> = {};
     let carryOver = 0;
-    for (const m of months) {
+    for (const m of displayMonths) {
       goals[m] = base + carryOver;
       const won = byMonth[m]?.closed_won || 0;
       const miss = goals[m] - won;
