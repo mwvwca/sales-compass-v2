@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
+import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { Check, Plus, RefreshCw, Minus, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -42,11 +43,9 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
       if (existing.stage.trim() !== opp.stage.trim()) changes.push(`Stage: ${existing.stage} → ${opp.stage}`);
       if (existing.repName !== opp.repName) changes.push(`Rep: ${existing.repName} → ${opp.repName}`);
       if (existing.name !== opp.name) changes.push(`Name: ${existing.name} → ${opp.name}`);
-      // Detect classification mismatch: stage says Closed Won/Lost but classification doesn't match
-      const stageNorm = opp.stage.toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
-      const expectedClass = stageNorm === 'closed won' ? 'closed_won' : stageNorm === 'closed lost' ? 'lost' : null;
-      if (expectedClass && existing.classification !== expectedClass) {
-        changes.push(`Classification: ${existing.classification} → ${expectedClass}`);
+      const resolvedClassification = resolveImportedClassification(existing.classification, opp.classification);
+      if (existing.classification !== resolvedClassification) {
+        changes.push(`Classification: ${existing.classification} → ${resolvedClassification}`);
       }
       const changeType: ChangeType = changes.length > 0 ? 'updated' : 'unchanged';
       return { opportunity: opp, existing, changeType, changes, selected: changes.length > 0 };
