@@ -150,8 +150,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       "Close Date": excelDateToString(row[closeDateCol]),
       Stage: stage,
       Probability: probability,
-      Forecast: forecastVal === "TRUE" ? "TRUE" : "",
-      Upside: upsideVal === "TRUE" ? "TRUE" : "",
+      Forecast: forecastVal ? "TRUE" : "",
+      Upside: upsideVal ? "TRUE" : "",
     });
   }
 
