@@ -1,5 +1,5 @@
 import * as XLSX from "@e965/xlsx";
-import { isTruthyForecastFlag, isTruthyUpsideFlag } from "@/lib/forecastClassification";
+import { getImportedClassification, isTruthyForecastFlag, isTruthyUpsideFlag } from "@/lib/forecastClassification";
 
 export interface ForecastRow {
   "Opportunity ID": string;
@@ -102,8 +102,9 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
   const amountCol = colMap["Amount"];
   const closeDateCol = colMap["Close Date"];
   const stageCol = colMap["Stage"];
-  const forecastCol = colMap["Forecast"];
-  const upsideCol = colMap["Upside"];
+  const forecastCategoryCol = colMap["Forecast Category"];
+  const forecastCol = colMap["Forecast"] ?? colMap["Forecasted Deal"];
+  const upsideCol = colMap["Upside"] ?? colMap["Upside Deal"];
 
   const results: ForecastRow[] = [];
   const skipped: SkippedRow[] = [];
@@ -138,10 +139,17 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
     const { stage, probability } = parseStage(rawStageValue);
     const amountRaw = String(row[amountCol] ?? "").trim();
 
+    const rawForecastCategory: unknown = forecastCategoryCol !== undefined ? row[forecastCategoryCol] : "";
     const rawForecast: unknown = forecastCol !== undefined ? row[forecastCol] : "";
     const rawUpside: unknown = upsideCol !== undefined ? row[upsideCol] : "";
-    const forecastVal = isTruthyForecastFlag(rawForecast);
-    const upsideVal = isTruthyUpsideFlag(rawUpside);
+    const importedClassification = getImportedClassification({
+      stage,
+      forecastCategory: rawForecastCategory,
+      forecastFlag: rawForecast,
+      upsideFlag: rawUpside,
+    });
+    const forecastVal = importedClassification === "commit" || isTruthyForecastFlag(rawForecast);
+    const upsideVal = importedClassification === "upside" || isTruthyUpsideFlag(rawUpside);
 
     results.push({
       "Opportunity ID": oppId,
