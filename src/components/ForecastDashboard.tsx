@@ -130,10 +130,10 @@ export default function ForecastDashboard() {
     const year = activeQ.split('-Q')[0];
     const annualQuarters = [`${year}-Q1`, `${year}-Q2`, `${year}-Q3`, `${year}-Q4`] as Quarter[];
 
-    // For monthly, use first month of selected quarter (or current month if it's within the selected quarter)
+    // For monthly, use selectedMonth if set, otherwise current month or first month of quarter
     const activeQMonths = getQuarterMonths(activeQ);
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const monthlyKey = activeQMonths.includes(currentMonthKey) ? currentMonthKey : activeQMonths[0];
+    const monthlyKey = selectedMonth && activeQMonths.includes(selectedMonth) ? selectedMonth : (activeQMonths.includes(currentMonthKey) ? currentMonthKey : activeQMonths[0]);
 
     const calcForOpps = (opps: typeof opportunities, goalAmount: number) => {
       const pipe = opps.filter(o => o.classification !== 'omitted').reduce((s, o) => s + o.amount, 0);
