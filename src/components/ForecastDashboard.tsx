@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { normalizeRepName } from '@/context/ForecastContext';
-import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
+import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, getWeeksInMonth, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
 import ExecutiveReportVisual from './ExecutiveReportVisual';
@@ -16,6 +16,7 @@ export default function ForecastDashboard() {
   const [showGoals, setShowGoals] = useState(false);
   const [hudView, setHudView] = useState<'monthly' | 'quarterly' | 'annual'>('quarterly');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
   const quarters = useMemo(() => {
     const set = new Set<string>();
@@ -162,7 +163,20 @@ export default function ForecastDashboard() {
     // Monthly: scoped to the selected quarter's relevant month
     const monthlyOpps = opportunities.filter(o => baseFilter(o) && getMonthKey(o.closeDate) === monthlyKey);
     const monthlyGoal = getGoalForQuarters([activeQ]) / 3;
-    const monthly = calcForOpps(monthlyOpps, monthlyGoal);
+
+    // Weekly: filter within the month if a week is selected
+    const weeksInMonth = getWeeksInMonth(monthlyKey);
+    let displayOpps = monthlyOpps;
+    let displayGoal = monthlyGoal;
+    if (selectedWeek !== null && weeksInMonth[selectedWeek]) {
+      const week = weeksInMonth[selectedWeek];
+      displayOpps = monthlyOpps.filter(o => {
+        const d = new Date(o.closeDate);
+        return d >= week.start && d <= week.end;
+      });
+      displayGoal = monthlyGoal / weeksInMonth.length;
+    }
+    const monthly = calcForOpps(displayOpps, displayGoal);
 
     // Quarterly: use selected quarter, not always current
     const quarterlyOpps = opportunities.filter(o => baseFilter(o) && getQuarter(o.closeDate) === activeQ);
@@ -172,11 +186,15 @@ export default function ForecastDashboard() {
     const annualOpps = opportunities.filter(o => baseFilter(o) && annualQuarters.includes(getQuarter(o.closeDate)));
     const annual = calcForOpps(annualOpps, getGoalForQuarters(annualQuarters));
 
-    return { monthly, quarterly, annual, monthlyKey, activeQMonths };
-  }, [opportunities, reps, repNames, selectedRep, selectedQuarter, selectedMonth]);
+    return { monthly, quarterly, annual, monthlyKey, activeQMonths, weeksInMonth };
+  }, [opportunities, reps, repNames, selectedRep, selectedQuarter, selectedMonth, selectedWeek]);
 
   const activeHud = hudMetrics[hudView];
-  const hudLabel = hudView === 'monthly' ? getMonthLabel(hudMetrics.monthlyKey) : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
+  const hudLabel = hudView === 'monthly'
+    ? (selectedWeek !== null && hudMetrics.weeksInMonth[selectedWeek]
+      ? `${getMonthLabel(hudMetrics.monthlyKey)} ${hudMetrics.weeksInMonth[selectedWeek].label}`
+      : getMonthLabel(hudMetrics.monthlyKey))
+    : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
 
   return (
     <div className="space-y-6">
@@ -221,14 +239,28 @@ export default function ForecastDashboard() {
             ))}
           </div>
           {hudView === 'monthly' && (
-            <div className="flex bg-secondary rounded-md p-0.5">
-              {hudMetrics.activeQMonths.map(m => (
-                <button key={m} onClick={() => setSelectedMonth(m)}
-                  className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${m === hudMetrics.monthlyKey ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
-                  {getMonthLabel(m)}
+            <>
+              <div className="flex bg-secondary rounded-md p-0.5">
+                {hudMetrics.activeQMonths.map(m => (
+                  <button key={m} onClick={() => { setSelectedMonth(m); setSelectedWeek(null); }}
+                    className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${m === hudMetrics.monthlyKey ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                    {getMonthLabel(m)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex bg-secondary rounded-md p-0.5">
+                <button onClick={() => setSelectedWeek(null)}
+                  className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${selectedWeek === null ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                  All
                 </button>
-              ))}
-            </div>
+                {hudMetrics.weeksInMonth.map((w, i) => (
+                  <button key={i} onClick={() => setSelectedWeek(i)}
+                    className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${selectedWeek === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                    {w.label}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{hudLabel} View</span>
         </div>
