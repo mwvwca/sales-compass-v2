@@ -48,11 +48,6 @@ export default function ForecastDashboard() {
 
   const activeWeekRanges = useMemo(() => getWeeksInMonth(activeMonthKey), [activeMonthKey]);
 
-  // Determine the display months based on HUD view
-  const months = useMemo(() => {
-    if (hudView === 'monthly') return [activeMonthKey];
-    return months;
-  }, [hudView, activeMonthKey, months]);
 
   const filteredOpps = useMemo(() => {
     return opportunities.filter(o => {
