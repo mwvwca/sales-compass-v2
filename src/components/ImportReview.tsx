@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
+import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { Check, Plus, RefreshCw, Minus, Trash2 } from 'lucide-react';
 
 interface Props {

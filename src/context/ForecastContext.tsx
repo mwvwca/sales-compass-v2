@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { Rep, Opportunity, ImportRecord, ChangeLogEntry, OpportunitySnapshot } from '@/types/forecast';
+import { resolveImportedClassification } from '@/lib/forecastClassification';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
