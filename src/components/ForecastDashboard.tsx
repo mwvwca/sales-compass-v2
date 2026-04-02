@@ -220,6 +220,16 @@ export default function ForecastDashboard() {
               </button>
             ))}
           </div>
+          {hudView === 'monthly' && (
+            <div className="flex bg-secondary rounded-md p-0.5">
+              {hudMetrics.activeQMonths.map(m => (
+                <button key={m} onClick={() => setSelectedMonth(m)}
+                  className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${m === hudMetrics.monthlyKey ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {getMonthLabel(m)}
+                </button>
+              ))}
+            </div>
+          )}
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{hudLabel} View</span>
         </div>
         <div className="grid grid-cols-6 gap-3">
