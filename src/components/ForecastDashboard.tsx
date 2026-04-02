@@ -36,6 +36,24 @@ export default function ForecastDashboard() {
 
   const months = useMemo(() => fullYearQuarters.flatMap(q => getQuarterMonths(q)), [fullYearQuarters]);
 
+  // Compute active month key for filtering (same logic as hudMetrics, but available earlier)
+  const activeMonthKey = useMemo(() => {
+    const now = new Date();
+    const currentQ = getCurrentQuarter();
+    const activeQ = selectedQuarter === 'full-year' ? currentQ : selectedQuarter;
+    const activeQMonths = getQuarterMonths(activeQ);
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return selectedMonth && activeQMonths.includes(selectedMonth) ? selectedMonth : (activeQMonths.includes(currentMonthKey) ? currentMonthKey : activeQMonths[0]);
+  }, [selectedQuarter, selectedMonth]);
+
+  const activeWeekRanges = useMemo(() => getWeeksInMonth(activeMonthKey), [activeMonthKey]);
+
+  // Determine the display months based on HUD view
+  const displayMonths = useMemo(() => {
+    if (hudView === 'monthly') return [activeMonthKey];
+    return months;
+  }, [hudView, activeMonthKey, months]);
+
   const filteredOpps = useMemo(() => {
     return opportunities.filter(o => {
       if (!o.closeDate) return false;
@@ -44,9 +62,17 @@ export default function ForecastDashboard() {
       const q = getQuarter(o.closeDate);
       if (!fullYearQuarters.includes(q)) return false;
       if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
+      if (hudView === 'monthly') {
+        if (getMonthKey(o.closeDate) !== activeMonthKey) return false;
+        if (selectedWeek !== null && activeWeekRanges[selectedWeek]) {
+          const week = activeWeekRanges[selectedWeek];
+          const d = new Date(o.closeDate);
+          if (d < week.start || d > week.end) return false;
+        }
+      }
       return true;
     });
-  }, [opportunities, fullYearQuarters, selectedRep]);
+  }, [opportunities, fullYearQuarters, selectedRep, hudView, activeMonthKey, selectedWeek, activeWeekRanges]);
 
   const lostOpps = useMemo(() => {
     return opportunities.filter(o => {
@@ -79,7 +105,7 @@ export default function ForecastDashboard() {
     for (const name of activeReps) {
       summary[name] = {
         commit: 0, upside: 0, closed_won: 0, total: 0, goal: getRepGoal(name),
-        byMonth: Object.fromEntries(months.map(m => [m, { commit: 0, upside: 0, closed_won: 0, total: 0 }])),
+        byMonth: Object.fromEntries(displayMonths.map(m => [m, { commit: 0, upside: 0, closed_won: 0, total: 0 }])),
       };
     }
 
@@ -100,13 +126,13 @@ export default function ForecastDashboard() {
       }
     }
     return summary;
-  }, [filteredOpps, repNames, selectedRep, months]);
+  }, [filteredOpps, repNames, selectedRep, displayMonths]);
 
   const getMonthlyGoals = (goal: number, byMonth: Record<string, { closed_won: number }>) => {
-    const base = goal / months.length;
+    const base = goal / displayMonths.length;
     const goals: Record<string, number> = {};
     let carryOver = 0;
-    for (const m of months) {
+    for (const m of displayMonths) {
       goals[m] = base + carryOver;
       const won = byMonth[m]?.closed_won || 0;
       const miss = goals[m] - won;
@@ -298,7 +324,7 @@ export default function ForecastDashboard() {
             <thead>
               <tr className="border-b border-border bg-secondary/50">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
-                {months.map(m => (
+                {displayMonths.map(m => (
                   <th key={m} className="text-right px-3 py-2.5 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider" colSpan={1}>
                     {getMonthLabel(m)}
                   </th>
@@ -314,7 +340,7 @@ export default function ForecastDashboard() {
                 return (
                   <tr key={name} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                     <td className="px-4 py-2.5 font-medium">{name}</td>
-                    {months.map(m => {
+                    {displayMonths.map(m => {
                       const mGoal = monthlyGoals?.[m] || 0;
                       const mWon = data.byMonth[m]?.closed_won || 0;
                       const mCommit = data.byMonth[m]?.commit || 0;
@@ -339,7 +365,7 @@ export default function ForecastDashboard() {
               })}
               <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
                 <td className="px-4 py-3">Total</td>
-                {months.map(m => {
+                {displayMonths.map(m => {
                   const mCommit = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.commit || 0), 0);
                   const mUpside = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.upside || 0), 0);
                   const mWon = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.closed_won || 0), 0);
