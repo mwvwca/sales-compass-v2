@@ -36,6 +36,14 @@ export default function ForecastDashboard() {
 
   const months = useMemo(() => fullYearQuarters.flatMap(q => getQuarterMonths(q)), [fullYearQuarters]);
 
+  // Determine the display months based on HUD view
+  const displayMonths = useMemo(() => {
+    if (hudView === 'monthly' && hudMetrics?.monthlyKey) {
+      return [hudMetrics.monthlyKey];
+    }
+    return months;
+  }, [hudView, hudMetrics?.monthlyKey, months]);
+
   const filteredOpps = useMemo(() => {
     return opportunities.filter(o => {
       if (!o.closeDate) return false;
@@ -44,9 +52,19 @@ export default function ForecastDashboard() {
       const q = getQuarter(o.closeDate);
       if (!fullYearQuarters.includes(q)) return false;
       if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
+      // Monthly filter
+      if (hudView === 'monthly' && hudMetrics?.monthlyKey) {
+        if (getMonthKey(o.closeDate) !== hudMetrics.monthlyKey) return false;
+        // Weekly filter
+        if (selectedWeek !== null && hudMetrics.weeksInMonth[selectedWeek]) {
+          const week = hudMetrics.weeksInMonth[selectedWeek];
+          const d = new Date(o.closeDate);
+          if (d < week.start || d > week.end) return false;
+        }
+      }
       return true;
     });
-  }, [opportunities, fullYearQuarters, selectedRep]);
+  }, [opportunities, fullYearQuarters, selectedRep, hudView, hudMetrics, selectedWeek]);
 
   const lostOpps = useMemo(() => {
     return opportunities.filter(o => {
