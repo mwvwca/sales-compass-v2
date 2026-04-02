@@ -324,7 +324,7 @@ export default function ForecastDashboard() {
             <thead>
               <tr className="border-b border-border bg-secondary/50">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
-                {months.map(m => (
+                {displayMonths.map(m => (
                   <th key={m} className="text-right px-3 py-2.5 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider" colSpan={1}>
                     {getMonthLabel(m)}
                   </th>
@@ -340,7 +340,7 @@ export default function ForecastDashboard() {
                 return (
                   <tr key={name} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                     <td className="px-4 py-2.5 font-medium">{name}</td>
-                    {months.map(m => {
+                    {displayMonths.map(m => {
                       const mGoal = monthlyGoals?.[m] || 0;
                       const mWon = data.byMonth[m]?.closed_won || 0;
                       const mCommit = data.byMonth[m]?.commit || 0;
@@ -365,7 +365,7 @@ export default function ForecastDashboard() {
               })}
               <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
                 <td className="px-4 py-3">Total</td>
-                {months.map(m => {
+                {displayMonths.map(m => {
                   const mCommit = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.commit || 0), 0);
                   const mUpside = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.upside || 0), 0);
                   const mWon = Object.values(summaryByRep).reduce((s, r) => s + (r.byMonth[m]?.closed_won || 0), 0);
