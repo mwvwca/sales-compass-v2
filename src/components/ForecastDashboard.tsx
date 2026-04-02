@@ -163,7 +163,20 @@ export default function ForecastDashboard() {
     // Monthly: scoped to the selected quarter's relevant month
     const monthlyOpps = opportunities.filter(o => baseFilter(o) && getMonthKey(o.closeDate) === monthlyKey);
     const monthlyGoal = getGoalForQuarters([activeQ]) / 3;
-    const monthly = calcForOpps(monthlyOpps, monthlyGoal);
+
+    // Weekly: filter within the month if a week is selected
+    const weeksInMonth = getWeeksInMonth(monthlyKey);
+    let displayOpps = monthlyOpps;
+    let displayGoal = monthlyGoal;
+    if (selectedWeek !== null && weeksInMonth[selectedWeek]) {
+      const week = weeksInMonth[selectedWeek];
+      displayOpps = monthlyOpps.filter(o => {
+        const d = new Date(o.closeDate);
+        return d >= week.start && d <= week.end;
+      });
+      displayGoal = monthlyGoal / weeksInMonth.length;
+    }
+    const monthly = calcForOpps(displayOpps, displayGoal);
 
     // Quarterly: use selected quarter, not always current
     const quarterlyOpps = opportunities.filter(o => baseFilter(o) && getQuarter(o.closeDate) === activeQ);
@@ -173,8 +186,8 @@ export default function ForecastDashboard() {
     const annualOpps = opportunities.filter(o => baseFilter(o) && annualQuarters.includes(getQuarter(o.closeDate)));
     const annual = calcForOpps(annualOpps, getGoalForQuarters(annualQuarters));
 
-    return { monthly, quarterly, annual, monthlyKey, activeQMonths };
-  }, [opportunities, reps, repNames, selectedRep, selectedQuarter, selectedMonth]);
+    return { monthly, quarterly, annual, monthlyKey, activeQMonths, weeksInMonth };
+  }, [opportunities, reps, repNames, selectedRep, selectedQuarter, selectedMonth, selectedWeek]);
 
   const activeHud = hudMetrics[hudView];
   const hudLabel = hudView === 'monthly' ? getMonthLabel(hudMetrics.monthlyKey) : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
