@@ -36,13 +36,23 @@ export default function ForecastDashboard() {
 
   const months = useMemo(() => fullYearQuarters.flatMap(q => getQuarterMonths(q)), [fullYearQuarters]);
 
+  // Compute active month key for filtering (same logic as hudMetrics, but available earlier)
+  const activeMonthKey = useMemo(() => {
+    const now = new Date();
+    const currentQ = getCurrentQuarter();
+    const activeQ = selectedQuarter === 'full-year' ? currentQ : selectedQuarter;
+    const activeQMonths = getQuarterMonths(activeQ);
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return selectedMonth && activeQMonths.includes(selectedMonth) ? selectedMonth : (activeQMonths.includes(currentMonthKey) ? currentMonthKey : activeQMonths[0]);
+  }, [selectedQuarter, selectedMonth]);
+
+  const activeWeekRanges = useMemo(() => getWeeksInMonth(activeMonthKey), [activeMonthKey]);
+
   // Determine the display months based on HUD view
   const displayMonths = useMemo(() => {
-    if (hudView === 'monthly' && hudMetrics?.monthlyKey) {
-      return [hudMetrics.monthlyKey];
-    }
+    if (hudView === 'monthly') return [activeMonthKey];
     return months;
-  }, [hudView, hudMetrics?.monthlyKey, months]);
+  }, [hudView, activeMonthKey, months]);
 
   const filteredOpps = useMemo(() => {
     return opportunities.filter(o => {
@@ -52,19 +62,17 @@ export default function ForecastDashboard() {
       const q = getQuarter(o.closeDate);
       if (!fullYearQuarters.includes(q)) return false;
       if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
-      // Monthly filter
-      if (hudView === 'monthly' && hudMetrics?.monthlyKey) {
-        if (getMonthKey(o.closeDate) !== hudMetrics.monthlyKey) return false;
-        // Weekly filter
-        if (selectedWeek !== null && hudMetrics.weeksInMonth[selectedWeek]) {
-          const week = hudMetrics.weeksInMonth[selectedWeek];
+      if (hudView === 'monthly') {
+        if (getMonthKey(o.closeDate) !== activeMonthKey) return false;
+        if (selectedWeek !== null && activeWeekRanges[selectedWeek]) {
+          const week = activeWeekRanges[selectedWeek];
           const d = new Date(o.closeDate);
           if (d < week.start || d > week.end) return false;
         }
       }
       return true;
     });
-  }, [opportunities, fullYearQuarters, selectedRep, hudView, hudMetrics, selectedWeek]);
+  }, [opportunities, fullYearQuarters, selectedRep, hudView, activeMonthKey, selectedWeek, activeWeekRanges]);
 
   const lostOpps = useMemo(() => {
     return opportunities.filter(o => {
