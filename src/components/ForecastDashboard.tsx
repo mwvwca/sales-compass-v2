@@ -62,17 +62,23 @@ export default function ForecastDashboard() {
       const q = getQuarter(o.closeDate);
       if (!fullYearQuarters.includes(q)) return false;
       if (selectedRep !== 'all' && o.repName !== selectedRep) return false;
-      if (hudView === 'monthly') {
-        if (getMonthKey(o.closeDate) !== activeMonthKey) return false;
-        if (selectedWeek !== null && activeWeekRanges[selectedWeek]) {
-          const week = activeWeekRanges[selectedWeek];
-          const d = new Date(o.closeDate);
-          if (d < week.start || d > week.end) return false;
-        }
+      return true;
+    });
+  }, [opportunities, fullYearQuarters, selectedRep]);
+
+  // Narrowed opps for opportunity list when monthly/weekly HUD is active
+  const hudFilteredOpps = useMemo(() => {
+    if (hudView !== 'monthly') return filteredOpps;
+    return filteredOpps.filter(o => {
+      if (getMonthKey(o.closeDate) !== activeMonthKey) return false;
+      if (selectedWeek !== null && activeWeekRanges[selectedWeek]) {
+        const week = activeWeekRanges[selectedWeek];
+        const d = new Date(o.closeDate);
+        if (d < week.start || d > week.end) return false;
       }
       return true;
     });
-  }, [opportunities, fullYearQuarters, selectedRep, hudView, activeMonthKey, selectedWeek, activeWeekRanges]);
+  }, [filteredOpps, hudView, activeMonthKey, selectedWeek, activeWeekRanges]);
 
   const lostOpps = useMemo(() => {
     return opportunities.filter(o => {
