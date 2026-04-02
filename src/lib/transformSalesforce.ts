@@ -137,8 +137,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
     const { stage, probability } = parseStage(rawStageValue);
     const amountRaw = String(row[amountCol] ?? "").trim();
 
-    const rawForecast = forecastCol !== undefined ? row[forecastCol] : "";
-    const rawUpside = upsideCol !== undefined ? row[upsideCol] : "";
+    const rawForecast: unknown = forecastCol !== undefined ? row[forecastCol] : "";
+    const rawUpside: unknown = upsideCol !== undefined ? row[upsideCol] : "";
     const forecastVal = rawForecast === true || String(rawForecast ?? "").trim().toUpperCase() === "TRUE";
     const upsideVal = rawUpside === true || String(rawUpside ?? "").trim().toUpperCase() === "TRUE";
 
