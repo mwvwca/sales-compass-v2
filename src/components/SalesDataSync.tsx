@@ -22,8 +22,8 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
     const stageLower = (row.Stage || '').toLowerCase().trim();
     const isClosedWon = stageLower === 'closed won';
     const isClosedLost = stageLower === 'closed lost' || stageLower === 'omitted';
-    const isForecast = row.Forecast === 'TRUE';
-    const isUpside = row.Upside === 'TRUE';
+    const isForecast = isTruthyForecastFlag(row.Forecast);
+    const isUpside = isTruthyUpsideFlag(row.Upside);
     return {
       id: row["Opportunity ID"] || `import-${Date.now()}-${i}`,
       name: row["Opportunity Name"] || 'Unknown',

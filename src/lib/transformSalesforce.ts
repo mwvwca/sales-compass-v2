@@ -140,8 +140,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
 
     const rawForecast: unknown = forecastCol !== undefined ? row[forecastCol] : "";
     const rawUpside: unknown = upsideCol !== undefined ? row[upsideCol] : "";
-    const forecastVal = rawForecast === true || String(rawForecast ?? "").trim().toUpperCase() === "TRUE";
-    const upsideVal = rawUpside === true || String(rawUpside ?? "").trim().toUpperCase() === "TRUE";
+    const forecastVal = isTruthyForecastFlag(rawForecast);
+    const upsideVal = isTruthyUpsideFlag(rawUpside);
 
     results.push({
       "Opportunity ID": oppId,
