@@ -95,29 +95,32 @@ export interface WeekRange {
   end: Date;
 }
 
-/** Returns Mon–Fri week ranges for a given month key (e.g. "2025-01"). */
+/** Returns Mon–Fri week ranges for a given month key (e.g. "2025-01").
+ *  All dates are UTC-based to match opportunity date parsing. */
 export function getWeeksInMonth(monthKey: string): WeekRange[] {
   const [year, month] = monthKey.split('-').map(Number);
   const weeks: WeekRange[] = [];
-  const firstDay = new Date(year, month - 1, 1);
-  const lastDay = new Date(year, month, 0);
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  const lastDay = new Date(Date.UTC(year, month, 0));
 
   // Find the first Monday on or after the 1st
   let cursor = new Date(firstDay);
-  const dow = cursor.getDay(); // 0=Sun
-  if (dow === 0) cursor.setDate(cursor.getDate() + 1);
-  else if (dow > 1) cursor.setDate(cursor.getDate() + (8 - dow));
+  const dow = cursor.getUTCDay(); // 0=Sun
+  if (dow === 0) cursor.setUTCDate(cursor.getUTCDate() + 1);
+  else if (dow > 1) cursor.setUTCDate(cursor.getUTCDate() + (8 - dow));
   // dow === 1 means it's already Monday
 
   let weekNum = 1;
   while (cursor <= lastDay) {
     const start = new Date(cursor);
     const friday = new Date(cursor);
-    friday.setDate(friday.getDate() + 4);
-    const end = friday > lastDay ? new Date(lastDay) : friday;
-    weeks.push({ label: `W${weekNum}`, start, end });
+    friday.setUTCDate(friday.getUTCDate() + 4);
+    // End of week: use end of day (23:59:59.999 UTC) so same-day comparisons work
+    const endDate = friday > lastDay ? new Date(lastDay) : friday;
+    endDate.setUTCHours(23, 59, 59, 999);
+    weeks.push({ label: `W${weekNum}`, start, end: endDate });
     weekNum++;
-    cursor.setDate(cursor.getDate() + 7);
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
   }
 
   return weeks;
