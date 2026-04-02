@@ -16,6 +16,7 @@ export default function ForecastDashboard() {
   const [showGoals, setShowGoals] = useState(false);
   const [hudView, setHudView] = useState<'monthly' | 'quarterly' | 'annual'>('quarterly');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
   const quarters = useMemo(() => {
     const set = new Set<string>();
