@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import { normalizeRepName } from '@/context/ForecastContext';
+import { normalizeRepName } from '@/lib/repUtils';
 import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, getWeeksInMonth, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';

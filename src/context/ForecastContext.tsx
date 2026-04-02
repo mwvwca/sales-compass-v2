@@ -23,43 +23,39 @@ function saveToStorage<T>(key: string, data: T) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
-const MAX_SNAPSHOTS = 5000; // Cap snapshots to prevent localStorage overflow
+const MAX_SNAPSHOTS = 5000;
 
 function getStorageSizeKB(): number {
   let total = 0;
   for (const key of Object.values(STORAGE_KEYS)) {
     const item = localStorage.getItem(key);
-    if (item) total += item.length * 2; // UTF-16 = 2 bytes per char
+    if (item) total += item.length * 2;
   }
   return Math.round(total / 1024);
 }
 
 function pruneSnapshots(snapshots: OpportunitySnapshot[], limit: number): OpportunitySnapshot[] {
   if (snapshots.length <= limit) return snapshots;
-  // Keep the most recent snapshots per opportunity (latest import wins)
+
   const byOpp = new Map<string, OpportunitySnapshot[]>();
   for (const s of snapshots) {
     const arr = byOpp.get(s.opportunityId) || [];
     arr.push(s);
     byOpp.set(s.opportunityId, arr);
   }
-  // Sort each group by date desc, keep last 3 per opp
+
   const pruned: OpportunitySnapshot[] = [];
   for (const arr of byOpp.values()) {
     arr.sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
     pruned.push(...arr.slice(0, 3));
   }
-  // If still over limit, keep most recent overall
+
   if (pruned.length > limit) {
     pruned.sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
     return pruned.slice(0, limit);
   }
-  return pruned;
-}
 
-/** Normalize a rep name for matching purposes */
-export function normalizeRepName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  return pruned;
 }
 
 interface ForecastState {
@@ -87,20 +83,35 @@ interface ForecastContextValue extends ForecastState {
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
 }
 
+type ForecastContextWindow = Window & typeof globalThis & {
+  __forecastContextValue__?: ForecastContextValue;
+};
+
+function getWindowForecastContext(): ForecastContextValue | null {
+  if (typeof window === 'undefined') return null;
+  return (window as ForecastContextWindow).__forecastContextValue__ ?? null;
+}
+
 const ForecastContext = createContext<ForecastContextValue | null>(null);
 
 export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ForecastState>(() => {
     const opportunities = loadFromStorage<Opportunity[]>(STORAGE_KEYS.opportunities, []);
-    
-    // One-time migration: fix classification for opps where stage is Closed Won/Lost but classification doesn't match
+
     const migrated = opportunities.map(o => {
       const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
       if (stageNorm === 'closed won' && o.classification !== 'closed_won') {
         return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
       }
       if (stageNorm === 'closed lost' && o.classification !== 'lost') {
-        return { ...o, previousClassification: o.classification, classification: 'lost' as const, lostDate: o.lostDate || new Date().toISOString(), lostReason: o.lostReason || 'Closed Lost in Salesforce', movedAt: new Date().toISOString() };
+        return {
+          ...o,
+          previousClassification: o.classification,
+          classification: 'lost' as const,
+          lostDate: o.lostDate || new Date().toISOString(),
+          lostReason: o.lostReason || 'Closed Lost in Salesforce',
+          movedAt: new Date().toISOString(),
+        };
       }
       return o;
     });
@@ -116,19 +127,18 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    // Prune snapshots before saving to prevent localStorage overflow
     const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
     if (prunedSnapshots.length !== state.snapshots.length) {
       setState(s => ({ ...s, snapshots: prunedSnapshots }));
-      return; // Will re-trigger this effect with pruned data
+      return;
     }
+
     saveToStorage(STORAGE_KEYS.reps, state.reps);
     saveToStorage(STORAGE_KEYS.opportunities, state.opportunities);
     saveToStorage(STORAGE_KEYS.imports, state.imports);
     saveToStorage(STORAGE_KEYS.changelog, state.changelog);
     saveToStorage(STORAGE_KEYS.snapshots, state.snapshots);
 
-    // Warn if approaching localStorage limits
     const sizeKB = getStorageSizeKB();
     if (sizeKB > 4000) {
       console.warn(`[Forecast] localStorage usage: ${sizeKB}KB / ~5000KB. Consider exporting a backup.`);
@@ -160,7 +170,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       const merged = opps.map(o => {
         const existing = existingMap.get(o.id);
 
-        // Create snapshot for every imported opportunity
         newSnapshots.push({
           opportunityId: o.id,
           importDate,
@@ -174,7 +183,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (existing) {
-          // Track all field changes
           const fieldsToTrack: { field: ChangeLogEntry['field']; oldVal: string; newVal: string }[] = [
             { field: 'closeDate', oldVal: existing.closeDate || '(empty)', newVal: o.closeDate || '(empty)' },
             { field: 'amount', oldVal: String(existing.amount), newVal: String(o.amount) },
@@ -209,6 +217,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             movedAt: existing.classification !== resolvedClassification ? new Date().toISOString() : existing.movedAt,
           };
         }
+
         return o;
       });
 
@@ -272,7 +281,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({
       ...s,
       opportunities: s.opportunities.map(o =>
-        o.id === id ? { ...o, previousClassification: o.classification, classification: 'lost' as const, lostDate: new Date().toISOString(), lostReason: reason || 'Removed from import' } : o
+        o.id === id ? { ...o, previousClassification: o.classification, classification: 'lost' as const, lostDate: new Date().toISOString(), lostReason: reason || 'Removed from import' } : o,
       ),
     }));
   }, []);
@@ -281,7 +290,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({
       ...s,
       opportunities: s.opportunities.map(o =>
-        o.id === id ? { ...o, classification: (o.previousClassification && o.previousClassification !== 'lost' ? o.previousClassification : 'unclassified') as any, lostDate: undefined, lostReason: undefined } : o
+        o.id === id ? { ...o, classification: (o.previousClassification && o.previousClassification !== 'lost' ? o.previousClassification : 'unclassified') as Opportunity['classification'], lostDate: undefined, lostReason: undefined } : o,
       ),
     }));
   }, []);
@@ -300,17 +309,47 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
   }, [state.snapshots]);
 
+  const contextValue: ForecastContextValue = {
+    ...state,
+    addRep,
+    updateRep,
+    deleteRep,
+    importOpportunities,
+    classifyOpportunity,
+    updateOpportunityAmount,
+    updateOpportunity,
+    deleteOpportunity,
+    archiveToGraveyard,
+    restoreFromGraveyard,
+    clearChangelog,
+    restoreFromBackup,
+    getOpportunityHistory,
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const win = window as ForecastContextWindow;
+    win.__forecastContextValue__ = contextValue;
+    return () => {
+      if (win.__forecastContextValue__ === contextValue) {
+        delete win.__forecastContextValue__;
+      }
+    };
+  }, [contextValue]);
+
   return (
-    <ForecastContext.Provider value={{ ...state, addRep, updateRep, deleteRep, importOpportunities, classifyOpportunity, updateOpportunityAmount, updateOpportunity, deleteOpportunity, archiveToGraveyard, restoreFromGraveyard, clearChangelog, restoreFromBackup, getOpportunityHistory }}>
+    <ForecastContext.Provider value={contextValue}>
       {children}
     </ForecastContext.Provider>
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useForecast() {
   const ctx = useContext(ForecastContext);
-  if (!ctx) throw new Error('useForecast must be used within ForecastProvider');
-  return ctx;
-}
+  if (ctx) return ctx;
 
+  const fallbackCtx = getWindowForecastContext();
+  if (fallbackCtx) return fallbackCtx;
+
+  throw new Error('useForecast must be used within ForecastProvider');
+}
