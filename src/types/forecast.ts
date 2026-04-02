@@ -100,32 +100,47 @@ export interface WeekRange {
   end: Date;
 }
 
-/** Returns Mon–Fri work week ranges for a given month key (e.g. "2025-01").
- *  Weeks are strictly Monday–Friday. Days before the first Monday or after the
- *  last Friday are NOT included in any week — they are still visible via the
- *  monthly "All" view. All dates are UTC-based to match opportunity date parsing. */
+/** Returns work week ranges for a given month key (e.g. "2025-01").
+ *  W1 starts on the 1st of the month (even mid-week) and ends on the first Friday.
+ *  Subsequent weeks run Monday–Friday. The last week extends to the last business
+ *  day of the month. All dates are UTC-based to match opportunity date parsing. */
 export function getWeeksInMonth(monthKey: string): WeekRange[] {
   const [year, month] = monthKey.split('-').map(Number);
   const weeks: WeekRange[] = [];
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   const lastDay = new Date(Date.UTC(year, month, 0));
 
-  // Find the first Monday on or after the 1st
-  let cursor = new Date(firstDay);
-  const dow = cursor.getUTCDay(); // 0=Sun
-  if (dow === 0) cursor.setUTCDate(cursor.getUTCDate() + 1);
-  else if (dow > 1) cursor.setUTCDate(cursor.getUTCDate() + (8 - dow));
-  // dow === 1 means it's already Monday
+  // W1 always starts on the 1st and ends on the first Friday
+  const dow = firstDay.getUTCDay(); // 0=Sun
+  let firstFriday = new Date(firstDay);
+  if (dow === 0) {
+    // Sunday: first Friday is day 5
+    firstFriday.setUTCDate(firstFriday.getUTCDate() + 5);
+  } else if (dow === 6) {
+    // Saturday: first Friday is day 6
+    firstFriday.setUTCDate(firstFriday.getUTCDate() + 6);
+  } else {
+    // Mon(1)->Fri = +4, Tue(2)->Fri = +3, Wed(3)->Fri = +2, Thu(4)->Fri = +1, Fri(5)->+0
+    firstFriday.setUTCDate(firstFriday.getUTCDate() + (5 - dow));
+  }
+  if (firstFriday > lastDay) firstFriday = new Date(lastDay);
+  const w1End = new Date(firstFriday);
+  w1End.setUTCHours(23, 59, 59, 999);
+  weeks.push({ label: 'W1', start: new Date(firstDay), end: w1End });
+
+  // Subsequent weeks: Monday–Friday
+  let cursor = new Date(firstFriday);
+  cursor.setUTCDate(cursor.getUTCDate() + 3); // skip to Monday (Fri+3=Mon)
 
   let weekNum = 1;
   while (cursor <= lastDay) {
+    weekNum++;
     const start = new Date(cursor);
     const friday = new Date(cursor);
     friday.setUTCDate(friday.getUTCDate() + 4);
     const endDate = friday > lastDay ? new Date(lastDay) : new Date(friday);
     endDate.setUTCHours(23, 59, 59, 999);
     weeks.push({ label: `W${weekNum}`, start, end: endDate });
-    weekNum++;
     cursor.setUTCDate(cursor.getUTCDate() + 7);
   }
 
