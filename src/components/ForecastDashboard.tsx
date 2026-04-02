@@ -247,6 +247,18 @@ export default function ForecastDashboard() {
                 </button>
               ))}
             </div>
+            <div className="flex bg-secondary rounded-md p-0.5">
+              <button onClick={() => setSelectedWeek(null)}
+                className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${selectedWeek === null ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                All
+              </button>
+              {hudMetrics.weeksInMonth.map((w, i) => (
+                <button key={i} onClick={() => setSelectedWeek(i)}
+                  className={`px-2 py-1 text-[10px] font-mono rounded transition-colors ${selectedWeek === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {w.label}
+                </button>
+              ))}
+            </div>
           )}
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{hudLabel} View</span>
         </div>
