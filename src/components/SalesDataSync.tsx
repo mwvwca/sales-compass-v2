@@ -4,6 +4,7 @@ import * as XLSX from '@e965/xlsx';
 import { Upload, Download, CheckCircle2, AlertCircle, ArrowDown, Sparkles, Send, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { transformOutputToForecast, createForecastWorkbook, type ForecastRow, type SkippedRow } from '@/lib/transformSalesforce';
+import { isTruthyForecastFlag, isTruthyUpsideFlag } from '@/lib/forecastClassification';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ImportReview from './ImportReview';
 import type { Opportunity } from '@/types/forecast';
@@ -21,8 +22,8 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
     const stageLower = (row.Stage || '').toLowerCase().trim();
     const isClosedWon = stageLower === 'closed won';
     const isClosedLost = stageLower === 'closed lost' || stageLower === 'omitted';
-    const isForecast = row.Forecast === 'TRUE';
-    const isUpside = row.Upside === 'TRUE';
+    const isForecast = isTruthyForecastFlag(row.Forecast);
+    const isUpside = isTruthyUpsideFlag(row.Upside);
     return {
       id: row["Opportunity ID"] || `import-${Date.now()}-${i}`,
       name: row["Opportunity Name"] || 'Unknown',

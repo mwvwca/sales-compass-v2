@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import type { Opportunity } from '@/types/forecast';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
+import { isTruthyForecastFlag, isTruthyUpsideFlag } from '@/lib/forecastClassification';
 import ImportReview from './ImportReview';
 
 interface ColumnMapping {
@@ -127,8 +128,8 @@ export default function ImportSheet() {
               if (stageNorm === 'closed lost') return 'lost' as const;
               const rawForecast = row[(mapping as any).forecast || ''];
               const rawUpside = row[(mapping as any).upsideFlag || ''];
-              const isForecast = rawForecast === true || String(rawForecast || '').trim().toUpperCase() === 'TRUE';
-              const isUpside = rawUpside === true || String(rawUpside || '').trim().toUpperCase() === 'TRUE';
+              const isForecast = isTruthyForecastFlag(rawForecast);
+              const isUpside = isTruthyUpsideFlag(rawUpside);
               if (isForecast) return 'commit' as const;
               if (isUpside) return 'upside' as const;
               return 'unclassified' as const;
