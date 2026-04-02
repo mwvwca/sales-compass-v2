@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import type { Opportunity } from '@/types/forecast';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
+import { isTruthyForecastFlag, isTruthyUpsideFlag } from '@/lib/forecastClassification';
 import ImportReview from './ImportReview';
 
 interface ColumnMapping {

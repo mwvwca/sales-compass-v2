@@ -4,6 +4,7 @@ import * as XLSX from '@e965/xlsx';
 import { Upload, Download, CheckCircle2, AlertCircle, ArrowDown, Sparkles, Send, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { transformOutputToForecast, createForecastWorkbook, type ForecastRow, type SkippedRow } from '@/lib/transformSalesforce';
+import { isTruthyForecastFlag, isTruthyUpsideFlag } from '@/lib/forecastClassification';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ImportReview from './ImportReview';
 import type { Opportunity } from '@/types/forecast';

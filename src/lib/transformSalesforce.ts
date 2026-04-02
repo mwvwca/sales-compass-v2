@@ -1,4 +1,5 @@
 import * as XLSX from "@e965/xlsx";
+import { isTruthyForecastFlag, isTruthyUpsideFlag } from "@/lib/forecastClassification";
 
 export interface ForecastRow {
   "Opportunity ID": string;
