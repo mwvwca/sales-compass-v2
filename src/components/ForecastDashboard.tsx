@@ -172,7 +172,7 @@ export default function ForecastDashboard() {
     const annual = calcForOpps(annualOpps, getGoalForQuarters(annualQuarters));
 
     return { monthly, quarterly, annual };
-  }, [opportunities, reps, repNames, selectedRep]);
+  }, [opportunities, reps, repNames, selectedRep, selectedQuarter]);
 
   const activeHud = hudMetrics[hudView];
   const hudLabel = hudView === 'monthly' ? 'Monthly' : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
