@@ -125,10 +125,12 @@ export default function ImportSheet() {
               const stageNorm = String(row[mapping.stage || ''] || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
               if (stageNorm === 'closed won') return 'closed_won' as const;
               if (stageNorm === 'closed lost') return 'lost' as const;
-              const forecastVal = String(row[(mapping as any).forecast || ''] || '').trim().toUpperCase();
-              const upsideVal = String(row[(mapping as any).upsideFlag || ''] || '').trim().toUpperCase();
-              if (forecastVal === 'TRUE') return 'commit' as const;
-              if (upsideVal === 'TRUE') return 'upside' as const;
+              const rawForecast = row[(mapping as any).forecast || ''];
+              const rawUpside = row[(mapping as any).upsideFlag || ''];
+              const isForecast = rawForecast === true || String(rawForecast || '').trim().toUpperCase() === 'TRUE';
+              const isUpside = rawUpside === true || String(rawUpside || '').trim().toUpperCase() === 'TRUE';
+              if (isForecast) return 'commit' as const;
+              if (isUpside) return 'upside' as const;
               return 'unclassified' as const;
             })(),
             lostDate: String(row[mapping.stage || ''] || '').toLowerCase().trim() === 'closed lost' ? importDate : undefined,

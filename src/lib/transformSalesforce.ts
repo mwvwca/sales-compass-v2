@@ -137,8 +137,10 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
     const { stage, probability } = parseStage(rawStageValue);
     const amountRaw = String(row[amountCol] ?? "").trim();
 
-    const forecastVal = forecastCol !== undefined ? String(row[forecastCol] ?? "").trim().toUpperCase() : "";
-    const upsideVal = upsideCol !== undefined ? String(row[upsideCol] ?? "").trim().toUpperCase() : "";
+    const rawForecast: unknown = forecastCol !== undefined ? row[forecastCol] : "";
+    const rawUpside: unknown = upsideCol !== undefined ? row[upsideCol] : "";
+    const forecastVal = rawForecast === true || String(rawForecast ?? "").trim().toUpperCase() === "TRUE";
+    const upsideVal = rawUpside === true || String(rawUpside ?? "").trim().toUpperCase() === "TRUE";
 
     results.push({
       "Opportunity ID": oppId,
@@ -148,8 +150,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       "Close Date": excelDateToString(row[closeDateCol]),
       Stage: stage,
       Probability: probability,
-      Forecast: forecastVal === "TRUE" ? "TRUE" : "",
-      Upside: upsideVal === "TRUE" ? "TRUE" : "",
+      Forecast: forecastVal ? "TRUE" : "",
+      Upside: upsideVal ? "TRUE" : "",
     });
   }
 
