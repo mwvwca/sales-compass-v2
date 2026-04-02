@@ -324,8 +324,8 @@ export default function ForecastDashboard() {
             <thead>
               <tr className="border-b border-border bg-secondary/50">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
-                {displayMonths.map(m => (
                 {months.map(m => (
+                  <th key={m} className={`text-right px-3 py-2.5 text-xs font-mono font-medium uppercase tracking-wider ${hudView === 'monthly' && m === activeMonthKey ? 'text-foreground bg-secondary' : 'text-muted-foreground'}`} colSpan={1}>
                   <th key={m} className={`text-right px-3 py-2.5 text-xs font-mono font-medium uppercase tracking-wider ${hudView === 'monthly' && m === activeMonthKey ? 'text-foreground bg-secondary' : 'text-muted-foreground'}`} colSpan={1}>
                     {getMonthLabel(m)}
                   </th>
