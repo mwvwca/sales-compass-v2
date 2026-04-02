@@ -313,3 +313,4 @@ export function useForecast() {
   if (!ctx) throw new Error('useForecast must be used within ForecastProvider');
   return ctx;
 }
+
