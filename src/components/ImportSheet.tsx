@@ -128,18 +128,12 @@ export default function ImportSheet() {
             amount: parseFloat(row[mapping.amount || ''] || '0') || 0,
             closeDate,
             stage: String(row[mapping.stage || ''] || '').trim(),
-            classification: (() => {
-              const stageNorm = String(row[mapping.stage || ''] || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
-              if (stageNorm === 'closed won') return 'closed_won' as const;
-              if (stageNorm === 'closed lost') return 'lost' as const;
-              const rawForecast = row[(mapping as any).forecast || ''];
-              const rawUpside = row[(mapping as any).upsideFlag || ''];
-              const isForecast = isTruthyForecastFlag(rawForecast);
-              const isUpside = isTruthyUpsideFlag(rawUpside);
-              if (isForecast) return 'commit' as const;
-              if (isUpside) return 'upside' as const;
-              return 'unclassified' as const;
-            })(),
+            classification: getImportedClassification({
+              stage: row[mapping.stage || ''],
+              forecastCategory: row[mapping.forecastCategory || ''],
+              forecastFlag: row[mapping.forecast || ''],
+              upsideFlag: row[mapping.upsideFlag || ''],
+            }),
             lostDate: String(row[mapping.stage || ''] || '').toLowerCase().trim() === 'closed lost' ? importDate : undefined,
             lostReason: String(row[mapping.stage || ''] || '').toLowerCase().trim() === 'closed lost' ? 'Closed Lost in Salesforce' : undefined,
             probability: parseFloat(row[mapping.probability || ''] || '0') || 0,
