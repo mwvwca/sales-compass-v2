@@ -189,8 +189,11 @@ export default function ForecastDashboard() {
     return { monthly, quarterly, annual, monthlyKey, activeQMonths, weeksInMonth };
   }, [opportunities, reps, repNames, selectedRep, selectedQuarter, selectedMonth, selectedWeek]);
 
-  const activeHud = hudMetrics[hudView];
-  const hudLabel = hudView === 'monthly' ? getMonthLabel(hudMetrics.monthlyKey) : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
+  const hudLabel = hudView === 'monthly'
+    ? (selectedWeek !== null && hudMetrics.weeksInMonth[selectedWeek]
+      ? `${getMonthLabel(hudMetrics.monthlyKey)} ${hudMetrics.weeksInMonth[selectedWeek].label}`
+      : getMonthLabel(hudMetrics.monthlyKey))
+    : hudView === 'quarterly' ? 'Quarterly' : 'Annual';
 
   return (
     <div className="space-y-6">
