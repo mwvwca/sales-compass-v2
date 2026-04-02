@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { normalizeRepName } from '@/context/ForecastContext';
-import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
+import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, getWeeksInMonth, type Quarter } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
 import ExecutiveReportVisual from './ExecutiveReportVisual';
