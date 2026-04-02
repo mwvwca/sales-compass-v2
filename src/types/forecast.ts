@@ -95,45 +95,24 @@ export interface WeekRange {
   end: Date;
 }
 
-/** Returns week ranges for a given month key (e.g. "2025-01").
- *  W1 always starts on the 1st of the month. Subsequent weeks start on Mondays.
- *  All dates are UTC-based to match opportunity date parsing. */
+/** Returns Mon–Fri work week ranges for a given month key (e.g. "2025-01").
+ *  Weeks are strictly Monday–Friday. Days before the first Monday or after the
+ *  last Friday are NOT included in any week — they are still visible via the
+ *  monthly "All" view. All dates are UTC-based to match opportunity date parsing. */
 export function getWeeksInMonth(monthKey: string): WeekRange[] {
   const [year, month] = monthKey.split('-').map(Number);
   const weeks: WeekRange[] = [];
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   const lastDay = new Date(Date.UTC(year, month, 0));
-  lastDay.setUTCHours(23, 59, 59, 999);
 
-  // W1 starts on the 1st regardless of day-of-week.
-  // Find the first Monday after the 1st to determine where W1 ends and W2 starts.
-  let firstMonday = new Date(firstDay);
-  const dow = firstMonday.getUTCDay(); // 0=Sun
-  if (dow === 0) firstMonday.setUTCDate(firstMonday.getUTCDate() + 1);
-  else if (dow === 1) { /* already Monday */ }
-  else firstMonday.setUTCDate(firstMonday.getUTCDate() + (8 - dow));
+  // Find the first Monday on or after the 1st
+  let cursor = new Date(firstDay);
+  const dow = cursor.getUTCDay(); // 0=Sun
+  if (dow === 0) cursor.setUTCDate(cursor.getUTCDate() + 1);
+  else if (dow > 1) cursor.setUTCDate(cursor.getUTCDate() + (8 - dow));
+  // dow === 1 means it's already Monday
 
-  // If the 1st IS a Monday, W1 is Mon-Fri. Otherwise W1 is 1st through the following Friday.
-  let w1End: Date;
-  if (dow === 1) {
-    // 1st is Monday, W1 = Mon-Fri (1st to 5th)
-    w1End = new Date(firstDay);
-    w1End.setUTCDate(w1End.getUTCDate() + 4);
-  } else {
-    // W1 starts on the 1st, ends on the Friday of the first full week
-    w1End = new Date(firstMonday);
-    w1End.setUTCDate(w1End.getUTCDate() + 4);
-  }
-  if (w1End > lastDay) w1End = new Date(lastDay);
-  w1End.setUTCHours(23, 59, 59, 999);
-  weeks.push({ label: 'W1', start: new Date(firstDay), end: w1End });
-
-  // Subsequent weeks start on Mondays
-  let cursor = new Date(firstMonday);
-  if (dow !== 1) cursor.setUTCDate(cursor.getUTCDate() + 7); // Skip to the Monday after W1's full week
-  else cursor.setUTCDate(cursor.getUTCDate() + 7); // Next Monday after W1
-
-  let weekNum = 2;
+  let weekNum = 1;
   while (cursor <= lastDay) {
     const start = new Date(cursor);
     const friday = new Date(cursor);
