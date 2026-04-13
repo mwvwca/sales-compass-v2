@@ -410,7 +410,7 @@ export default function ForecastDashboard() {
       />
 
       {/* Opportunities */}
-      <OpportunityList opportunities={hudFilteredOpps} lostOpportunities={lostOpps} quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} />
+      <OpportunityList opportunities={listFilteredOpps} lostOpportunities={lostOpps} quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} />
     </div>
   );
 }
