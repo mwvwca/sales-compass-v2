@@ -48,11 +48,10 @@ export default function ForecastDashboard() {
 
   const activeWeekRanges = useMemo(() => getWeeksInMonth(activeMonthKey), [activeMonthKey]);
 
-  const filteredOpps = useMemo(() => {
+  const listOpps = useMemo(() => {
     return opportunities.filter(o => {
       if (!o.closeDate) return false;
       if (o.classification === 'lost') return false;
-      if (o.classification === 'omitted') return false;
       if (o.stage.toLowerCase().trim() === 'closed lost') return false;
       const q = getQuarter(o.closeDate);
       if (!fullYearQuarters.includes(q)) return false;
@@ -61,19 +60,26 @@ export default function ForecastDashboard() {
     });
   }, [opportunities, fullYearQuarters, selectedRep]);
 
-  // Narrowed opps for opportunity list when monthly/weekly HUD is active
-  const hudFilteredOpps = useMemo(() => {
-    if (hudView !== 'monthly') return filteredOpps;
-    return filteredOpps.filter(o => {
-      if (getMonthKey(o.closeDate) !== activeMonthKey) return false;
+  const filteredOpps = useMemo(() => listOpps.filter(o => o.classification !== 'omitted'), [listOpps]);
+
+  const applyHudTimeFilter = useMemo(() => {
+    return (opps: typeof opportunities) => {
+      if (hudView !== 'monthly') return opps;
+      return opps.filter(o => {
+        if (getMonthKey(o.closeDate) !== activeMonthKey) return false;
         if (selectedWeek !== null && activeWeekRanges[selectedWeek]) {
           const week = activeWeekRanges[selectedWeek];
           const d = getDateAtUtcStart(o.closeDate);
-        if (d < week.start || d > week.end) return false;
-      }
-      return true;
-    });
-  }, [filteredOpps, hudView, activeMonthKey, selectedWeek, activeWeekRanges]);
+          if (d < week.start || d > week.end) return false;
+        }
+        return true;
+      });
+    };
+  }, [hudView, activeMonthKey, selectedWeek, activeWeekRanges, opportunities]);
+
+  // Keep omitted deals visible in the list while excluding them from HUD totals.
+  const hudFilteredOpps = useMemo(() => applyHudTimeFilter(filteredOpps), [applyHudTimeFilter, filteredOpps]);
+  const listFilteredOpps = useMemo(() => applyHudTimeFilter(listOpps), [applyHudTimeFilter, listOpps]);
 
   const lostOpps = useMemo(() => {
     return opportunities.filter(o => {
@@ -404,7 +410,7 @@ export default function ForecastDashboard() {
       />
 
       {/* Opportunities */}
-      <OpportunityList opportunities={hudFilteredOpps} lostOpportunities={lostOpps} quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} />
+      <OpportunityList opportunities={listFilteredOpps} lostOpportunities={lostOpps} quarter={selectedQuarter === 'full-year' ? getCurrentQuarter() : selectedQuarter} />
     </div>
   );
 }
