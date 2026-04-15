@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye } from 'lucide-react';
-import { formatStageWithPct } from '@/lib/utils';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle } from 'lucide-react';
+import { getStagePercentage, formatStageWithPct } from '@/lib/utils';
 import OpportunityHistory from './OpportunityHistory';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,7 +49,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     return months.includes(currentMonth) ? currentMonth : 'all';
   });
   const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
-  const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified', 'omitted']));
+  const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
@@ -124,6 +124,11 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       let cmp = 0;
       if (sortField === 'amount') cmp = a.amount - b.amount;
       else if (sortField === 'classification') cmp = (classOrder[a.classification] ?? 9) - (classOrder[b.classification] ?? 9);
+      else if (sortField === 'stage') {
+        const aPct = getStagePercentage(a.stage) ?? -1;
+        const bPct = getStagePercentage(b.stage) ?? -1;
+        cmp = aPct - bPct;
+      }
       else cmp = String(a[sortField]).localeCompare(String(b[sortField]));
       return sortDir === 'desc' ? -cmp : cmp;
     });
@@ -223,6 +228,19 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
 
   const moved = filtered.filter(o => o.previousClassification && o.previousClassification !== o.classification);
 
+  // Alert: opportunities closing in the current or a past month that are still at 25% (Discovery)
+  const earlyStageAlerts = useMemo(() => {
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return filtered.filter(o => {
+      if (o.classification === 'omitted' || o.classification === 'closed_won') return false;
+      const pct = getStagePercentage(o.stage);
+      if (pct === null || pct > 25) return false;
+      const mk = getMonthKey(o.closeDate);
+      return mk <= currentMonthKey;
+    });
+  }, [filtered]);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -314,6 +332,27 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
           )}
         </div>
       </div>
+
+
+      {earlyStageAlerts.length > 0 && (
+        <div className="border border-upside/40 bg-upside/10 rounded-lg px-4 py-3 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-upside mt-0.5 shrink-0" />
+          <div className="text-xs">
+            <span className="font-semibold text-upside">{earlyStageAlerts.length} opportunit{earlyStageAlerts.length === 1 ? 'y' : 'ies'} at ≤25% stage</span>
+            <span className="text-muted-foreground"> closing this month or earlier:</span>
+            <div className="mt-1 space-y-0.5">
+              {earlyStageAlerts.slice(0, 5).map(o => (
+                <div key={o.id} className="text-muted-foreground">
+                  {o.name} — {formatStageWithPct(o.stage)} — {fmt(o.amount)} — closes {o.closeDate}
+                </div>
+              ))}
+              {earlyStageAlerts.length > 5 && (
+                <div className="text-muted-foreground">…and {earlyStageAlerts.length - 5} more</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground text-sm">
