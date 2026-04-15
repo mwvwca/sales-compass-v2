@@ -333,6 +333,27 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
         </div>
       </div>
 
+
+      {earlyStageAlerts.length > 0 && (
+        <div className="border border-upside/40 bg-upside/10 rounded-lg px-4 py-3 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-upside mt-0.5 shrink-0" />
+          <div className="text-xs">
+            <span className="font-semibold text-upside">{earlyStageAlerts.length} opportunit{earlyStageAlerts.length === 1 ? 'y' : 'ies'} at ≤25% stage</span>
+            <span className="text-muted-foreground"> closing this month or earlier:</span>
+            <div className="mt-1 space-y-0.5">
+              {earlyStageAlerts.slice(0, 5).map(o => (
+                <div key={o.id} className="text-muted-foreground">
+                  {o.name} — {formatStageWithPct(o.stage)} — {fmt(o.amount)} — closes {o.closeDate}
+                </div>
+              ))}
+              {earlyStageAlerts.length > 5 && (
+                <div className="text-muted-foreground">…and {earlyStageAlerts.length - 5} more</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground text-sm">
           No opportunities for this period. Import a Salesforce export to get started.
