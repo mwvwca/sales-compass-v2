@@ -147,6 +147,16 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
               <Trash2 size={12} /> {counts.removed} removed {showRemoved ? '(hide)' : '(show)'}
             </button>
           )}
+          <button
+            onClick={handleToggleAllUnmatched}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-colors cursor-pointer ${
+              showAllUnmatched
+                ? 'text-destructive bg-destructive/10 hover:text-destructive/80'
+                : 'text-muted-foreground bg-secondary hover:text-foreground'
+            }`}
+          >
+            {showAllUnmatched ? 'All unmatched (on)' : 'Show all unmatched'}
+          </button>
         </div>
       </div>
 
