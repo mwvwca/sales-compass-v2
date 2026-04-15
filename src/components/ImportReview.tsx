@@ -31,40 +31,52 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
   const incomingRepNames = useMemo(() => new Set(incoming.map(o => normalizeRepName(o.repName))), [incoming]);
   const incomingIds = useMemo(() => new Set(incoming.map(o => o.id)), [incoming]);
 
-  const [items, setItems] = useState<ReviewItem[]>(() => {
-    // Incoming items: new / updated / unchanged
-    const incomingItems: ReviewItem[] = incoming.map(opp => {
-      const existing = existingMap.get(opp.id);
-      if (!existing) {
-        return { opportunity: opp, changeType: 'new' as ChangeType, changes: [], selected: true };
-      }
-      const changes: string[] = [];
-      if (existing.amount !== opp.amount) changes.push(`Amount: ${fmt(existing.amount)} → ${fmt(opp.amount)}`);
-      if (existing.closeDate !== opp.closeDate) changes.push(`Close: ${existing.closeDate} → ${opp.closeDate}`);
-      if (existing.stage.trim() !== opp.stage.trim()) changes.push(`Stage: ${existing.stage} → ${opp.stage}`);
-      if (existing.repName !== opp.repName) changes.push(`Rep: ${existing.repName} → ${opp.repName}`);
-      if (existing.name !== opp.name) changes.push(`Name: ${existing.name} → ${opp.name}`);
-      const resolvedClassification = resolveImportedClassification(existing.classification, opp.classification);
-      if (existing.classification !== resolvedClassification) {
-        changes.push(`Classification: ${existing.classification} → ${resolvedClassification}`);
-      }
-      const changeType: ChangeType = changes.length > 0 ? 'updated' : 'unchanged';
-      return { opportunity: opp, existing, changeType, changes, selected: changes.length > 0 };
-    });
+  const [showAllUnmatched, setShowAllUnmatched] = useState(false);
 
-    // Removed items: exist in app for reps in this import, but not in incoming list
-    const removedItems: ReviewItem[] = opportunities
-      .filter(o => o.classification !== 'lost' && incomingRepNames.has(normalizeRepName(o.repName)) && !incomingIds.has(o.id))
-      .map(o => ({
-        opportunity: o,
-        existing: o,
-        changeType: 'removed' as ChangeType,
-        changes: ['No longer in import file'],
-        selected: false, // default deselected — user must opt in to remove
-      }));
-
-    return [...incomingItems, ...removedItems];
+  const buildIncomingItems = (): ReviewItem[] => incoming.map(opp => {
+    const existing = existingMap.get(opp.id);
+    if (!existing) {
+      return { opportunity: opp, changeType: 'new' as ChangeType, changes: [], selected: true };
+    }
+    const changes: string[] = [];
+    if (existing.amount !== opp.amount) changes.push(`Amount: ${fmt(existing.amount)} → ${fmt(opp.amount)}`);
+    if (existing.closeDate !== opp.closeDate) changes.push(`Close: ${existing.closeDate} → ${opp.closeDate}`);
+    if (existing.stage.trim() !== opp.stage.trim()) changes.push(`Stage: ${existing.stage} → ${opp.stage}`);
+    if (existing.repName !== opp.repName) changes.push(`Rep: ${existing.repName} → ${opp.repName}`);
+    if (existing.name !== opp.name) changes.push(`Name: ${existing.name} → ${opp.name}`);
+    const resolvedClassification = resolveImportedClassification(existing.classification, opp.classification);
+    if (existing.classification !== resolvedClassification) {
+      changes.push(`Classification: ${existing.classification} → ${resolvedClassification}`);
+    }
+    const changeType: ChangeType = changes.length > 0 ? 'updated' : 'unchanged';
+    return { opportunity: opp, existing, changeType, changes, selected: changes.length > 0 };
   });
+
+  const buildRemovedItems = (allUnmatched: boolean): ReviewItem[] => opportunities
+    .filter(o => o.classification !== 'lost' && o.classification !== 'omitted' && !incomingIds.has(o.id) && (allUnmatched || incomingRepNames.has(normalizeRepName(o.repName))))
+    .map(o => ({
+      opportunity: o,
+      existing: o,
+      changeType: 'removed' as ChangeType,
+      changes: [incomingRepNames.has(normalizeRepName(o.repName)) ? 'No longer in import file' : 'Rep not in import file'],
+      selected: false,
+    }));
+
+  const [items, setItems] = useState<ReviewItem[]>(() => [...buildIncomingItems(), ...buildRemovedItems(false)]);
+
+  const handleToggleAllUnmatched = () => {
+    const next = !showAllUnmatched;
+    setShowAllUnmatched(next);
+    const incomingItems = buildIncomingItems();
+    const removedItems = buildRemovedItems(next);
+    // Preserve selections from current items
+    const selectionMap = new Map(items.map(i => [i.opportunity.id, i.selected]));
+    const merged = [...incomingItems, ...removedItems].map(i => ({
+      ...i,
+      selected: selectionMap.has(i.opportunity.id) ? selectionMap.get(i.opportunity.id)! : i.selected,
+    }));
+    setItems(merged);
+  };
 
   const toggle = (id: string) => setItems(prev => prev.map(i => i.opportunity.id === id ? { ...i, selected: !i.selected } : i));
   const selectAll = (type: ChangeType) => setItems(prev => prev.map(i => i.changeType === type ? { ...i, selected: true } : i));
@@ -135,6 +147,16 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
               <Trash2 size={12} /> {counts.removed} removed {showRemoved ? '(hide)' : '(show)'}
             </button>
           )}
+          <button
+            onClick={handleToggleAllUnmatched}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-colors cursor-pointer ${
+              showAllUnmatched
+                ? 'text-destructive bg-destructive/10 hover:text-destructive/80'
+                : 'text-muted-foreground bg-secondary hover:text-foreground'
+            }`}
+          >
+            {showAllUnmatched ? 'All unmatched (on)' : 'Show all unmatched'}
+          </button>
         </div>
       </div>
 
