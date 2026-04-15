@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
+import { normalizeRepName } from '@/lib/repUtils';
 import { Check, Plus, RefreshCw, Minus, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -27,7 +28,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
   const existingMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
 
   // Reps present in the incoming file — only flag removals for these reps
-  const incomingRepNames = useMemo(() => new Set(incoming.map(o => o.repName)), [incoming]);
+  const incomingRepNames = useMemo(() => new Set(incoming.map(o => normalizeRepName(o.repName))), [incoming]);
   const incomingIds = useMemo(() => new Set(incoming.map(o => o.id)), [incoming]);
 
   const [items, setItems] = useState<ReviewItem[]>(() => {
@@ -53,7 +54,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
 
     // Removed items: exist in app for reps in this import, but not in incoming list
     const removedItems: ReviewItem[] = opportunities
-      .filter(o => incomingRepNames.has(o.repName) && !incomingIds.has(o.id))
+      .filter(o => o.classification !== 'lost' && incomingRepNames.has(normalizeRepName(o.repName)) && !incomingIds.has(o.id))
       .map(o => ({
         opportunity: o,
         existing: o,
