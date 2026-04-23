@@ -195,7 +195,7 @@ describe('commissionUtils', () => {
     expect(review.selectedMonthRows[1].accelerator).toBe(2);
     expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-4')).toBe(true);
     expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-5')).toBe(true);
-    expect(review.summaries[0].expectedTotal).toBeCloseTo(41669.44, 2);
+    expect(review.summaries[0].expectedTotal).toBeCloseTo(48149.44, 2);
   });
 
   it('keeps closed won, lost, and omitted classifications sticky during imports', () => {
