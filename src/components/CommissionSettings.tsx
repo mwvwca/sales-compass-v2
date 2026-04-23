@@ -8,13 +8,13 @@ import { normalizeRepName } from '@/lib/repUtils';
 interface CommissionSettingsProps {
   reps: Rep[];
   commissionSettings: CommissionSettingsMap;
-  onSave: (repName: string, settings: { monthlyQuota: number; baseRate: number }) => void;
+  onSave: (repName: string, settings: { monthlyQuota: number; annualVariableComp?: number; baseRate?: number }) => void;
   onClear: (repName: string) => void;
 }
 
 interface DraftRow {
   monthlyQuota: string;
-  baseRate: string;
+  annualVariableComp: string;
 }
 
 export default function CommissionSettings({ reps, commissionSettings, onSave, onClear }: CommissionSettingsProps) {
@@ -25,7 +25,7 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
       const existing = commissionSettings[normalizeRepName(rep.name)];
       accumulator[rep.id] = {
         monthlyQuota: existing?.monthlyQuota ? String(existing.monthlyQuota) : '',
-        baseRate: existing?.baseRate ? String(existing.baseRate * 100) : '',
+        annualVariableComp: existing?.annualVariableComp ? String(existing.annualVariableComp) : '',
       };
       return accumulator;
     }, {});
@@ -48,11 +48,11 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
   const handleSave = (rep: Rep) => {
     const draft = drafts[rep.id];
     const monthlyQuota = Number(draft?.monthlyQuota || 0);
-    const baseRatePct = Number(draft?.baseRate || 0);
+    const annualVariableComp = Number(draft?.annualVariableComp || 0);
 
     onSave(rep.name, {
       monthlyQuota: Number.isFinite(monthlyQuota) ? monthlyQuota : 0,
-      baseRate: Number.isFinite(baseRatePct) ? baseRatePct / 100 : 0,
+      annualVariableComp: Number.isFinite(annualVariableComp) ? annualVariableComp : 0,
     });
   };
 
@@ -68,7 +68,7 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
     <section className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Commission settings</h3>
-        <p className="text-xs text-muted-foreground">Set each rep’s monthly quota and base commission rate used for expected payout math.</p>
+        <p className="text-xs text-muted-foreground">Set each rep’s monthly quota and annual variable comp. The expected commission rate is derived automatically.</p>
       </div>
 
       <div className="overflow-hidden rounded-md border border-border">
@@ -77,7 +77,8 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
             <tr className="border-b border-border bg-secondary/40 text-left">
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Rep</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Monthly Quota</th>
-              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Base Rate %</th>
+              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Annual Variable Comp</th>
+              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Derived Rate</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Actions</th>
             </tr>
           </thead>
@@ -85,6 +86,9 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
             {reps.map(rep => {
               const repKey = normalizeRepName(rep.name);
               const configured = commissionSettings[repKey];
+              const derivedRate = configured?.baseRate ?? (configured?.annualVariableComp && configured.monthlyQuota > 0
+                ? configured.annualVariableComp / (configured.monthlyQuota * 12)
+                : 0);
 
               return (
                 <tr key={rep.id} className="border-b border-border last:border-0">
@@ -101,13 +105,14 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
                   <td className="px-4 py-3">
                     <Input
                       type="number"
-                      step="0.01"
-                      value={drafts[rep.id]?.baseRate || ''}
-                      onChange={event => updateDraft(rep.id, 'baseRate', event.target.value)}
-                      placeholder="10"
+                        step="0.01"
+                        value={drafts[rep.id]?.annualVariableComp || ''}
+                        onChange={event => updateDraft(rep.id, 'annualVariableComp', event.target.value)}
+                        placeholder="120000"
                       className="font-mono"
                     />
                   </td>
+                    <td className="px-4 py-3 font-mono text-foreground">{derivedRate > 0 ? `${(derivedRate * 100).toFixed(2)}%` : '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Button type="button" variant="outline" size="sm" onClick={() => handleSave(rep)}>
