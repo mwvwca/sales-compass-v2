@@ -51,6 +51,19 @@ const opportunities: Opportunity[] = [
     probability: 100,
     importDate: '2026-05-25T00:00:00.000Z',
   },
+  {
+    id: 'opp-5',
+    name: 'Migrated Omitted Won Deal',
+    repId: 'rep-1',
+    repName: 'Jane Smith',
+    amount: 1200,
+    closeDate: '2026-05-26T00:00:00.000Z',
+    stage: 'Closed Won',
+    classification: 'closed_won',
+    previousClassification: 'omitted',
+    probability: 100,
+    importDate: '2026-05-26T00:00:00.000Z',
+  },
 ];
 
 const commissionSettings: CommissionSettingsMap = {
@@ -102,12 +115,13 @@ describe('commissionUtils', () => {
     expect(review.selectedMonthRows).toHaveLength(2);
     expect(review.selectedMonthRows.map(row => row.opportunityId)).toEqual(['opp-1', 'opp-2']);
     expect(review.selectedMonthRows[1].repKey).toBe('jane smith');
-    expect(review.selectedMonthRows[1].expectedCommission).toBe(80);
-    expect(review.selectedMonthRows[1].variance).toBeCloseTo(5);
-    expect(review.summaries[0].expectedTotal).toBe(130);
+    expect(review.selectedMonthRows[1].expectedCommission).toBe(70);
+    expect(review.selectedMonthRows[1].variance).toBeCloseTo(15);
+    expect(review.summaries[0].expectedTotal).toBe(120);
     expect(review.summaries[0].actualTotal).toBe(135);
     expect(review.summaries[0].flaggedRows).toBe(1);
     expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-4')).toBe(true);
+    expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-5')).toBe(true);
     expect(review.selectedMonthRows[1].actualBefore).toBe(500);
     expect(review.selectedMonthRows[1].actualAfter).toBe(1200);
   });
