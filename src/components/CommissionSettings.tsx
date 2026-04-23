@@ -68,7 +68,7 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
     <section className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Commission settings</h3>
-        <p className="text-xs text-muted-foreground">Set each rep’s monthly quota and annual variable comp. The expected commission rate is derived automatically.</p>
+        <p className="text-xs text-muted-foreground">Set each rep’s monthly quota and annual variable comp. The review uses the derived base rate to calculate the source-style expected payout per deal.</p>
       </div>
 
       <div className="overflow-hidden rounded-md border border-border">
