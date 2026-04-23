@@ -130,6 +130,7 @@ interface ForecastContextValue extends ForecastState {
   clearCommissionSettings: (repName: string) => void;
   updateCommissionMonthActual: (repName: string, monthKey: string, actualTotal?: number) => void;
   updateCommissionOpportunityReview: (repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => void;
+  updateOpportunityCommissionDetails: (id: string, updates: Pick<Opportunity, 'commissionMrr' | 'commissionTermYears' | 'commissionPaymentType' | 'commissionSpiff' | 'commissionNotes'>) => void;
   setCommissionPinHash: (pinHash: string | null) => void;
   restoreFromBackup: (data: {
     reps: Rep[];
@@ -161,10 +162,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
     const migrated = opportunities.map(o => {
       const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
-      if (stageNorm === 'closed won' && o.classification !== 'closed_won' && o.classification !== 'omitted') {
+      if (stageNorm === 'closed won' && o.classification !== 'closed_won' && o.classification !== 'omitted' && o.classification !== 'lost') {
         return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
       }
-      if (stageNorm === 'closed lost' && o.classification !== 'lost') {
+      if (stageNorm === 'closed lost' && o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'closed_won') {
         return {
           ...o,
           previousClassification: o.classification,
@@ -288,6 +289,11 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           return {
             ...o,
             notes: existing.notes,
+            commissionMrr: existing.commissionMrr,
+            commissionTermYears: existing.commissionTermYears,
+            commissionPaymentType: existing.commissionPaymentType,
+            commissionSpiff: existing.commissionSpiff,
+            commissionNotes: existing.commissionNotes,
             classification: resolvedClassification,
             previousClassification: existing.classification !== resolvedClassification ? existing.classification : existing.previousClassification,
             movedAt: existing.classification !== resolvedClassification ? new Date().toISOString() : existing.movedAt,
@@ -386,6 +392,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         [repKey]: {
           monthlyQuota: Math.max(0, settings.monthlyQuota || 0),
           annualVariableComp: settings.annualVariableComp === undefined ? undefined : Math.max(0, settings.annualVariableComp || 0),
+            priorQuarterPayout: settings.priorQuarterPayout === undefined ? undefined : Math.max(0, settings.priorQuarterPayout || 0),
           baseRate: settings.baseRate === undefined ? undefined : Math.max(0, settings.baseRate || 0),
         },
       },
@@ -448,6 +455,22 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const updateOpportunityCommissionDetails = useCallback((id: string, updates: Pick<Opportunity, 'commissionMrr' | 'commissionTermYears' | 'commissionPaymentType' | 'commissionSpiff' | 'commissionNotes'>) => {
+    setState(s => ({
+      ...s,
+      opportunities: s.opportunities.map(o => (o.id === id
+        ? {
+            ...o,
+            commissionMrr: updates.commissionMrr,
+            commissionTermYears: updates.commissionTermYears,
+            commissionPaymentType: updates.commissionPaymentType,
+            commissionSpiff: updates.commissionSpiff,
+            commissionNotes: updates.commissionNotes,
+          }
+        : o)),
+    }));
+  }, []);
+
   const setCommissionPinHash = useCallback((pinHash: string | null) => {
     setState(s => ({ ...s, commissionPinHash: pinHash }));
   }, []);
@@ -498,6 +521,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     clearCommissionSettings,
     updateCommissionMonthActual,
     updateCommissionOpportunityReview,
+    updateOpportunityCommissionDetails,
     setCommissionPinHash,
     restoreFromBackup,
     getOpportunityHistory,

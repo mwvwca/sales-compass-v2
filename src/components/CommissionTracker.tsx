@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Calculator } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Calculator, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import { normalizeRepName } from '@/lib/repUtils';
 const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const percentFormatter = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
 
-function formatQuotaProgress(booked: number, quota: number): string {
+function formatProgress(booked: number, quota: number): string {
   if (quota <= 0) return `${currencyFormatter.format(booked)} booked`;
   return `${currencyFormatter.format(booked)} / ${currencyFormatter.format(quota)} (${(booked / quota * 100).toFixed(0)}%)`;
 }
@@ -23,6 +23,7 @@ interface CommissionTrackerProps {
   commissionReviews: CommissionReviewsMap;
   onMonthActualChange: (repName: string, monthKey: string, actualTotal?: number) => void;
   onOpportunityReviewChange: (repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => void;
+  onOpportunityCommissionDetailsChange: (opportunityId: string, updates: Pick<Opportunity, 'commissionMrr' | 'commissionTermYears' | 'commissionPaymentType' | 'commissionSpiff' | 'commissionNotes'>) => void;
 }
 
 export default function CommissionTracker({
@@ -32,6 +33,7 @@ export default function CommissionTracker({
   commissionReviews,
   onMonthActualChange,
   onOpportunityReviewChange,
+  onOpportunityCommissionDetailsChange,
 }: CommissionTrackerProps) {
   const latestMonth = useMemo(() => {
     const rows = buildCommissionReview(opportunities, commissionSettings, commissionReviews);
@@ -41,6 +43,7 @@ export default function CommissionTracker({
   const [selectedMonth, setSelectedMonth] = useState(latestMonth);
   const [selectedRep, setSelectedRep] = useState<'all' | string>('all');
   const [anomaliesOnly, setAnomaliesOnly] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!selectedMonth && latestMonth) {
@@ -63,6 +66,10 @@ export default function CommissionTracker({
       .filter(rep => activeRepKeys.size === 0 || activeRepKeys.has(normalizeRepName(rep.name)))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [reps, review.selectedMonthRows]);
+
+  const toggleExpanded = (id: string) => {
+    setExpandedRows(current => ({ ...current, [id]: !current[id] }));
+  };
 
   if (review.availableMonths.length === 0) {
     return (
@@ -150,73 +157,186 @@ export default function CommissionTracker({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/40 text-left">
+              <th className="w-10 px-3 py-2.5" />
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Close Date</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Rep</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Opportunity</th>
-              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Amount</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Expected</th>
-              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Attainment</th>
+              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Accelerator context</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Company Statement</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Variance</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Note</th>
             </tr>
           </thead>
           <tbody>
-            {review.selectedMonthRows.map(row => (
-              <tr key={row.opportunityId} className="border-b border-border align-top last:border-0">
-                <td className="px-4 py-3 font-mono text-foreground">{new Date(row.closeDate).toLocaleDateString()}</td>
-                <td className="px-4 py-3 text-foreground">{row.repName}</td>
-                <td className="px-4 py-3">
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">{row.opportunityName}</p>
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span>{row.tierLabel}</span>
-                      <span>Base rate {percentFormatter.format(row.baseRate)}</span>
-                      {row.annualVariableComp !== undefined && <span>AVC {currencyFormatter.format(row.annualVariableComp)}</span>}
-                      {row.hitCap && <span>Cap hit</span>}
-                      {row.missingSettings && <span>Needs monthly settings</span>}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 font-mono text-foreground">{currencyFormatter.format(row.amount)}</td>
-                <td className="px-4 py-3 font-mono text-foreground">{currencyFormatter.format(row.expectedCommission)}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1"><Calculator className="h-3.5 w-3.5" /> Monthly booked vs quota</div>
-                      <div>Booked before: {formatQuotaProgress(row.actualBefore, row.monthlyQuota)}</div>
-                      <div>Booked after: {formatQuotaProgress(row.actualAfter, row.monthlyQuota)}</div>
-                      <div>Quota used: {currencyFormatter.format(row.monthlyQuota)}</div>
-                      <div>Tier reached: {row.tierLabel}</div>
-                    </div>
-                </td>
-                <td className="px-4 py-3">
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={row.actualCommission ?? ''}
-                    onChange={event => onOpportunityReviewChange(row.repName, row.monthKey, row.opportunityId, {
-                      actualCommission: event.target.value === '' ? undefined : Number(event.target.value),
-                      note: row.note,
-                    })}
-                    className="min-w-[120px] font-mono"
-                  />
-                </td>
-                <td className="px-4 py-3 font-mono text-foreground">
-                  {row.variance === undefined ? '—' : currencyFormatter.format(row.variance)}
-                </td>
-                <td className="px-4 py-3">
-                  <Textarea
-                    value={row.note ?? ''}
-                    onChange={event => onOpportunityReviewChange(row.repName, row.monthKey, row.opportunityId, {
-                      actualCommission: row.actualCommission,
-                      note: event.target.value,
-                    })}
-                    placeholder="Investigate mismatch"
-                    className="min-h-[72px] min-w-[180px] resize-y"
-                  />
-                </td>
-              </tr>
-            ))}
+            {review.selectedMonthRows.map(row => {
+              const isExpanded = !!expandedRows[row.opportunityId];
+              return (
+                <Fragment key={row.opportunityId}>
+                  <tr className="border-b border-border align-top last:border-0">
+                    <td className="px-3 py-3">
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => toggleExpanded(row.opportunityId)}>
+                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </Button>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-foreground">{new Date(row.closeDate).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-foreground">{row.repName}</td>
+                    <td className="px-4 py-3">
+                      <div className="space-y-1">
+                        <p className="font-medium text-foreground">{row.opportunityName}</p>
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span>ACV {currencyFormatter.format(row.annualAcv)}</span>
+                          <span>LTC {row.ltcMultiplier.toFixed(2)}x</span>
+                          <span>Accel {row.accelerator.toFixed(1)}x</span>
+                          <span>Qtr {row.quarterKey}</span>
+                          {row.hitCap && <span>Cap hit</span>}
+                          {row.missingSettings && <span>Needs plan inputs</span>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-foreground">
+                      <div>{currencyFormatter.format(row.expectedCommission)}</div>
+                      <div className="text-xs text-muted-foreground">{currencyFormatter.format(row.amount)} booked</div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1"><Calculator className="h-3.5 w-3.5" /> Starting attainment for accelerator</div>
+                        <div>Booked before: {formatProgress(row.quarterBookedBefore, row.quarterlyQuota)}</div>
+                        <div>Booked after: {formatProgress(row.quarterBookedAfter, row.quarterlyQuota)}</div>
+                        <div>Band applied: {row.acceleratorLabel}</div>
+                        <div>Base rate: {percentFormatter.format(row.baseRate)}</div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={row.actualCommission ?? ''}
+                        onChange={event => onOpportunityReviewChange(row.repName, row.monthKey, row.opportunityId, {
+                          actualCommission: event.target.value === '' ? undefined : Number(event.target.value),
+                          note: row.note,
+                        })}
+                        className="min-w-[120px] font-mono"
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-mono text-foreground">
+                      {row.variance === undefined ? '—' : currencyFormatter.format(row.variance)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Textarea
+                        value={row.note ?? ''}
+                        onChange={event => onOpportunityReviewChange(row.repName, row.monthKey, row.opportunityId, {
+                          actualCommission: row.actualCommission,
+                          note: event.target.value,
+                        })}
+                        placeholder="Investigate mismatch"
+                        className="min-h-[72px] min-w-[180px] resize-y"
+                      />
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="border-b border-border bg-secondary/10 last:border-0">
+                      <td />
+                      <td colSpan={8} className="px-4 py-4">
+                        <div className="grid gap-4 lg:grid-cols-[repeat(4,minmax(0,1fr))]">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Commission MRR</label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={row.commissionMrr ?? ''}
+                              onChange={event => onOpportunityCommissionDetailsChange(row.opportunityId, {
+                                commissionMrr: event.target.value === '' ? undefined : Number(event.target.value),
+                                commissionTermYears: row.commissionTermYears,
+                                commissionPaymentType: row.commissionPaymentType,
+                                commissionSpiff: row.commissionSpiff,
+                                commissionNotes: row.commissionNotes,
+                              })}
+                              className="font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Term years</label>
+                            <Input
+                              type="number"
+                              step="1"
+                              min="1"
+                              value={row.commissionTermYears}
+                              onChange={event => onOpportunityCommissionDetailsChange(row.opportunityId, {
+                                commissionMrr: row.commissionMrr,
+                                commissionTermYears: event.target.value === '' ? undefined : Number(event.target.value),
+                                commissionPaymentType: row.commissionPaymentType,
+                                commissionSpiff: row.commissionSpiff,
+                                commissionNotes: row.commissionNotes,
+                              })}
+                              className="font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Payment type</label>
+                            <select
+                              value={row.commissionPaymentType}
+                              onChange={event => onOpportunityCommissionDetailsChange(row.opportunityId, {
+                                commissionMrr: row.commissionMrr,
+                                commissionTermYears: row.commissionTermYears,
+                                commissionPaymentType: event.target.value as 'annual' | 'upfront',
+                                commissionSpiff: row.commissionSpiff,
+                                commissionNotes: row.commissionNotes,
+                              })}
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            >
+                              <option value="annual">Annual</option>
+                              <option value="upfront">Upfront</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">SPIFF</label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={row.commissionSpiff || ''}
+                              onChange={event => onOpportunityCommissionDetailsChange(row.opportunityId, {
+                                commissionMrr: row.commissionMrr,
+                                commissionTermYears: row.commissionTermYears,
+                                commissionPaymentType: row.commissionPaymentType,
+                                commissionSpiff: event.target.value === '' ? undefined : Number(event.target.value),
+                                commissionNotes: row.commissionNotes,
+                              })}
+                              className="font-mono"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,1fr)]">
+                          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-3">
+                            <div>Annual ACV used: <span className="font-mono text-foreground">{currencyFormatter.format(row.annualAcv)}</span></div>
+                            <div>Quarter quota: <span className="font-mono text-foreground">{currencyFormatter.format(row.quarterlyQuota)}</span></div>
+                            <div>Prior quarter payout: <span className="font-mono text-foreground">{currencyFormatter.format(row.priorQuarterPayout)}</span></div>
+                            <div>LTC multiplier: <span className="font-mono text-foreground">{row.ltcMultiplier.toFixed(2)}x</span></div>
+                            <div>Accelerator: <span className="font-mono text-foreground">{row.accelerator.toFixed(1)}x</span></div>
+                            <div>Cap status: <span className="font-mono text-foreground">{row.hitCap ? 'Capped' : 'Not capped'}</span></div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Commission details note</label>
+                            <Textarea
+                              value={row.commissionNotes ?? ''}
+                              onChange={event => onOpportunityCommissionDetailsChange(row.opportunityId, {
+                                commissionMrr: row.commissionMrr,
+                                commissionTermYears: row.commissionTermYears,
+                                commissionPaymentType: row.commissionPaymentType,
+                                commissionSpiff: row.commissionSpiff,
+                                commissionNotes: event.target.value,
+                              })}
+                              placeholder="Add post-close details from the calculator"
+                              className="min-h-[100px] resize-y"
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
             {review.selectedMonthRows.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted-foreground">

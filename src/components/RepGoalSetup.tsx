@@ -20,6 +20,7 @@ export default function RepGoalSetup() {
     clearCommissionSettings,
     updateCommissionMonthActual,
     updateCommissionOpportunityReview,
+    updateOpportunityCommissionDetails,
     setCommissionPinHash,
   } = useForecast();
   const [name, setName] = useState('');
@@ -176,6 +177,7 @@ export default function RepGoalSetup() {
               commissionReviews={commissionReviews}
               onMonthActualChange={updateCommissionMonthActual}
               onOpportunityReviewChange={updateCommissionOpportunityReview}
+              onOpportunityCommissionDetailsChange={updateOpportunityCommissionDetails}
             />
           </div>
         </CommissionLock>

@@ -4,32 +4,36 @@ import type {
   Opportunity,
   RepCommissionSettings,
 } from '@/types/forecast';
-import { getDateAtUtcStart, getMonthKey } from '@/types/forecast';
+import { getDateAtUtcStart, getMonthKey, getQuarter } from '@/types/forecast';
 import { normalizeRepName } from '@/lib/repUtils';
 
 export interface DealCommissionInputs {
-  dealAmount: number;
+  annualAcv: number;
   baseRate: number;
-  quota: number;
-  actualBefore: number;
+  quarterlyQuota: number;
+  quarterBookedBefore: number;
+  termYears?: number;
+  paymentType?: 'annual' | 'upfront';
+  spiff?: number;
 }
 
 export interface DealCommissionResult {
-  maxEligible: number;
-  standardPayout: number;
-  buckets: {
-    inBase: number;
-    inTier1: number;
-    inTier2: number;
-    basePayout: number;
-    tier1Payout: number;
-    tier2Payout: number;
-  };
-  preCapTotal: number;
-  cappedAmount: number;
+  annualAcv: number;
+  baseRate: number;
+  quarterlyQuota: number;
+  quarterBookedBefore: number;
+  quarterBookedAfter: number;
+  startingAttainmentPct: number;
+  endingAttainmentPct: number;
+  accelerator: number;
+  ltcMultiplier: number;
+  baseCommission: number;
+  multipliedCommission: number;
+  capAmount: number;
+  cappedCommission: number;
   finalPayout: number;
+  spiff: number;
   hitCap: boolean;
-  actualAfter: number;
 }
 
 export interface CommissionReviewRow {
@@ -38,6 +42,7 @@ export interface CommissionReviewRow {
   repName: string;
   repKey: string;
   monthKey: string;
+  quarterKey: string;
   closeDate: string;
   amount: number;
   expectedCommission: number;
@@ -45,15 +50,25 @@ export interface CommissionReviewRow {
   note?: string;
   variance?: number;
   monthlyQuota: number;
+  quarterlyQuota: number;
   annualVariableComp?: number;
+  priorQuarterPayout: number;
   baseRate: number;
-  actualBefore: number;
-  actualAfter: number;
-  attainmentBeforePct: number;
-  attainmentAfterPct: number;
+  quarterBookedBefore: number;
+  quarterBookedAfter: number;
+  startingAttainmentPct: number;
+  endingAttainmentPct: number;
   hitCap: boolean;
-  tierLabel: string;
   missingSettings: boolean;
+  annualAcv: number;
+  commissionMrr?: number;
+  commissionTermYears: number;
+  commissionPaymentType: 'annual' | 'upfront';
+  commissionSpiff: number;
+  commissionNotes?: string;
+  ltcMultiplier: number;
+  accelerator: number;
+  acceleratorLabel: string;
 }
 
 export interface CommissionReviewSummary {
@@ -80,36 +95,71 @@ export function getCommissionReviewKey(repKey: string, monthKey: string): string
   return `${repKey}__${monthKey}`;
 }
 
-export function calculateDealCommission({ dealAmount, baseRate, quota, actualBefore }: DealCommissionInputs): DealCommissionResult {
-  const amount = Math.max(0, dealAmount || 0);
-  const rate = Math.max(0, baseRate || 0);
-  const safeQuota = Math.max(0, quota || 0);
-  const startActual = Math.max(0, actualBefore || 0);
-  const actualAfter = startActual + amount;
-  const tier1Cap = safeQuota * 1.4;
+function getQuarterlyQuota(monthlyQuota: number): number {
+  return Math.max(0, monthlyQuota || 0) * 3;
+}
 
-  const standardPayout = amount * rate;
-  const inBase = Math.max(0, Math.min(actualAfter, safeQuota) - Math.min(startActual, safeQuota));
-  const inTier1 = Math.max(0, Math.min(actualAfter, tier1Cap) - Math.max(startActual, safeQuota));
-  const inTier2 = Math.max(0, actualAfter - Math.max(startActual, tier1Cap));
+export function getLtcMultiplier(termYears = 1, paymentType: 'annual' | 'upfront' = 'annual'): number {
+  if (termYears <= 1) return 1;
+  if (termYears === 2) return paymentType === 'upfront' ? 1.4 : 1.3;
+  return paymentType === 'upfront' ? 1.6 : 1.5;
+}
 
-  const basePayout = inBase * rate;
-  const tier1Payout = inTier1 * rate * 1.5;
-  const tier2Payout = inTier2 * rate * 2;
-  const preCapTotal = basePayout + tier1Payout + tier2Payout;
-  const maxEligible = amount * 0.5;
-  const finalPayout = Math.min(preCapTotal, maxEligible);
-  const cappedAmount = Math.max(0, preCapTotal - maxEligible);
+export function getQuarterlyAccelerator(startingAttainmentPct: number): number {
+  if (startingAttainmentPct > 140) return 2;
+  if (startingAttainmentPct >= 100) return 1.5;
+  return 1;
+}
+
+export function getAcceleratorLabel(multiplier: number): string {
+  if (multiplier >= 2) return '140%+ band';
+  if (multiplier >= 1.5) return '100–140% band';
+  return '<100% band';
+}
+
+export function calculateDealCommission({
+  annualAcv,
+  baseRate,
+  quarterlyQuota,
+  quarterBookedBefore,
+  termYears = 1,
+  paymentType = 'annual',
+  spiff = 0,
+}: DealCommissionInputs): DealCommissionResult {
+  const safeAnnualAcv = Math.max(0, annualAcv || 0);
+  const safeBaseRate = Math.max(0, baseRate || 0);
+  const safeQuarterlyQuota = Math.max(0, quarterlyQuota || 0);
+  const safeQuarterBookedBefore = Math.max(0, quarterBookedBefore || 0);
+  const safeSpiff = Math.max(0, spiff || 0);
+
+  const startingAttainmentPct = safeQuarterlyQuota > 0 ? (safeQuarterBookedBefore / safeQuarterlyQuota) * 100 : 0;
+  const accelerator = getQuarterlyAccelerator(startingAttainmentPct);
+  const ltcMultiplier = getLtcMultiplier(termYears, paymentType);
+  const baseCommission = safeAnnualAcv * safeBaseRate;
+  const multipliedCommission = baseCommission * ltcMultiplier * accelerator;
+  const capAmount = safeAnnualAcv * 0.5;
+  const cappedCommission = Math.min(multipliedCommission, capAmount);
+  const finalPayout = cappedCommission + safeSpiff;
+  const quarterBookedAfter = safeQuarterBookedBefore + safeAnnualAcv;
+  const endingAttainmentPct = safeQuarterlyQuota > 0 ? (quarterBookedAfter / safeQuarterlyQuota) * 100 : 0;
 
   return {
-    maxEligible,
-    standardPayout,
-    buckets: { inBase, inTier1, inTier2, basePayout, tier1Payout, tier2Payout },
-    preCapTotal,
-    cappedAmount,
+    annualAcv: safeAnnualAcv,
+    baseRate: safeBaseRate,
+    quarterlyQuota: safeQuarterlyQuota,
+    quarterBookedBefore: safeQuarterBookedBefore,
+    quarterBookedAfter,
+    startingAttainmentPct,
+    endingAttainmentPct,
+    accelerator,
+    ltcMultiplier,
+    baseCommission,
+    multipliedCommission,
+    capAmount,
+    cappedCommission,
     finalPayout,
-    hitCap: preCapTotal > maxEligible + 0.005,
-    actualAfter,
+    spiff: safeSpiff,
+    hitCap: multipliedCommission > capAmount + 0.005,
   };
 }
 
@@ -117,14 +167,6 @@ function sortByCloseDate(a: Opportunity, b: Opportunity): number {
   const dateDiff = getDateAtUtcStart(a.closeDate).getTime() - getDateAtUtcStart(b.closeDate).getTime();
   if (dateDiff !== 0) return dateDiff;
   return a.name.localeCompare(b.name);
-}
-
-function getTierLabel(result: DealCommissionResult): string {
-  const labels: string[] = [];
-  if (result.buckets.inBase > 0) labels.push('Base');
-  if (result.buckets.inTier1 > 0) labels.push('Tier 1');
-  if (result.buckets.inTier2 > 0) labels.push('Tier 2');
-  return labels.length ? labels.join(' + ') : 'No payout';
 }
 
 function normalizeClassification(value?: Opportunity['classification']): Opportunity['classification'] | '' {
@@ -135,23 +177,27 @@ function normalizeClassification(value?: Opportunity['classification']): Opportu
 function isCommissionEligible(opportunity: Opportunity): boolean {
   const classification = normalizeClassification(opportunity.classification);
   const previousClassification = normalizeClassification(opportunity.previousClassification);
-
   return classification === 'closed_won' && previousClassification !== 'omitted';
 }
 
-function getSafeSettings(settings?: RepCommissionSettings): RepCommissionSettings {
+function getSafeSettings(settings?: RepCommissionSettings): Required<Pick<RepCommissionSettings, 'monthlyQuota' | 'priorQuarterPayout' | 'baseRate'>> & Pick<RepCommissionSettings, 'annualVariableComp'> {
   const monthlyQuota = Math.max(0, settings?.monthlyQuota || 0);
-  const annualQuota = monthlyQuota * 12;
   const annualVariableComp = settings?.annualVariableComp === undefined ? undefined : Math.max(0, settings.annualVariableComp || 0);
-  const derivedBaseRate = annualVariableComp !== undefined && annualQuota > 0
-    ? annualVariableComp / annualQuota
+  const derivedBaseRate = annualVariableComp !== undefined && monthlyQuota > 0
+    ? annualVariableComp / (monthlyQuota * 12)
     : undefined;
 
   return {
     monthlyQuota,
     annualVariableComp,
-    baseRate: Math.max(0, (derivedBaseRate ?? settings?.baseRate ?? 0)),
+    priorQuarterPayout: Math.max(0, settings?.priorQuarterPayout || 0),
+    baseRate: Math.max(0, derivedBaseRate ?? settings?.baseRate ?? 0),
   };
+}
+
+function getAnnualAcv(opportunity: Opportunity): number {
+  if ((opportunity.commissionMrr || 0) > 0) return Math.max(0, opportunity.commissionMrr || 0) * 12;
+  return Math.max(0, opportunity.amount || 0);
 }
 
 export function buildCommissionReview(
@@ -168,48 +214,55 @@ export function buildCommissionReview(
 
   const availableMonths = Array.from(new Set(closedWon.map(opportunity => getMonthKey(opportunity.closeDate)))).sort((a, b) => b.localeCompare(a));
   const activeMonth = selectedMonth && availableMonths.includes(selectedMonth) ? selectedMonth : availableMonths[0];
-
-  const groupActuals = new Map<string, number>();
   const allRows: CommissionReviewRow[] = [];
 
   const grouped = new Map<string, Opportunity[]>();
   for (const opportunity of closedWon) {
     const repKey = normalizeRepName(opportunity.repName);
-    const monthKey = getMonthKey(opportunity.closeDate);
-    const key = getCommissionReviewKey(repKey, monthKey);
+    const quarterKey = getQuarter(opportunity.closeDate);
+    const key = `${repKey}__${quarterKey}`;
     const existing = grouped.get(key) || [];
     existing.push(opportunity);
     grouped.set(key, existing);
   }
 
-  for (const [groupKey, groupOpportunities] of grouped.entries()) {
+  for (const groupOpportunities of grouped.values()) {
     groupOpportunities.sort(sortByCloseDate);
     const firstOpportunity = groupOpportunities[0];
     const repKey = normalizeRepName(firstOpportunity.repName);
-    const monthKey = getMonthKey(firstOpportunity.closeDate);
     const settings = getSafeSettings(commissionSettings[repKey]);
-    const review = commissionReviews[groupKey];
-    let actualBefore = 0;
+    const quarterlyQuota = getQuarterlyQuota(settings.monthlyQuota);
+    let quarterBookedBefore = settings.baseRate > 0 ? settings.priorQuarterPayout / settings.baseRate : 0;
 
     for (const opportunity of groupOpportunities) {
-      const deal = calculateDealCommission({
-        dealAmount: opportunity.amount,
-        baseRate: settings.baseRate,
-        quota: settings.monthlyQuota,
-        actualBefore,
-      });
+      const monthKey = getMonthKey(opportunity.closeDate);
+      const review = commissionReviews[getCommissionReviewKey(repKey, monthKey)];
       const reviewEntry = review?.opportunities?.[opportunity.id];
-      const expectedCommission = deal.standardPayout;
+      const annualAcv = getAnnualAcv(opportunity);
+      const termYears = Math.max(1, Math.round(opportunity.commissionTermYears || 1));
+      const paymentType = opportunity.commissionPaymentType || 'annual';
+      const spiff = Math.max(0, opportunity.commissionSpiff || 0);
+      const deal = calculateDealCommission({
+        annualAcv,
+        baseRate: settings.baseRate,
+        quarterlyQuota,
+        quarterBookedBefore,
+        termYears,
+        paymentType,
+        spiff,
+      });
+      const expectedCommission = deal.finalPayout;
       const variance = reviewEntry?.actualCommission === undefined
         ? undefined
         : reviewEntry.actualCommission - expectedCommission;
 
-      const row: CommissionReviewRow = {
+      allRows.push({
         opportunityId: opportunity.id,
         opportunityName: opportunity.name,
         repName: opportunity.repName,
         repKey,
         monthKey,
+        quarterKey: getQuarter(opportunity.closeDate),
         closeDate: opportunity.closeDate,
         amount: opportunity.amount,
         expectedCommission,
@@ -217,22 +270,29 @@ export function buildCommissionReview(
         note: reviewEntry?.note,
         variance,
         monthlyQuota: settings.monthlyQuota,
+        quarterlyQuota,
         annualVariableComp: settings.annualVariableComp,
+        priorQuarterPayout: settings.priorQuarterPayout,
         baseRate: settings.baseRate,
-        actualBefore,
-        actualAfter: deal.actualAfter,
-        attainmentBeforePct: settings.monthlyQuota > 0 ? (actualBefore / settings.monthlyQuota) * 100 : 0,
-        attainmentAfterPct: settings.monthlyQuota > 0 ? (deal.actualAfter / settings.monthlyQuota) * 100 : 0,
+        quarterBookedBefore: deal.quarterBookedBefore,
+        quarterBookedAfter: deal.quarterBookedAfter,
+        startingAttainmentPct: deal.startingAttainmentPct,
+        endingAttainmentPct: deal.endingAttainmentPct,
         hitCap: deal.hitCap,
-        tierLabel: getTierLabel(deal),
         missingSettings: settings.monthlyQuota <= 0 || settings.baseRate <= 0,
-      };
+        annualAcv,
+        commissionMrr: opportunity.commissionMrr,
+        commissionTermYears: termYears,
+        commissionPaymentType: paymentType,
+        commissionSpiff: spiff,
+        commissionNotes: opportunity.commissionNotes,
+        ltcMultiplier: deal.ltcMultiplier,
+        accelerator: deal.accelerator,
+        acceleratorLabel: getAcceleratorLabel(deal.accelerator),
+      });
 
-      allRows.push(row);
-      actualBefore = deal.actualAfter;
+      quarterBookedBefore = deal.quarterBookedAfter;
     }
-
-    groupActuals.set(groupKey, review?.actualTotal ?? 0);
   }
 
   const filteredRows = allRows.filter(row => {
