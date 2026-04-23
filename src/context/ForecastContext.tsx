@@ -161,7 +161,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
     const migrated = opportunities.map(o => {
       const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
-      if (stageNorm === 'closed won' && o.classification !== 'closed_won') {
+      if (stageNorm === 'closed won' && o.classification !== 'closed_won' && o.classification !== 'omitted') {
         return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
       }
       if (stageNorm === 'closed lost' && o.classification !== 'lost') {

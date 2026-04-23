@@ -137,7 +137,7 @@ function getSafeSettings(settings?: RepCommissionSettings): RepCommissionSetting
   return {
     monthlyQuota,
     annualVariableComp,
-    baseRate: Math.max(0, derivedBaseRate ?? settings?.baseRate || 0),
+    baseRate: Math.max(0, (derivedBaseRate ?? settings?.baseRate ?? 0)),
   };
 }
 
@@ -150,7 +150,7 @@ export function buildCommissionReview(
   anomaliesOnly = false,
 ): CommissionReviewResult {
   const closedWon = opportunities
-    .filter(opportunity => opportunity.classification === 'closed_won' && opportunity.classification !== 'omitted')
+    .filter(opportunity => opportunity.classification === 'closed_won')
     .sort(sortByCloseDate);
 
   const availableMonths = Array.from(new Set(closedWon.map(opportunity => getMonthKey(opportunity.closeDate)))).sort((a, b) => b.localeCompare(a));
