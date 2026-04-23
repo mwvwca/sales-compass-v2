@@ -45,6 +45,7 @@ export interface CommissionReviewRow {
   note?: string;
   variance?: number;
   monthlyQuota: number;
+  annualQuota: number;
   annualVariableComp?: number;
   baseRate: number;
   actualBefore: number;
@@ -127,11 +128,24 @@ function getTierLabel(result: DealCommissionResult): string {
   return labels.length ? labels.join(' + ') : 'No payout';
 }
 
+function normalizeClassification(value?: Opportunity['classification']): Opportunity['classification'] | '' {
+  if (!value) return '';
+  return value.toLowerCase().trim().replace(/[\s-]+/g, '_') as Opportunity['classification'];
+}
+
+function isCommissionEligible(opportunity: Opportunity): boolean {
+  const classification = normalizeClassification(opportunity.classification);
+  const previousClassification = normalizeClassification(opportunity.previousClassification);
+
+  return classification === 'closed_won' && previousClassification !== 'omitted';
+}
+
 function getSafeSettings(settings?: RepCommissionSettings): RepCommissionSettings {
   const monthlyQuota = Math.max(0, settings?.monthlyQuota || 0);
+  const annualQuota = monthlyQuota * 12;
   const annualVariableComp = settings?.annualVariableComp === undefined ? undefined : Math.max(0, settings.annualVariableComp || 0);
-  const derivedBaseRate = annualVariableComp !== undefined && monthlyQuota > 0
-    ? annualVariableComp / (monthlyQuota * 12)
+  const derivedBaseRate = annualVariableComp !== undefined && annualQuota > 0
+    ? annualVariableComp / annualQuota
     : undefined;
 
   return {
