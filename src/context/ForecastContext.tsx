@@ -161,7 +161,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
     const migrated = opportunities.map(o => {
       const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
-      if (stageNorm === 'closed won' && o.classification !== 'closed_won') {
+      if (stageNorm === 'closed won' && o.classification !== 'closed_won' && o.classification !== 'omitted') {
         return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
       }
       if (stageNorm === 'closed lost' && o.classification !== 'lost') {
@@ -385,7 +385,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         ...s.commissionSettings,
         [repKey]: {
           monthlyQuota: Math.max(0, settings.monthlyQuota || 0),
-          baseRate: Math.max(0, settings.baseRate || 0),
+          annualVariableComp: settings.annualVariableComp === undefined ? undefined : Math.max(0, settings.annualVariableComp || 0),
+          baseRate: settings.baseRate === undefined ? undefined : Math.max(0, settings.baseRate || 0),
         },
       },
     }));

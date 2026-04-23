@@ -39,12 +39,24 @@ const opportunities: Opportunity[] = [
     probability: 0,
     importDate: '2026-05-22T00:00:00.000Z',
   },
+  {
+    id: 'opp-4',
+    name: 'Omitted Won Deal',
+    repId: 'rep-1',
+    repName: 'Jane Smith',
+    amount: 1000,
+    closeDate: '2026-05-25T00:00:00.000Z',
+    stage: 'Closed Won',
+    classification: 'omitted',
+    probability: 100,
+    importDate: '2026-05-25T00:00:00.000Z',
+  },
 ];
 
 const commissionSettings: CommissionSettingsMap = {
   'jane smith': {
     monthlyQuota: 1000,
-    baseRate: 0.1,
+    annualVariableComp: 1200,
   },
 };
 
@@ -77,6 +89,12 @@ describe('commissionUtils', () => {
     expect(result.hitCap).toBe(false);
   });
 
+  it('derives base rate from annual variable comp when provided', () => {
+    const review = buildCommissionReview(opportunities, commissionSettings, commissionReviews, '2026-05');
+
+    expect(review.selectedMonthRows[0].baseRate).toBeCloseTo(0.1);
+  });
+
   it('builds monthly review rows from closed won deals only and normalizes rep names', () => {
     const review = buildCommissionReview(opportunities, commissionSettings, commissionReviews, '2026-05');
 
@@ -89,5 +107,8 @@ describe('commissionUtils', () => {
     expect(review.summaries[0].expectedTotal).toBe(130);
     expect(review.summaries[0].actualTotal).toBe(135);
     expect(review.summaries[0].flaggedRows).toBe(1);
+    expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-4')).toBe(true);
+    expect(review.selectedMonthRows[1].actualBefore).toBe(500);
+    expect(review.selectedMonthRows[1].actualAfter).toBe(1200);
   });
 });

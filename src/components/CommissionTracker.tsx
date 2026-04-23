@@ -11,6 +11,11 @@ import { normalizeRepName } from '@/lib/repUtils';
 const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const percentFormatter = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
 
+function formatQuotaProgress(booked: number, quota: number): string {
+  if (quota <= 0) return `${currencyFormatter.format(booked)} booked`;
+  return `${currencyFormatter.format(booked)} / ${currencyFormatter.format(quota)} (${(booked / quota * 100).toFixed(0)}%)`;
+}
+
 interface CommissionTrackerProps {
   reps: Rep[];
   opportunities: Opportunity[];
@@ -167,6 +172,7 @@ export default function CommissionTracker({
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <span>{row.tierLabel}</span>
                       <span>{percentFormatter.format(row.baseRate)}</span>
+                      {row.annualVariableComp !== undefined && <span>AVC {currencyFormatter.format(row.annualVariableComp)}</span>}
                       {row.hitCap && <span>Cap hit</span>}
                       {row.missingSettings && <span>Needs monthly settings</span>}
                     </div>
@@ -175,7 +181,12 @@ export default function CommissionTracker({
                 <td className="px-4 py-3 font-mono text-foreground">{currencyFormatter.format(row.amount)}</td>
                 <td className="px-4 py-3 font-mono text-foreground">{currencyFormatter.format(row.expectedCommission)}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1"><Calculator className="h-3.5 w-3.5" /> {row.attainmentBeforePct.toFixed(0)}% → {row.attainmentAfterPct.toFixed(0)}%</div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1"><Calculator className="h-3.5 w-3.5" /> Quota progress</div>
+                    <div>Before: {formatQuotaProgress(row.actualBefore, row.monthlyQuota)}</div>
+                    <div>After: {formatQuotaProgress(row.actualAfter, row.monthlyQuota)}</div>
+                    <div>Tier: {row.tierLabel}</div>
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <Input

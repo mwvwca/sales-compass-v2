@@ -45,6 +45,7 @@ export interface CommissionReviewRow {
   note?: string;
   variance?: number;
   monthlyQuota: number;
+  annualVariableComp?: number;
   baseRate: number;
   actualBefore: number;
   actualAfter: number;
@@ -127,9 +128,16 @@ function getTierLabel(result: DealCommissionResult): string {
 }
 
 function getSafeSettings(settings?: RepCommissionSettings): RepCommissionSettings {
+  const monthlyQuota = Math.max(0, settings?.monthlyQuota || 0);
+  const annualVariableComp = settings?.annualVariableComp === undefined ? undefined : Math.max(0, settings.annualVariableComp || 0);
+  const derivedBaseRate = annualVariableComp !== undefined && monthlyQuota > 0
+    ? annualVariableComp / (monthlyQuota * 12)
+    : undefined;
+
   return {
-    monthlyQuota: Math.max(0, settings?.monthlyQuota || 0),
-    baseRate: Math.max(0, settings?.baseRate || 0),
+    monthlyQuota,
+    annualVariableComp,
+    baseRate: Math.max(0, (derivedBaseRate ?? settings?.baseRate ?? 0)),
   };
 }
 
@@ -195,6 +203,7 @@ export function buildCommissionReview(
         note: reviewEntry?.note,
         variance,
         monthlyQuota: settings.monthlyQuota,
+          annualVariableComp: settings.annualVariableComp,
         baseRate: settings.baseRate,
         actualBefore,
         actualAfter: deal.actualAfter,
