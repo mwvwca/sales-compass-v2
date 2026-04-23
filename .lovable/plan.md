@@ -1,128 +1,68 @@
 
-Goal: add a PIN-locked monthly commission review area under Goals that shows the exact Closed Won opportunities contributing to expected commission, lets you enter the company’s statement amounts at both the deal and monthly rep level, and highlights anomalies for investigation.
+Goal: correct the monthly commission review so expected payouts align with the source calculator, attainment context is understandable, and omitted deals never contribute to commission even if their Salesforce stage is Closed Won.
 
-1. Extend the data model for commission review
-- Add a commission settings structure for each rep, matched with the existing case-insensitive rep normalization.
-- Add a commission review record for monthly statement validation, storing:
-  - rep
-  - month key
-  - optional actual statement total for that rep/month
-  - optional per-opportunity actual statement amount overrides
-  - optional notes for anomaly follow-up
-- Keep derived expected commissions computed from opportunities + settings rather than permanently stored, so changes to Closed Won deals recalculate automatically.
-- Include these new source records in backup/restore with strict Zod validation.
+1. Fix the Closed Won vs omitted inclusion rule
+- Update the commission dataset builder in `src/lib/commissionUtils.ts` so it excludes any opportunity whose classification is `omitted`, regardless of stage text.
+- Keep the filter based on the app’s normalized classification model, not raw stage names.
+- Preserve the project rule that omitted opportunities stay excluded from analytics/totals everywhere, including commission review.
 
-2. Reuse the existing commission math from the other workspace app
-- Adapt the math from the NA VAR Calculator’s hidden commission utility into this app as a dedicated commission helper.
-- Preserve the tiered payout behavior, caps, and rate-based calculations, but scope the review UI to this app’s actual Closed Won opportunities.
-- Make the helper monthly-review friendly by processing deals in chronological order within each rep/month so expected payouts can be tied to specific opportunities.
+2. Correct the expected commission math to match the source app more closely
+- Rework the commission settings model so the base rate can be derived the same way as the source calculator instead of forcing direct manual percent entry only.
+- Add the source-plan inputs needed for accurate payout math, likely:
+  - monthly quota / target
+  - annual variable compensation (or equivalent driver for base rate)
+- In `src/lib/commissionUtils.ts`, align the calculation flow with the source logic’s units and progression so the expected payout for deals like “Deal REG-Xtant” can land near the expected 3,805.08 instead of overstating/understating due to a mismatched rate or quota basis.
+- Keep the pure utility testable and continue processing deals chronologically within each rep/month.
 
-3. Build monthly deal-level commission attribution
-- Create a derived monthly commission dataset from opportunities where:
-  - classification is `closed_won`
-  - close date maps to the selected month
-  - rep is matched via `normalizeRepName()`
-- For each included opportunity, calculate and expose:
-  - opportunity name
-  - rep
-  - close date
-  - amount
+3. Make attainment readable and meaningful
+- Replace the current raw `0% -> 445%` style display in `src/components/CommissionTracker.tsx` with clearer wording and context.
+- Show attainment as a labeled progress state tied to quota, for example:
+  - “Booked before this deal”
+  - “Booked after this deal”
+  - “Quota progress”
+- Add supporting values alongside percentages so users can see the actual booked amount versus monthly quota, not just a percentage jump.
+- If the source plan uses a different attainment basis than “deal amount accumulated this month,” label that explicitly so the UI is self-explanatory.
+
+4. Tighten the settings UX so math inputs are less error-prone
+- Update `src/components/CommissionSettings.tsx` to reflect the real commission-plan inputs used by the calculator logic.
+- Avoid exposing only “Base Rate %” if that is an implementation detail rather than how you think about comp plans.
+- If base rate is derived from other settings, either:
+  - compute it automatically and display it read-only, or
+  - clearly separate “derived rate” from editable inputs.
+
+5. Improve deal-row explanation in the tracker
+- Add compact contextual detail per row in `src/components/CommissionTracker.tsx`, such as:
+  - quota used
+  - booked-before amount
+  - booked-after amount
+  - tier bucket reached
+- Keep the current anomaly workflow intact:
   - expected commission
-  - tier/attainment context
-  - cap flag if applicable
-- This becomes the exact list of opportunities that contributed to that month’s expected commission.
-
-4. Add anomaly comparison fields
-- In the monthly commission table, add an editable “Company Statement” value per opportunity row.
-- Compute row-level variance:
-  - expected commission
-  - actual statement amount
-  - difference
-- Visually flag meaningful mismatches so you can spot cases like expected $200 vs statement $175 immediately.
-- Add an optional note field per row for investigation comments.
-
-5. Add monthly rep rollup comparison
-- For each rep/month, show a summary above or below the deal table with:
-  - expected monthly total
-  - entered company statement total
+  - company statement amount
   - variance
-  - count of flagged deal mismatches
-- Support both comparison methods together:
-  - deal-by-deal validation
-  - monthly statement total validation
-- If row-level actuals are entered, also show the sum of entered rows versus the monthly statement total so missing or extra statement items are obvious.
+  - notes
+- Retain “show anomalies only.”
 
-6. Place the feature under Goals with PIN lock
-- Keep the existing quarterly goals table intact.
-- Add a second commission section under Goals, collapsed or clearly separated.
-- Protect only the commission section with a local PIN gate:
-  - set PIN
-  - unlock
-  - relock
-  - change/reset PIN
-- Use the same browser-local pattern already proven in the source app:
-  - hashed PIN in localStorage
-  - unlocked state in sessionStorage
-- Label this clearly as privacy obfuscation, not real security, since the app is offline/localStorage-based.
-
-7. Add month and rep review controls
-- Add a month selector as the primary scope for the commission review.
-- Add rep filtering:
-  - All reps
-  - single rep
-- Keep the table focused on Closed Won only, per your preference.
-- Sort rows by close date, then opportunity name, to make statement matching easier.
-
-8. Keep the UI optimized for investigation
-- Use a compact table layout suitable for the current app style.
-- Suggested columns:
-  - Close Date
-  - Rep
-  - Opportunity
-  - Amount
-  - Expected Commission
-  - Company Statement
-  - Variance
-  - Note
-- Add summary styling for mismatches:
-  - neutral when no actual entered
-  - positive/negative highlighting when variance exists
-- Optionally include a “show only anomalies” toggle so the review is faster once data entry starts.
-
-9. Preserve offline and backup behavior
-- Store commission settings, PIN metadata, monthly actual totals, row-level statement entries, and notes in localStorage.
-- Update backup export/import schemas to include these records safely.
-- Maintain strict limits and validation to avoid corrupting the offline dataset.
-
-10. Test the critical edge cases
-- Closed Won opportunities only appear in the review table.
-- Monthly grouping uses the existing UTC-safe month helpers.
-- Rep matching remains whitespace-tolerant and case-insensitive.
-- Deal-level expected commissions roll up correctly to monthly rep totals.
-- Row-level statement entries and monthly statement totals persist across reloads.
-- Variance flags behave correctly for missing, partial, or mismatched statement inputs.
-- Backup/restore preserves all commission review data.
-- PIN set/unlock/relock/reset works without exposing commission data when locked.
+6. Update tests to lock in the corrected behavior
+- Expand `src/test/commissionUtils.test.ts` to cover:
+  - omitted deals are excluded even if their stage is Closed Won
+  - chronological monthly rollup math
+  - expected payout for known tier scenarios
+  - clearer attainment values based on the revised logic
+- Add a regression case specifically for mixed-status opportunities so future stage migrations do not accidentally re-include omitted deals.
 
 Technical details
-- Existing files likely to update:
-  - `src/types/forecast.ts`
-  - `src/context/ForecastContext.tsx`
-  - `src/components/RepGoalSetup.tsx`
-  - `src/components/DataBackup.tsx`
-- New files likely to add:
+- Files to update:
   - `src/lib/commissionUtils.ts`
-  - `src/components/CommissionLock.tsx`
+  - `src/types/forecast.ts`
   - `src/components/CommissionSettings.tsx`
   - `src/components/CommissionTracker.tsx`
-- Source logic to adapt:
-  - `NA VAR Calculator/src/lib/commission.ts`
-- Storage additions:
-  - per-rep commission plan/settings
-  - monthly rep statement totals
-  - per-opportunity statement entries and notes
-  - local PIN hash/session state
+  - `src/test/commissionUtils.test.ts`
+- Likely no storage model rewrite is needed for statement entries or PIN lock; those can remain as-is unless the revised settings require new persisted fields.
+- The main issue appears to be a mismatch between the current simplified monthly settings/math and the original calculator’s quota/rate basis, plus the commission review currently filtering only `classification === 'closed_won'` without protecting against the project-wide omitted rule.
 
 Expected result
-- In Goals, you’ll unlock a monthly commission review section, pick a month, and see the exact Closed Won opportunities that generated expected commission for each rep.
-- You’ll be able to enter what the company statement paid for each deal and/or the monthly rep total, and the app will immediately show variances so anomalies can be investigated quickly.
+- Omitted deals will never show in the commission review.
+- The tracker will produce more realistic expected commission values for month-end validation.
+- Attainment will read as understandable quota progress instead of opaque percentage jumps.
+- You’ll still be able to compare expected vs company statement amounts row by row and investigate anomalies quickly.
