@@ -7,6 +7,7 @@ export interface Rep {
 export interface RepCommissionSettings {
   monthlyQuota: number;
   annualVariableComp?: number;
+  priorQuarterPayout?: number;
   baseRate?: number;
 }
 
@@ -43,6 +44,11 @@ export interface Opportunity {
   lostReason?: string;
   movedAt?: string;
   notes?: string;
+  commissionMrr?: number;
+  commissionTermYears?: number;
+  commissionPaymentType?: 'annual' | 'upfront';
+  commissionSpiff?: number;
+  commissionNotes?: string;
 }
 
 export interface ImportRecord {
