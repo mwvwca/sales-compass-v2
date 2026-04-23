@@ -28,6 +28,7 @@ const opportunitySchema = z.object({
   lostDate: z.string().optional(),
   lostReason: z.string().max(500).optional(),
   movedAt: z.string().optional(),
+  notes: z.string().max(4000).optional(),
 });
 
 const importRecordSchema = z.object({
@@ -49,21 +50,60 @@ const changeLogSchema = z.object({
   newValue: z.string(),
 });
 
+const commissionSettingSchema = z.object({
+  monthlyQuota: z.number().finite().min(0),
+  baseRate: z.number().finite().min(0).max(1),
+});
+
+const commissionOpportunityReviewSchema = z.object({
+  actualCommission: z.number().finite().min(0).optional(),
+  note: z.string().max(4000).optional(),
+});
+
+const commissionMonthlyReviewSchema = z.object({
+  repKey: z.string().max(200),
+  repName: z.string().max(200),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  actualTotal: z.number().finite().min(0).optional(),
+  opportunities: z.record(z.string(), commissionOpportunityReviewSchema),
+});
+
 const backupSchema = z.object({
   reps: z.array(repSchema).max(1000),
   opportunities: z.array(opportunitySchema).max(10000),
   imports: z.array(importRecordSchema).max(1000).optional(),
   changelog: z.array(changeLogSchema).max(50000).optional(),
+  commissionSettings: z.record(z.string(), commissionSettingSchema).optional(),
+  commissionReviews: z.record(z.string(), commissionMonthlyReviewSchema).optional(),
+  commissionPinHash: z.string().max(256).nullable().optional(),
   exportedAt: z.string().optional(),
 });
 
 export default function DataBackup() {
-  const { reps, opportunities, imports, changelog, restoreFromBackup } = useForecast();
+  const {
+    reps,
+    opportunities,
+    imports,
+    changelog,
+    commissionSettings,
+    commissionReviews,
+    commissionPinHash,
+    restoreFromBackup,
+  } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleSave = () => {
-    const backup = { reps, opportunities, imports, changelog, exportedAt: new Date().toISOString() };
+    const backup = {
+      reps,
+      opportunities,
+      imports,
+      changelog,
+      commissionSettings,
+      commissionReviews,
+      commissionPinHash,
+      exportedAt: new Date().toISOString(),
+    };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
