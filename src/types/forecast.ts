@@ -6,7 +6,8 @@ export interface Rep {
 
 export interface RepCommissionSettings {
   monthlyQuota: number;
-  baseRate: number;
+  annualVariableComp?: number;
+  baseRate?: number;
 }
 
 export type CommissionSettingsMap = Record<string, RepCommissionSettings>;
