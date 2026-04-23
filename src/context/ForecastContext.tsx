@@ -527,6 +527,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     getOpportunityHistory,
   };
 
+  if (typeof window !== 'undefined') {
+    (window as ForecastContextWindow).__forecastContextValue__ = contextValue;
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const win = window as ForecastContextWindow;
