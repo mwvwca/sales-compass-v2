@@ -29,6 +29,11 @@ const opportunitySchema = z.object({
   lostReason: z.string().max(500).optional(),
   movedAt: z.string().optional(),
   notes: z.string().max(4000).optional(),
+  commissionMrr: z.number().finite().min(0).optional(),
+  commissionTermYears: z.number().finite().min(1).max(10).optional(),
+  commissionPaymentType: z.enum(['annual', 'upfront']).optional(),
+  commissionSpiff: z.number().finite().min(0).optional(),
+  commissionNotes: z.string().max(4000).optional(),
 });
 
 const importRecordSchema = z.object({
@@ -53,6 +58,7 @@ const changeLogSchema = z.object({
 const commissionSettingSchema = z.object({
   monthlyQuota: z.number().finite().min(0),
   annualVariableComp: z.number().finite().min(0).optional(),
+  priorQuarterPayout: z.number().finite().min(0).optional(),
   baseRate: z.number().finite().min(0).max(1).optional(),
 });
 
