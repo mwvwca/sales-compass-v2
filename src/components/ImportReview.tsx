@@ -47,6 +47,8 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
     const resolvedClassification = resolveImportedClassification(existing.classification, opp.classification);
     if (existing.classification !== resolvedClassification) {
       changes.push(`Classification: ${existing.classification} → ${resolvedClassification}`);
+    } else if (existing.classification !== opp.classification) {
+      changes.push(`Classification held: ${existing.classification} (import suggested ${opp.classification})`);
     }
     const changeType: ChangeType = changes.length > 0 ? 'updated' : 'unchanged';
     return { opportunity: opp, existing, changeType, changes, selected: changes.length > 0 };

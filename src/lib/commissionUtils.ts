@@ -65,6 +65,7 @@ export interface CommissionReviewRow {
   commissionTermYears: number;
   commissionPaymentType: 'annual' | 'upfront';
   commissionSpiff: number;
+  commissionNotes?: string;
   ltcMultiplier: number;
   accelerator: number;
   acceleratorLabel: string;
@@ -284,6 +285,7 @@ export function buildCommissionReview(
         commissionTermYears: termYears,
         commissionPaymentType: paymentType,
         commissionSpiff: spiff,
+        commissionNotes: opportunity.commissionNotes,
         ltcMultiplier: deal.ltcMultiplier,
         accelerator: deal.accelerator,
         acceleratorLabel: getAcceleratorLabel(deal.accelerator),
