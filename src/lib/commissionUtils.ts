@@ -45,7 +45,6 @@ export interface CommissionReviewRow {
   note?: string;
   variance?: number;
   monthlyQuota: number;
-  annualQuota: number;
   annualVariableComp?: number;
   baseRate: number;
   actualBefore: number;
@@ -164,7 +163,7 @@ export function buildCommissionReview(
   anomaliesOnly = false,
 ): CommissionReviewResult {
   const closedWon = opportunities
-    .filter(opportunity => opportunity.classification === 'closed_won')
+    .filter(isCommissionEligible)
     .sort(sortByCloseDate);
 
   const availableMonths = Array.from(new Set(closedWon.map(opportunity => getMonthKey(opportunity.closeDate)))).sort((a, b) => b.localeCompare(a));
@@ -200,9 +199,10 @@ export function buildCommissionReview(
         actualBefore,
       });
       const reviewEntry = review?.opportunities?.[opportunity.id];
+      const expectedCommission = deal.standardPayout;
       const variance = reviewEntry?.actualCommission === undefined
         ? undefined
-        : reviewEntry.actualCommission - deal.finalPayout;
+        : reviewEntry.actualCommission - expectedCommission;
 
       const row: CommissionReviewRow = {
         opportunityId: opportunity.id,
@@ -212,12 +212,12 @@ export function buildCommissionReview(
         monthKey,
         closeDate: opportunity.closeDate,
         amount: opportunity.amount,
-        expectedCommission: deal.finalPayout,
+        expectedCommission,
         actualCommission: reviewEntry?.actualCommission,
         note: reviewEntry?.note,
         variance,
         monthlyQuota: settings.monthlyQuota,
-          annualVariableComp: settings.annualVariableComp,
+        annualVariableComp: settings.annualVariableComp,
         baseRate: settings.baseRate,
         actualBefore,
         actualAfter: deal.actualAfter,
