@@ -1,6 +1,17 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { Rep, Opportunity, ImportRecord, ChangeLogEntry, OpportunitySnapshot } from '@/types/forecast';
+import type {
+  Rep,
+  Opportunity,
+  ImportRecord,
+  ChangeLogEntry,
+  OpportunitySnapshot,
+  CommissionReviewsMap,
+  CommissionSettingsMap,
+  RepCommissionSettings,
+} from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
+import { normalizeRepName } from '@/lib/repUtils';
+import { getCommissionReviewKey } from '@/lib/commissionUtils';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
@@ -8,6 +19,9 @@ const STORAGE_KEYS = {
   imports: 'forecast_imports',
   changelog: 'forecast_changelog',
   snapshots: 'forecast_snapshots',
+  commissionSettings: 'forecast_commission_settings',
+  commissionReviews: 'forecast_commission_reviews',
+  commissionPinHash: 'forecast_commission_pin_hash',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -58,12 +72,45 @@ function pruneSnapshots(snapshots: OpportunitySnapshot[], limit: number): Opport
   return pruned;
 }
 
+function updateCommissionReviewRecord(
+  reviews: CommissionReviewsMap,
+  repName: string,
+  monthKey: string,
+  updater: (current: NonNullable<CommissionReviewsMap[string]>) => NonNullable<CommissionReviewsMap[string]> | null,
+): CommissionReviewsMap {
+  const repKey = normalizeRepName(repName);
+  if (!repKey || !monthKey) return reviews;
+
+  const reviewKey = getCommissionReviewKey(repKey, monthKey);
+  const current = reviews[reviewKey] || {
+    repKey,
+    repName: repName.trim(),
+    monthKey,
+    actualTotal: undefined,
+    opportunities: {},
+  };
+
+  const next = updater(current);
+  if (!next) {
+    const { [reviewKey]: _removed, ...remaining } = reviews;
+    return remaining;
+  }
+
+  return {
+    ...reviews,
+    [reviewKey]: next,
+  };
+}
+
 interface ForecastState {
   reps: Rep[];
   opportunities: Opportunity[];
   imports: ImportRecord[];
   changelog: ChangeLogEntry[];
   snapshots: OpportunitySnapshot[];
+  commissionSettings: CommissionSettingsMap;
+  commissionReviews: CommissionReviewsMap;
+  commissionPinHash: string | null;
   loading: boolean;
 }
 
@@ -79,7 +126,21 @@ interface ForecastContextValue extends ForecastState {
   updateOpportunity: (id: string, updates: Partial<Omit<Opportunity, 'id'>>) => void;
   deleteOpportunity: (id: string) => void;
   clearChangelog: () => void;
-  restoreFromBackup: (data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[]; snapshots?: OpportunitySnapshot[] }) => void;
+  setCommissionSettings: (repName: string, settings: RepCommissionSettings) => void;
+  clearCommissionSettings: (repName: string) => void;
+  updateCommissionMonthActual: (repName: string, monthKey: string, actualTotal?: number) => void;
+  updateCommissionOpportunityReview: (repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => void;
+  setCommissionPinHash: (pinHash: string | null) => void;
+  restoreFromBackup: (data: {
+    reps: Rep[];
+    opportunities: Opportunity[];
+    imports: ImportRecord[];
+    changelog: ChangeLogEntry[];
+    snapshots?: OpportunitySnapshot[];
+    commissionSettings?: CommissionSettingsMap;
+    commissionReviews?: CommissionReviewsMap;
+    commissionPinHash?: string | null;
+  }) => void;
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
 }
 
@@ -122,6 +183,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       imports: loadFromStorage(STORAGE_KEYS.imports, []),
       changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
       snapshots: loadFromStorage(STORAGE_KEYS.snapshots, []),
+      commissionSettings: loadFromStorage(STORAGE_KEYS.commissionSettings, {}),
+      commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
+      commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
       loading: false,
     };
   });
@@ -138,12 +202,24 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.imports, state.imports);
     saveToStorage(STORAGE_KEYS.changelog, state.changelog);
     saveToStorage(STORAGE_KEYS.snapshots, state.snapshots);
+    saveToStorage(STORAGE_KEYS.commissionSettings, state.commissionSettings);
+    saveToStorage(STORAGE_KEYS.commissionReviews, state.commissionReviews);
+    saveToStorage(STORAGE_KEYS.commissionPinHash, state.commissionPinHash);
 
     const sizeKB = getStorageSizeKB();
     if (sizeKB > 4000) {
       console.warn(`[Forecast] localStorage usage: ${sizeKB}KB / ~5000KB. Consider exporting a backup.`);
     }
-  }, [state.reps, state.opportunities, state.imports, state.changelog, state.snapshots]);
+  }, [
+    state.reps,
+    state.opportunities,
+    state.imports,
+    state.changelog,
+    state.snapshots,
+    state.commissionSettings,
+    state.commissionReviews,
+    state.commissionPinHash,
+  ]);
 
   const addRep = useCallback((rep: Rep) => {
     setState(s => ({ ...s, reps: [...s.reps, rep] }));
@@ -299,8 +375,103 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, changelog: [] }));
   }, []);
 
-  const restoreFromBackup = useCallback((data: { reps: Rep[]; opportunities: Opportunity[]; imports: ImportRecord[]; changelog: ChangeLogEntry[]; snapshots?: OpportunitySnapshot[] }) => {
-    setState(s => ({ ...s, reps: data.reps, opportunities: data.opportunities, imports: data.imports, changelog: data.changelog, snapshots: data.snapshots || s.snapshots }));
+  const setCommissionSettings = useCallback((repName: string, settings: RepCommissionSettings) => {
+    const repKey = normalizeRepName(repName);
+    if (!repKey) return;
+
+    setState(s => ({
+      ...s,
+      commissionSettings: {
+        ...s.commissionSettings,
+        [repKey]: {
+          monthlyQuota: Math.max(0, settings.monthlyQuota || 0),
+          baseRate: Math.max(0, settings.baseRate || 0),
+        },
+      },
+    }));
+  }, []);
+
+  const clearCommissionSettings = useCallback((repName: string) => {
+    const repKey = normalizeRepName(repName);
+    if (!repKey) return;
+
+    setState(s => {
+      const { [repKey]: _removed, ...remaining } = s.commissionSettings;
+      return { ...s, commissionSettings: remaining };
+    });
+  }, []);
+
+  const updateCommissionMonthActual = useCallback((repName: string, monthKey: string, actualTotal?: number) => {
+    setState(s => ({
+      ...s,
+      commissionReviews: updateCommissionReviewRecord(s.commissionReviews, repName, monthKey, current => {
+        const nextActualTotal = actualTotal === undefined || Number.isNaN(actualTotal) ? undefined : Math.max(0, actualTotal);
+        const hasOpportunityEntries = Object.keys(current.opportunities).length > 0;
+        if (nextActualTotal === undefined && !hasOpportunityEntries) return null;
+        return {
+          ...current,
+          actualTotal: nextActualTotal,
+        };
+      }),
+    }));
+  }, []);
+
+  const updateCommissionOpportunityReview = useCallback((repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => {
+    setState(s => ({
+      ...s,
+      commissionReviews: updateCommissionReviewRecord(s.commissionReviews, repName, monthKey, current => {
+        const sanitizedActual = updates.actualCommission === undefined || Number.isNaN(updates.actualCommission)
+          ? undefined
+          : Math.max(0, updates.actualCommission);
+        const sanitizedNote = updates.note?.trim() ? updates.note.trim() : undefined;
+        const nextOpportunity = {
+          actualCommission: sanitizedActual,
+          note: sanitizedNote,
+        };
+        const nextOpportunities = { ...current.opportunities };
+
+        if (nextOpportunity.actualCommission === undefined && !nextOpportunity.note) {
+          delete nextOpportunities[opportunityId];
+        } else {
+          nextOpportunities[opportunityId] = nextOpportunity;
+        }
+
+        const hasOpportunityEntries = Object.keys(nextOpportunities).length > 0;
+        if (current.actualTotal === undefined && !hasOpportunityEntries) return null;
+
+        return {
+          ...current,
+          opportunities: nextOpportunities,
+        };
+      }),
+    }));
+  }, []);
+
+  const setCommissionPinHash = useCallback((pinHash: string | null) => {
+    setState(s => ({ ...s, commissionPinHash: pinHash }));
+  }, []);
+
+  const restoreFromBackup = useCallback((data: {
+    reps: Rep[];
+    opportunities: Opportunity[];
+    imports: ImportRecord[];
+    changelog: ChangeLogEntry[];
+    snapshots?: OpportunitySnapshot[];
+    commissionSettings?: CommissionSettingsMap;
+    commissionReviews?: CommissionReviewsMap;
+    commissionPinHash?: string | null;
+  }) => {
+    setState(s => ({
+      ...s,
+      reps: data.reps,
+      opportunities: data.opportunities,
+      imports: data.imports,
+      changelog: data.changelog,
+      snapshots: data.snapshots || s.snapshots,
+      commissionSettings: data.commissionSettings || {},
+      commissionReviews: data.commissionReviews || {},
+      commissionPinHash: data.commissionPinHash ?? null,
+    }));
   }, []);
 
   const getOpportunityHistory = useCallback((opportunityId: string): OpportunitySnapshot[] => {
@@ -322,6 +493,11 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     archiveToGraveyard,
     restoreFromGraveyard,
     clearChangelog,
+    setCommissionSettings,
+    clearCommissionSettings,
+    updateCommissionMonthActual,
+    updateCommissionOpportunityReview,
+    setCommissionPinHash,
     restoreFromBackup,
     getOpportunityHistory,
   };

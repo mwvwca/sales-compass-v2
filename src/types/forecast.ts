@@ -4,6 +4,28 @@ export interface Rep {
   quarterlyGoals: Record<string, number>;
 }
 
+export interface RepCommissionSettings {
+  monthlyQuota: number;
+  baseRate: number;
+}
+
+export type CommissionSettingsMap = Record<string, RepCommissionSettings>;
+
+export interface CommissionOpportunityReview {
+  actualCommission?: number;
+  note?: string;
+}
+
+export interface CommissionMonthlyReview {
+  repKey: string;
+  repName: string;
+  monthKey: string;
+  actualTotal?: number;
+  opportunities: Record<string, CommissionOpportunityReview>;
+}
+
+export type CommissionReviewsMap = Record<string, CommissionMonthlyReview>;
+
 export interface Opportunity {
   id: string;
   name: string;
@@ -110,17 +132,13 @@ export function getWeeksInMonth(monthKey: string): WeekRange[] {
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   const lastDay = new Date(Date.UTC(year, month, 0));
 
-  // W1 always starts on the 1st and ends on the first Friday
-  const dow = firstDay.getUTCDay(); // 0=Sun
+  const dow = firstDay.getUTCDay();
   let firstFriday = new Date(firstDay);
   if (dow === 0) {
-    // Sunday: first Friday is day 5
     firstFriday.setUTCDate(firstFriday.getUTCDate() + 5);
   } else if (dow === 6) {
-    // Saturday: first Friday is day 6
     firstFriday.setUTCDate(firstFriday.getUTCDate() + 6);
   } else {
-    // Mon(1)->Fri = +4, Tue(2)->Fri = +3, Wed(3)->Fri = +2, Thu(4)->Fri = +1, Fri(5)->+0
     firstFriday.setUTCDate(firstFriday.getUTCDate() + (5 - dow));
   }
   if (firstFriday > lastDay) firstFriday = new Date(lastDay);
@@ -128,9 +146,8 @@ export function getWeeksInMonth(monthKey: string): WeekRange[] {
   w1End.setUTCHours(23, 59, 59, 999);
   weeks.push({ label: 'W1', start: new Date(firstDay), end: w1End });
 
-  // Subsequent weeks: Monday–Friday
   let cursor = new Date(firstFriday);
-  cursor.setUTCDate(cursor.getUTCDate() + 3); // skip to Monday (Fri+3=Mon)
+  cursor.setUTCDate(cursor.getUTCDate() + 3);
 
   let weekNum = 1;
   while (cursor <= lastDay) {
