@@ -8,13 +8,14 @@ import { normalizeRepName } from '@/lib/repUtils';
 interface CommissionSettingsProps {
   reps: Rep[];
   commissionSettings: CommissionSettingsMap;
-  onSave: (repName: string, settings: { monthlyQuota: number; annualVariableComp?: number; baseRate?: number }) => void;
+  onSave: (repName: string, settings: { monthlyQuota: number; annualVariableComp?: number; priorQuarterPayout?: number; baseRate?: number }) => void;
   onClear: (repName: string) => void;
 }
 
 interface DraftRow {
   monthlyQuota: string;
   annualVariableComp: string;
+  priorQuarterPayout: string;
 }
 
 export default function CommissionSettings({ reps, commissionSettings, onSave, onClear }: CommissionSettingsProps) {
@@ -26,6 +27,7 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
       accumulator[rep.id] = {
         monthlyQuota: existing?.monthlyQuota ? String(existing.monthlyQuota) : '',
         annualVariableComp: existing?.annualVariableComp ? String(existing.annualVariableComp) : '',
+        priorQuarterPayout: existing?.priorQuarterPayout ? String(existing.priorQuarterPayout) : '',
       };
       return accumulator;
     }, {});
@@ -49,17 +51,19 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
     const draft = drafts[rep.id];
     const monthlyQuota = Number(draft?.monthlyQuota || 0);
     const annualVariableComp = Number(draft?.annualVariableComp || 0);
+    const priorQuarterPayout = Number(draft?.priorQuarterPayout || 0);
 
     onSave(rep.name, {
       monthlyQuota: Number.isFinite(monthlyQuota) ? monthlyQuota : 0,
       annualVariableComp: Number.isFinite(annualVariableComp) ? annualVariableComp : 0,
+      priorQuarterPayout: Number.isFinite(priorQuarterPayout) ? priorQuarterPayout : 0,
     });
   };
 
   if (reps.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
-        Add reps above to configure monthly quotas and payout rates.
+        Add reps above to configure quota, variable comp, and quarter-to-date payout context.
       </div>
     );
   }
@@ -68,7 +72,7 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
     <section className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Commission settings</h3>
-        <p className="text-xs text-muted-foreground">Set each rep’s monthly quota and annual variable comp. The review uses the derived base rate to calculate the source-style expected payout per deal.</p>
+        <p className="text-xs text-muted-foreground">Set the same plan inputs used by the calculator. Base rate is derived automatically from monthly MRR quota and annual variable comp.</p>
       </div>
 
       <div className="overflow-hidden rounded-md border border-border">
@@ -76,9 +80,10 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
           <thead>
             <tr className="border-b border-border bg-secondary/40 text-left">
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Rep</th>
-              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Monthly Quota</th>
+              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Monthly MRR Quota</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Annual Variable Comp</th>
-              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Derived Rate</th>
+              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Prior Quarter Payout</th>
+              <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Derived Base Rate</th>
               <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Actions</th>
             </tr>
           </thead>
@@ -98,21 +103,31 @@ export default function CommissionSettings({ reps, commissionSettings, onSave, o
                       type="number"
                       value={drafts[rep.id]?.monthlyQuota || ''}
                       onChange={event => updateDraft(rep.id, 'monthlyQuota', event.target.value)}
-                      placeholder="500000"
+                      placeholder="5000"
                       className="font-mono"
                     />
                   </td>
                   <td className="px-4 py-3">
                     <Input
                       type="number"
-                        step="0.01"
-                        value={drafts[rep.id]?.annualVariableComp || ''}
-                        onChange={event => updateDraft(rep.id, 'annualVariableComp', event.target.value)}
-                        placeholder="120000"
+                      step="0.01"
+                      value={drafts[rep.id]?.annualVariableComp || ''}
+                      onChange={event => updateDraft(rep.id, 'annualVariableComp', event.target.value)}
+                      placeholder="120000"
                       className="font-mono"
                     />
                   </td>
-                    <td className="px-4 py-3 font-mono text-foreground">{derivedRate > 0 ? `${(derivedRate * 100).toFixed(2)}%` : '—'}</td>
+                  <td className="px-4 py-3">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={drafts[rep.id]?.priorQuarterPayout || ''}
+                      onChange={event => updateDraft(rep.id, 'priorQuarterPayout', event.target.value)}
+                      placeholder="0"
+                      className="font-mono"
+                    />
+                  </td>
+                  <td className="px-4 py-3 font-mono text-foreground">{derivedRate > 0 ? `${(derivedRate * 100).toFixed(2)}%` : '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Button type="button" variant="outline" size="sm" onClick={() => handleSave(rep)}>
