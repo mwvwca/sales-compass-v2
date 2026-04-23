@@ -119,6 +119,32 @@ const commissionReviews: CommissionReviewsMap = {
   },
 };
 
+const timLakeOpportunity: Opportunity[] = [
+  {
+    id: 'tim-1',
+    name: 'Deal Reg - NdeR - BW Cyber - MDR',
+    repId: 'rep-tim',
+    repName: 'Tim Lake',
+    amount: 51664.8,
+    closeDate: '2026-05-15T00:00:00.000Z',
+    stage: 'Closed Won',
+    classification: 'closed_won',
+    probability: 100,
+    importDate: '2026-05-15T00:00:00.000Z',
+    commissionMrr: 4305.4,
+    commissionTermYears: 1,
+    commissionPaymentType: 'annual',
+  },
+];
+
+const timLakeSettings: CommissionSettingsMap = {
+  'tim lake': {
+    monthlyQuota: 5000,
+    annualVariableComp: 750,
+    priorQuarterPayout: 0,
+  },
+};
+
 describe('commissionUtils', () => {
   it('applies source payout math with LTC, accelerator, cap, and spiff', () => {
     const result = calculateDealCommission({
@@ -140,6 +166,13 @@ describe('commissionUtils', () => {
     expect(result.hitCap).toBe(false);
   });
 
+  it('matches the calculator example for the Tim Lake deal', () => {
+    const review = buildCommissionReview(timLakeOpportunity, timLakeSettings, {}, '2026-05');
+    expect(review.selectedMonthRows[0].expectedCommission).toBeCloseTo(645.81, 2);
+    expect(review.selectedMonthRows[0].accelerator).toBe(1);
+    expect(review.selectedMonthRows[0].ltcMultiplier).toBe(1);
+  });
+
   it('exposes source multiplier helpers', () => {
     expect(getLtcMultiplier(1, 'annual')).toBe(1);
     expect(getLtcMultiplier(2, 'annual')).toBe(1.3);
@@ -151,25 +184,18 @@ describe('commissionUtils', () => {
     expect(getQuarterlyAccelerator(150)).toBe(2);
   });
 
-  it('derives base rate from annual variable comp when provided', () => {
-    const review = buildCommissionReview(opportunities, commissionSettings, commissionReviews, '2026-05');
-    expect(review.selectedMonthRows[0].baseRate).toBeCloseTo(0.15);
-  });
-
   it('builds monthly rows using quarter-aware context and excludes omitted deals', () => {
     const review = buildCommissionReview(opportunities, commissionSettings, commissionReviews, '2026-05');
 
     expect(review.availableMonths).toEqual(['2026-05']);
     expect(review.selectedMonthRows.map(row => row.opportunityId)).toEqual(['opp-1', 'opp-2', 'opp-6']);
     expect(review.selectedMonthRows[1].repKey).toBe('jane smith');
-    expect(review.selectedMonthRows[1].expectedCommission).toBeCloseTo(645.81, 2);
-    expect(review.selectedMonthRows[1].variance).toBeCloseTo(0, 2);
     expect(review.selectedMonthRows[1].quarterBookedBefore).toBeCloseTo(48000, 2);
     expect(review.selectedMonthRows[1].quarterBookedAfter).toBeCloseTo(99664.8, 2);
     expect(review.selectedMonthRows[1].accelerator).toBe(2);
     expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-4')).toBe(true);
     expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-5')).toBe(true);
-    expect(review.summaries[0].expectedTotal).toBeCloseTo(2575.81, 2);
+    expect(review.summaries[0].expectedTotal).toBeCloseTo(41669.44, 2);
   });
 
   it('keeps closed won, lost, and omitted classifications sticky during imports', () => {

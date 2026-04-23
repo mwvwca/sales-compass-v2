@@ -44,6 +44,7 @@ export function resolveImportedClassification(
   incomingClassification: OpportunityClassification,
 ): OpportunityClassification {
   if (existingClassification === 'omitted') return 'omitted';
+  if (incomingClassification === 'omitted') return 'omitted';
   if (existingClassification === 'closed_won' && incomingClassification !== 'omitted') return 'closed_won';
   if (existingClassification === 'lost' && incomingClassification !== 'omitted') return 'lost';
   if (incomingClassification === 'closed_won' || incomingClassification === 'lost') return incomingClassification;
