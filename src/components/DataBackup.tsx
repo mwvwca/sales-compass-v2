@@ -52,7 +52,8 @@ const changeLogSchema = z.object({
 
 const commissionSettingSchema = z.object({
   monthlyQuota: z.number().finite().min(0),
-  baseRate: z.number().finite().min(0).max(1),
+  annualVariableComp: z.number().finite().min(0).optional(),
+  baseRate: z.number().finite().min(0).max(1).optional(),
 });
 
 const commissionOpportunityReviewSchema = z.object({

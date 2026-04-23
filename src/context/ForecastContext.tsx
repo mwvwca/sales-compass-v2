@@ -385,7 +385,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         ...s.commissionSettings,
         [repKey]: {
           monthlyQuota: Math.max(0, settings.monthlyQuota || 0),
-          baseRate: Math.max(0, settings.baseRate || 0),
+          annualVariableComp: settings.annualVariableComp === undefined ? undefined : Math.max(0, settings.annualVariableComp || 0),
+          baseRate: settings.baseRate === undefined ? undefined : Math.max(0, settings.baseRate || 0),
         },
       },
     }));
