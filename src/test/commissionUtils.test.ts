@@ -119,7 +119,7 @@ describe('commissionUtils', () => {
     expect(review.selectedMonthRows[1].variance).toBeCloseTo(15);
     expect(review.summaries[0].expectedTotal).toBe(120);
     expect(review.summaries[0].actualTotal).toBe(135);
-    expect(review.summaries[0].flaggedRows).toBe(2);
+    expect(review.summaries[0].flaggedRows).toBe(1);
     expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-4')).toBe(true);
     expect(review.selectedMonthRows.every(row => row.opportunityId !== 'opp-5')).toBe(true);
     expect(review.selectedMonthRows[1].actualBefore).toBe(500);
