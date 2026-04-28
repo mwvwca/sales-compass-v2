@@ -202,6 +202,75 @@ export default function PipelineLookback() {
     [analysis.rows]
   );
 
+  // Commit-specific outcomes: deals that were Commit as of the lookback date
+  const commitOutcomes = useMemo(() => {
+    type Outcome = 'won' | 'lost' | 'pushed' | 'amount_changed' | 'still_commit' | 'downgraded' | 'removed';
+    const items: Array<{
+      id: string; name: string; repName: string;
+      pastAmount: number; currentAmount: number;
+      pastCloseDate: string; currentCloseDate: string | null;
+      currentClass: string | null;
+      outcome: Outcome; detail: string;
+    }> = [];
+
+    const monthOf = (d: string) => d ? d.slice(0, 7) : '';
+
+    for (const row of analysis.rows) {
+      if (!row.past || row.past.classification !== 'commit') continue;
+      const pAmt = row.past.amount;
+      const cur = row.current;
+      let outcome: Outcome;
+      let detail = '';
+
+      if (!cur) {
+        outcome = 'removed';
+        detail = 'No longer in pipeline';
+      } else if (cur.classification === 'closed_won') {
+        outcome = 'won';
+        detail = `Won ${fmt(cur.amount)}${Math.abs(cur.amount - pAmt) > 0.5 ? ` (was ${fmt(pAmt)})` : ''}`;
+      } else if (cur.classification === 'lost' || cur.stage.toLowerCase().trim() === 'closed lost') {
+        outcome = 'lost';
+        detail = 'Marked Closed Lost';
+      } else if (monthOf(row.past.closeDate) !== monthOf(cur.closeDate)) {
+        outcome = 'pushed';
+        detail = `Close date ${row.past.closeDate} → ${cur.closeDate}`;
+      } else if (cur.classification !== 'commit') {
+        outcome = 'downgraded';
+        detail = `Reclassified to ${cur.classification}`;
+      } else if (Math.abs(cur.amount - pAmt) > 0.5) {
+        outcome = 'amount_changed';
+        const delta = cur.amount - pAmt;
+        detail = `Amount ${delta > 0 ? '+' : ''}${fmt(delta)} (${fmt(pAmt)} → ${fmt(cur.amount)})`;
+      } else {
+        outcome = 'still_commit';
+        detail = 'Unchanged on commit';
+      }
+
+      items.push({
+        id: row.id, name: row.name, repName: row.repName,
+        pastAmount: pAmt, currentAmount: cur?.amount ?? 0,
+        pastCloseDate: row.past.closeDate, currentCloseDate: cur?.closeDate ?? null,
+        currentClass: cur?.classification ?? null,
+        outcome, detail,
+      });
+    }
+
+    const order: Record<Outcome, number> = { won: 0, lost: 1, pushed: 2, downgraded: 3, removed: 4, amount_changed: 5, still_commit: 6 };
+    items.sort((a, b) => order[a.outcome] - order[b.outcome]);
+
+    const totals = {
+      startingCommit: items.reduce((s, i) => s + i.pastAmount, 0),
+      won: items.filter(i => i.outcome === 'won').reduce((s, i) => s + i.currentAmount, 0),
+      lost: items.filter(i => i.outcome === 'lost').reduce((s, i) => s + i.pastAmount, 0),
+      pushed: items.filter(i => i.outcome === 'pushed').reduce((s, i) => s + i.pastAmount, 0),
+      downgraded: items.filter(i => i.outcome === 'downgraded').reduce((s, i) => s + i.pastAmount, 0),
+      removed: items.filter(i => i.outcome === 'removed').reduce((s, i) => s + i.pastAmount, 0),
+      stillCommit: items.filter(i => i.outcome === 'still_commit' || i.outcome === 'amount_changed').reduce((s, i) => s + i.currentAmount, 0),
+      count: items.length,
+    };
+    return { items, totals };
+  }, [analysis.rows]);
+
   const snapshotCoverage = useMemo(() => {
     const withSnap = analysis.rows.filter(r => r.past?.source === 'snapshot').length;
     return { withSnap, total: analysis.rows.length };
@@ -317,6 +386,70 @@ export default function PipelineLookback() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Commit outcomes */}
+      <div>
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+          Commit outcomes since {format(asOfDate, 'PPP')} ({commitOutcomes.totals.count})
+        </h3>
+        <div className="grid grid-cols-6 gap-3 mb-3">
+          {[
+            { label: 'Starting Commit', value: fmt(commitOutcomes.totals.startingCommit), color: 'text-commit' },
+            { label: 'Won', value: fmt(commitOutcomes.totals.won), color: 'text-positive' },
+            { label: 'Lost', value: fmt(commitOutcomes.totals.lost), color: 'text-negative' },
+            { label: 'Pushed Out', value: fmt(commitOutcomes.totals.pushed), color: 'text-upside' },
+            { label: 'Downgraded', value: fmt(commitOutcomes.totals.downgraded), color: 'text-muted-foreground' },
+            { label: 'Still Commit', value: fmt(commitOutcomes.totals.stillCommit), color: 'text-commit' },
+          ].map(c => (
+            <div key={c.label} className="bg-card border border-border rounded-lg p-3">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
+              <p className={`text-sm font-mono font-semibold ${c.color}`}>{c.value}</p>
+            </div>
+          ))}
+        </div>
+        {commitOutcomes.items.length === 0 ? (
+          <div className="text-xs text-muted-foreground border border-border rounded-lg p-6 text-center">
+            No deals were on Commit as of this date in the current scope.
+          </div>
+        ) : (
+          <div className="border border-border rounded-lg overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-secondary/50">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Outcome</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Opportunity</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Commit Amt</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {commitOutcomes.items.map(i => {
+                  const badge =
+                    i.outcome === 'won' ? { label: 'Won', cls: 'bg-positive/15 text-positive' }
+                    : i.outcome === 'lost' ? { label: 'Lost', cls: 'bg-negative/15 text-negative' }
+                    : i.outcome === 'pushed' ? { label: 'Pushed', cls: 'bg-upside/15 text-upside' }
+                    : i.outcome === 'downgraded' ? { label: 'Downgraded', cls: 'bg-secondary text-foreground' }
+                    : i.outcome === 'removed' ? { label: 'Removed', cls: 'bg-negative/10 text-negative' }
+                    : i.outcome === 'amount_changed' ? { label: 'Amount Δ', cls: 'bg-commit/10 text-commit' }
+                    : { label: 'Held', cls: 'bg-secondary text-muted-foreground' };
+                  return (
+                    <tr key={i.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                      <td className="px-3 py-2">
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${badge.cls}`}>{badge.label}</span>
+                      </td>
+                      <td className="px-3 py-2 font-medium">{i.name}</td>
+                      <td className="px-3 py-2 text-secondary-foreground text-xs">{i.repName}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">{fmt(i.pastAmount)}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{i.detail}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Movement list */}
