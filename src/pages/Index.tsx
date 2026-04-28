@@ -7,9 +7,10 @@ import DataBackup from '@/components/DataBackup';
 import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
-import { BarChart3, Users, Upload, Settings, Skull, History } from 'lucide-react';
+import DrQuality from '@/components/DrQuality';
+import { BarChart3, Users, Upload, Settings, Skull, History, Layers } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'settings' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'settings' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
@@ -19,6 +20,7 @@ const Index = () => {
     { id: 'goals', label: 'Goals', icon: <Users size={14} /> },
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
+    { id: 'dr-quality', label: 'DR Quality', icon: <Layers size={14} /> },
     { id: 'graveyard', label: 'Graveyard', icon: <Skull size={14} /> },
     { id: 'settings', label: 'Convert', icon: <Settings size={14} /> },
   ];
@@ -77,6 +79,15 @@ const Index = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Pick a date to compare pipeline state then vs now and review every deal that moved.</p>
             </div>
             <PipelineLookback />
+          </div>
+        )}
+        {tab === 'dr-quality' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">DR Quality</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Quantify how much of your pipeline is real vs. multi-product DR padding on the same accounts.</p>
+            </div>
+            <DrQuality />
           </div>
         )}
         {tab === 'graveyard' && (
