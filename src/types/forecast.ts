@@ -49,6 +49,8 @@ export interface Opportunity {
   commissionPaymentType?: 'annual' | 'upfront';
   commissionSpiff?: number;
   commissionNotes?: string;
+  accountName?: string;
+  productName?: string;
 }
 
 export interface ImportRecord {

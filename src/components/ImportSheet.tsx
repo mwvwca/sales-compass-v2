@@ -16,6 +16,8 @@ interface ColumnMapping {
   forecast?: string;
   forecastCategory?: string;
   upsideFlag?: string;
+  accountName?: string;
+  productName?: string;
 }
 
 const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
@@ -37,6 +39,13 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'forecast category': 'forecastCategory',
   'upside': 'upsideFlag',
   'upside deal': 'upsideFlag',
+  'account name': 'accountName',
+  'account': 'accountName',
+  'account id': 'accountName',
+  'product': 'productName',
+  'product name': 'productName',
+  'product family': 'productName',
+  'primary product': 'productName',
 };
 
 function autoMap(headers: string[]): Partial<ColumnMapping> {
@@ -138,6 +147,8 @@ export default function ImportSheet() {
             lostReason: String(row[mapping.stage || ''] || '').toLowerCase().trim() === 'closed lost' ? 'Closed Lost in Salesforce' : undefined,
             probability: parseFloat(row[mapping.probability || ''] || '0') || 0,
             importDate,
+            accountName: String(row[mapping.accountName || ''] || '').trim() || undefined,
+            productName: String(row[mapping.productName || ''] || '').trim() || undefined,
           };
         });
 
@@ -212,6 +223,7 @@ export default function ImportSheet() {
       <div className="text-xs text-muted-foreground space-y-1">
         <p className="font-medium">Expected columns (auto-mapped):</p>
         <p>Opportunity ID, Opportunity Name, Opportunity Owner, Amount, Close Date, Stage, Probability (%)</p>
+        <p className="text-muted-foreground/80">Optional for DR Quality: Account Name, Product (or Product Family)</p>
       </div>
     </div>
   );
