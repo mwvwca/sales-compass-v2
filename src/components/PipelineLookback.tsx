@@ -202,6 +202,75 @@ export default function PipelineLookback() {
     [analysis.rows]
   );
 
+  // Commit-specific outcomes: deals that were Commit as of the lookback date
+  const commitOutcomes = useMemo(() => {
+    type Outcome = 'won' | 'lost' | 'pushed' | 'amount_changed' | 'still_commit' | 'downgraded' | 'removed';
+    const items: Array<{
+      id: string; name: string; repName: string;
+      pastAmount: number; currentAmount: number;
+      pastCloseDate: string; currentCloseDate: string | null;
+      currentClass: string | null;
+      outcome: Outcome; detail: string;
+    }> = [];
+
+    const monthOf = (d: string) => d ? d.slice(0, 7) : '';
+
+    for (const row of analysis.rows) {
+      if (!row.past || row.past.classification !== 'commit') continue;
+      const pAmt = row.past.amount;
+      const cur = row.current;
+      let outcome: Outcome;
+      let detail = '';
+
+      if (!cur) {
+        outcome = 'removed';
+        detail = 'No longer in pipeline';
+      } else if (cur.classification === 'closed_won') {
+        outcome = 'won';
+        detail = `Won ${fmt(cur.amount)}${Math.abs(cur.amount - pAmt) > 0.5 ? ` (was ${fmt(pAmt)})` : ''}`;
+      } else if (cur.classification === 'lost' || cur.stage.toLowerCase().trim() === 'closed lost') {
+        outcome = 'lost';
+        detail = 'Marked Closed Lost';
+      } else if (monthOf(row.past.closeDate) !== monthOf(cur.closeDate)) {
+        outcome = 'pushed';
+        detail = `Close date ${row.past.closeDate} → ${cur.closeDate}`;
+      } else if (cur.classification !== 'commit') {
+        outcome = 'downgraded';
+        detail = `Reclassified to ${cur.classification}`;
+      } else if (Math.abs(cur.amount - pAmt) > 0.5) {
+        outcome = 'amount_changed';
+        const delta = cur.amount - pAmt;
+        detail = `Amount ${delta > 0 ? '+' : ''}${fmt(delta)} (${fmt(pAmt)} → ${fmt(cur.amount)})`;
+      } else {
+        outcome = 'still_commit';
+        detail = 'Unchanged on commit';
+      }
+
+      items.push({
+        id: row.id, name: row.name, repName: row.repName,
+        pastAmount: pAmt, currentAmount: cur?.amount ?? 0,
+        pastCloseDate: row.past.closeDate, currentCloseDate: cur?.closeDate ?? null,
+        currentClass: cur?.classification ?? null,
+        outcome, detail,
+      });
+    }
+
+    const order: Record<Outcome, number> = { won: 0, lost: 1, pushed: 2, downgraded: 3, removed: 4, amount_changed: 5, still_commit: 6 };
+    items.sort((a, b) => order[a.outcome] - order[b.outcome]);
+
+    const totals = {
+      startingCommit: items.reduce((s, i) => s + i.pastAmount, 0),
+      won: items.filter(i => i.outcome === 'won').reduce((s, i) => s + i.currentAmount, 0),
+      lost: items.filter(i => i.outcome === 'lost').reduce((s, i) => s + i.pastAmount, 0),
+      pushed: items.filter(i => i.outcome === 'pushed').reduce((s, i) => s + i.pastAmount, 0),
+      downgraded: items.filter(i => i.outcome === 'downgraded').reduce((s, i) => s + i.pastAmount, 0),
+      removed: items.filter(i => i.outcome === 'removed').reduce((s, i) => s + i.pastAmount, 0),
+      stillCommit: items.filter(i => i.outcome === 'still_commit' || i.outcome === 'amount_changed').reduce((s, i) => s + i.currentAmount, 0),
+      count: items.length,
+    };
+    return { items, totals };
+  }, [analysis.rows]);
+
   const snapshotCoverage = useMemo(() => {
     const withSnap = analysis.rows.filter(r => r.past?.source === 'snapshot').length;
     return { withSnap, total: analysis.rows.length };
