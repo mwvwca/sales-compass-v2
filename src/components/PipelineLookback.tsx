@@ -388,6 +388,70 @@ export default function PipelineLookback() {
         </div>
       </div>
 
+      {/* Commit outcomes */}
+      <div>
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+          Commit outcomes since {format(asOfDate, 'PPP')} ({commitOutcomes.totals.count})
+        </h3>
+        <div className="grid grid-cols-6 gap-3 mb-3">
+          {[
+            { label: 'Starting Commit', value: fmt(commitOutcomes.totals.startingCommit), color: 'text-commit' },
+            { label: 'Won', value: fmt(commitOutcomes.totals.won), color: 'text-positive' },
+            { label: 'Lost', value: fmt(commitOutcomes.totals.lost), color: 'text-negative' },
+            { label: 'Pushed Out', value: fmt(commitOutcomes.totals.pushed), color: 'text-upside' },
+            { label: 'Downgraded', value: fmt(commitOutcomes.totals.downgraded), color: 'text-muted-foreground' },
+            { label: 'Still Commit', value: fmt(commitOutcomes.totals.stillCommit), color: 'text-commit' },
+          ].map(c => (
+            <div key={c.label} className="bg-card border border-border rounded-lg p-3">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
+              <p className={`text-sm font-mono font-semibold ${c.color}`}>{c.value}</p>
+            </div>
+          ))}
+        </div>
+        {commitOutcomes.items.length === 0 ? (
+          <div className="text-xs text-muted-foreground border border-border rounded-lg p-6 text-center">
+            No deals were on Commit as of this date in the current scope.
+          </div>
+        ) : (
+          <div className="border border-border rounded-lg overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-secondary/50">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Outcome</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Opportunity</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Commit Amt</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {commitOutcomes.items.map(i => {
+                  const badge =
+                    i.outcome === 'won' ? { label: 'Won', cls: 'bg-positive/15 text-positive' }
+                    : i.outcome === 'lost' ? { label: 'Lost', cls: 'bg-negative/15 text-negative' }
+                    : i.outcome === 'pushed' ? { label: 'Pushed', cls: 'bg-upside/15 text-upside' }
+                    : i.outcome === 'downgraded' ? { label: 'Downgraded', cls: 'bg-secondary text-foreground' }
+                    : i.outcome === 'removed' ? { label: 'Removed', cls: 'bg-negative/10 text-negative' }
+                    : i.outcome === 'amount_changed' ? { label: 'Amount Δ', cls: 'bg-commit/10 text-commit' }
+                    : { label: 'Held', cls: 'bg-secondary text-muted-foreground' };
+                  return (
+                    <tr key={i.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                      <td className="px-3 py-2">
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${badge.cls}`}>{badge.label}</span>
+                      </td>
+                      <td className="px-3 py-2 font-medium">{i.name}</td>
+                      <td className="px-3 py-2 text-secondary-foreground text-xs">{i.repName}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">{fmt(i.pastAmount)}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{i.detail}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Movement list */}
       <div>
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
