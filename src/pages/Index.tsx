@@ -70,6 +70,15 @@ const Index = () => {
             <ImportChangeLog />
           </div>
         )}
+        {tab === 'lookback' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">Pipeline Lookback</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Pick a date to compare pipeline state then vs now and review every deal that moved.</p>
+            </div>
+            <PipelineLookback />
+          </div>
+        )}
         {tab === 'graveyard' && (
           <div>
             <div className="mb-4">
