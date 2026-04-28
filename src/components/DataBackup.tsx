@@ -34,6 +34,8 @@ const opportunitySchema = z.object({
   commissionPaymentType: z.enum(['annual', 'upfront']).optional(),
   commissionSpiff: z.number().finite().min(0).optional(),
   commissionNotes: z.string().max(4000).optional(),
+  accountName: z.string().max(500).optional(),
+  productName: z.string().max(500).optional(),
 });
 
 const importRecordSchema = z.object({
