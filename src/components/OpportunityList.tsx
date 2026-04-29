@@ -427,10 +427,10 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex justify-center gap-1">
-                        {classBtn(opp, 'closed_won', 'Won')}
-                        {classBtn(opp, 'commit', 'Commit')}
-                        {classBtn(opp, 'upside', 'Upside')}
-                        {classBtn(opp, 'unclassified', '—')}
+                        {classBtn(opp, 'closed_won', 'Won', isEditing)}
+                        {classBtn(opp, 'commit', 'Commit', isEditing)}
+                        {classBtn(opp, 'upside', 'Upside', isEditing)}
+                        {classBtn(opp, 'unclassified', '—', isEditing)}
                       </div>
                     </td>
                     <td className="px-2 py-2.5">
