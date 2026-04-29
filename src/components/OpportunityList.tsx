@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 
-type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification';
+type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification' | 'productName';
 type SortDir = 'asc' | 'desc';
 
 interface Props {
