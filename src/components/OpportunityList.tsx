@@ -207,19 +207,26 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
 
   const inputClass = "bg-secondary border border-border rounded px-2 py-0.5 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring";
 
-  const classBtn = (opp: Opportunity, cls: Classification, label: string) => {
+  const classBtn = (opp: Opportunity, cls: Classification, label: string, editable: boolean) => {
     const active = opp.classification === cls;
-    const colors: Record<string, string> = {
+    const colors: Record<string, string> = editable ? {
       closed_won: active ? 'bg-positive/20 text-positive border-positive/40' : 'text-muted-foreground border-border hover:border-positive/40 hover:text-positive',
       commit: active ? 'bg-commit/20 text-commit border-commit/40' : 'text-muted-foreground border-border hover:border-commit/40 hover:text-commit',
       upside: active ? 'bg-upside/20 text-upside border-upside/40' : 'text-muted-foreground border-border hover:border-upside/40 hover:text-upside',
       unclassified: active ? 'bg-secondary text-foreground border-foreground/20' : 'text-muted-foreground border-border hover:text-foreground',
+    } : {
+      closed_won: active ? 'bg-positive/20 text-positive border-positive/40' : 'text-muted-foreground/60 border-border',
+      commit: active ? 'bg-commit/20 text-commit border-commit/40' : 'text-muted-foreground/60 border-border',
+      upside: active ? 'bg-upside/20 text-upside border-upside/40' : 'text-muted-foreground/60 border-border',
+      unclassified: active ? 'bg-secondary text-foreground border-foreground/20' : 'text-muted-foreground/60 border-border',
     };
     return (
       <button
         key={cls}
-        onClick={() => classifyOpportunity(opp.id, cls)}
-        className={`px-2 py-0.5 text-xs rounded border transition-colors ${colors[cls]}`}
+        onClick={() => editable && classifyOpportunity(opp.id, cls)}
+        disabled={!editable}
+        title={editable ? undefined : 'Click the pencil to edit classification'}
+        className={`px-2 py-0.5 text-xs rounded border transition-colors ${colors[cls]} ${editable ? 'cursor-pointer' : 'cursor-not-allowed'}`}
       >
         {label}
       </button>
@@ -420,10 +427,10 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex justify-center gap-1">
-                        {classBtn(opp, 'closed_won', 'Won')}
-                        {classBtn(opp, 'commit', 'Commit')}
-                        {classBtn(opp, 'upside', 'Upside')}
-                        {classBtn(opp, 'unclassified', '—')}
+                        {classBtn(opp, 'closed_won', 'Won', isEditing)}
+                        {classBtn(opp, 'commit', 'Commit', isEditing)}
+                        {classBtn(opp, 'upside', 'Upside', isEditing)}
+                        {classBtn(opp, 'unclassified', '—', isEditing)}
                       </div>
                     </td>
                     <td className="px-2 py-2.5">
