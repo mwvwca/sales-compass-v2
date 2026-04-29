@@ -431,6 +431,13 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                       )}
                     </td>
                     <td className="px-3 py-2.5">
+                      {isEditing ? (
+                        <input value={editState.productName} onChange={e => setEditState(s => ({ ...s, productName: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} placeholder="Product" />
+                      ) : (
+                        <span className="text-secondary-foreground">{opp.productName || <span className="text-muted-foreground/50">—</span>}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
                       <div className="flex justify-center gap-1">
                         {classBtn(opp, 'closed_won', 'Won', isEditing)}
                         {classBtn(opp, 'commit', 'Commit', isEditing)}
