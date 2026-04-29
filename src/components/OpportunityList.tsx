@@ -129,6 +129,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
         const bPct = getStagePercentage(b.stage) ?? -1;
         cmp = aPct - bPct;
       }
+      else if (sortField === 'productName') cmp = String(a.productName ?? '').localeCompare(String(b.productName ?? ''));
       else cmp = String(a[sortField]).localeCompare(String(b[sortField]));
       return sortDir === 'desc' ? -cmp : cmp;
     });
