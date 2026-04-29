@@ -26,6 +26,7 @@ interface EditState {
   amount: string;
   closeDate: string;
   stage: string;
+  productName: string;
 }
 
 const classificationFilters: { key: Classification; label: string }[] = [
