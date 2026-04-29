@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 
-type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification';
+type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification' | 'productName';
 type SortDir = 'asc' | 'desc';
 
 interface Props {
@@ -26,6 +26,7 @@ interface EditState {
   amount: string;
   closeDate: string;
   stage: string;
+  productName: string;
 }
 
 const classificationFilters: { key: Classification; label: string }[] = [
@@ -52,7 +53,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '' });
+  const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '', productName: '' });
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string } | null>(null);
@@ -129,6 +130,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
         const bPct = getStagePercentage(b.stage) ?? -1;
         cmp = aPct - bPct;
       }
+      else if (sortField === 'productName') cmp = String(a.productName ?? '').localeCompare(String(b.productName ?? ''));
       else cmp = String(a[sortField]).localeCompare(String(b[sortField]));
       return sortDir === 'desc' ? -cmp : cmp;
     });
@@ -183,6 +185,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       amount: String(opp.amount),
       closeDate: opp.closeDate,
       stage: opp.stage,
+      productName: opp.productName ?? '',
     });
   };
 
@@ -194,6 +197,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       amount: isNaN(parsed) || parsed < 0 ? 0 : parsed,
       closeDate: editState.closeDate,
       stage: editState.stage,
+      productName: editState.productName.trim() || undefined,
     });
     setEditingId(null);
   };
@@ -375,6 +379,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                 <th onClick={() => toggleSort('amount')} className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1 justify-end">Amount <SortIcon field="amount" /></span></th>
                 <th onClick={() => toggleSort('closeDate')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Close <SortIcon field="closeDate" /></span></th>
                 <th onClick={() => toggleSort('stage')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Stage <SortIcon field="stage" /></span></th>
+                <th onClick={() => toggleSort('productName')} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1">Product <SortIcon field="productName" /></span></th>
                 <th onClick={() => toggleSort('classification')} className="text-center px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"><span className="inline-flex items-center gap-1 justify-center">Classification <SortIcon field="classification" /></span></th>
                 <th className="w-16 px-2 py-2"></th>
               </tr>
@@ -423,6 +428,13 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                         <input value={editState.stage} onChange={e => setEditState(s => ({ ...s, stage: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} />
                       ) : (
                         <span className="text-secondary-foreground">{formatStageWithPct(opp.stage)}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {isEditing ? (
+                        <input value={editState.productName} onChange={e => setEditState(s => ({ ...s, productName: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} placeholder="Product" />
+                      ) : (
+                        <span className="text-secondary-foreground">{opp.productName || <span className="text-muted-foreground/50">—</span>}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5">
