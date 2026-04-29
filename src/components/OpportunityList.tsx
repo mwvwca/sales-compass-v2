@@ -184,6 +184,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       amount: String(opp.amount),
       closeDate: opp.closeDate,
       stage: opp.stage,
+      productName: opp.productName ?? '',
     });
   };
 
@@ -195,6 +196,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       amount: isNaN(parsed) || parsed < 0 ? 0 : parsed,
       closeDate: editState.closeDate,
       stage: editState.stage,
+      productName: editState.productName.trim() || undefined,
     });
     setEditingId(null);
   };
