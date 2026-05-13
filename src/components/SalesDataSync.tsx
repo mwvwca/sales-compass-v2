@@ -39,6 +39,8 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
         : 'unclassified' as const,
       probability: parseFloat(probStr) || 0,
       importDate,
+      accountName: row["Account Name"]?.trim() || undefined,
+      productName: row.Product?.trim() || undefined,
       ...(isClosedLost ? { lostDate: importDate, lostReason: 'Closed Lost in Salesforce' } : {}),
     };
   });
@@ -278,6 +280,7 @@ const SalesDataSync = () => {
                   <TableHead className="text-xs">Prob.</TableHead>
                   <TableHead className="text-xs">Forecast</TableHead>
                   <TableHead className="text-xs">Upside</TableHead>
+                  <TableHead className="text-xs">Product</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -300,6 +303,7 @@ const SalesDataSync = () => {
                     <TableCell className="text-xs font-medium">{row.Probability}</TableCell>
                     <TableCell className="text-xs">{row.Forecast === 'TRUE' ? '✓' : ''}</TableCell>
                     <TableCell className="text-xs">{row.Upside === 'TRUE' ? '✓' : ''}</TableCell>
+                    <TableCell className="text-xs">{row.Product || '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

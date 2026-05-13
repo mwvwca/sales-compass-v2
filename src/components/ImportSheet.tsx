@@ -20,6 +20,10 @@ interface ColumnMapping {
   productName?: string;
 }
 
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+
 const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'opportunity id': 'id',
   'opportunity name': 'name',
@@ -46,6 +50,13 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'product name': 'productName',
   'product family': 'productName',
   'primary product': 'productName',
+  'products': 'productName',
+  'product product name': 'productName',
+  'product product family': 'productName',
+  'opportunity product product name': 'productName',
+  'opportunity product product family': 'productName',
+  'product 2 product name': 'productName',
+  'product2 product name': 'productName',
 };
 
 function parseImportDate(raw: unknown): string {
@@ -97,9 +108,16 @@ function parseImportDate(raw: unknown): string {
 function autoMap(headers: string[]): Partial<ColumnMapping> {
   const mapping: Partial<ColumnMapping> = {};
   for (const h of headers) {
-    const key = h.toLowerCase().trim();
+    const key = normalizeHeader(h);
     const field = DEFAULT_MAPPINGS[key];
     if (field) (mapping as any)[field] = h;
+  }
+  if (!mapping.productName) {
+    const productHeader = headers.find(h => {
+      const key = normalizeHeader(h);
+      return key.includes('product name') || key.includes('product family') || key === 'product' || key === 'products';
+    });
+    if (productHeader) mapping.productName = productHeader;
   }
   return mapping;
 }

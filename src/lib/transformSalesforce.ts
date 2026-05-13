@@ -11,6 +11,8 @@ export interface ForecastRow {
   Probability: string;
   Forecast?: string;
   Upside?: string;
+  "Account Name"?: string;
+  Product?: string;
 }
 
 const STAGE_PROBABILITY_MAP: Record<string, string> = {
@@ -56,6 +58,26 @@ function excelDateToString(value: unknown): string {
     return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
   }
   return String(value);
+}
+
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function findColumn(colMap: Record<string, number>, candidates: string[]): number | undefined {
+  const normalized = new Map(Object.entries(colMap).map(([header, index]) => [normalizeHeader(header), index]));
+  for (const candidate of candidates) {
+    const exact = normalized.get(normalizeHeader(candidate));
+    if (exact !== undefined) return exact;
+  }
+
+  return Object.entries(colMap).find(([header]) => {
+    const key = normalizeHeader(header);
+    return candidates.some(candidate => {
+      const normalizedCandidate = normalizeHeader(candidate);
+      return key.includes(normalizedCandidate) || normalizedCandidate.includes(key);
+    });
+  })?.[1];
 }
 
 export interface SkippedRow {
@@ -105,6 +127,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
   const forecastCategoryCol = colMap["Forecast Category"];
   const forecastCol = colMap["Forecast"] ?? colMap["Forecasted Deal"];
   const upsideCol = colMap["Upside"] ?? colMap["Upside Deal"];
+  const accountNameCol = findColumn(colMap, ["Account Name", "Account"]);
+  const productCol = findColumn(colMap, ["Product", "Products", "Product Name", "Product Family", "Primary Product", "Product: Product Name", "Product: Product Family", "Opportunity Product: Product Name", "Opportunity Product: Product Family"]);
 
   const results: ForecastRow[] = [];
   const skipped: SkippedRow[] = [];
@@ -161,6 +185,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       Probability: probability,
       Forecast: forecastVal ? "TRUE" : "",
       Upside: upsideVal ? "TRUE" : "",
+      "Account Name": accountNameCol !== undefined ? String(row[accountNameCol] ?? "").trim() : "",
+      Product: productCol !== undefined ? String(row[productCol] ?? "").trim() : "",
     });
   }
 
@@ -169,7 +195,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
 
 export function createForecastWorkbook(rows: ForecastRow[], version: string): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows, {
-    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside"],
+    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside", "Account Name", "Product"],
   });
 
   ws["!cols"] = [
@@ -182,6 +208,8 @@ export function createForecastWorkbook(rows: ForecastRow[], version: string): XL
     { wch: 12 },
     { wch: 10 },
     { wch: 10 },
+    { wch: 28 },
+    { wch: 28 },
   ];
 
   const wb = XLSX.utils.book_new();
