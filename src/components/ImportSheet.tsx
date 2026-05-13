@@ -48,6 +48,52 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'primary product': 'productName',
 };
 
+function parseImportDate(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === '') return '';
+
+  // Excel serial number → date
+  if (typeof raw === 'number' && isFinite(raw)) {
+    const ms = Math.round((raw - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  if (raw instanceof Date) {
+    if (isNaN(raw.getTime())) return '';
+    return `${raw.getUTCFullYear()}-${String(raw.getUTCMonth() + 1).padStart(2, '0')}-${String(raw.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  const s = String(raw).trim();
+  if (!s) return '';
+
+  // ISO YYYY-MM-DD
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const y = +iso[1], m = +iso[2], d = +iso[3];
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // M/D/YYYY (Salesforce US default)
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (us) {
+    let y = +us[3]; const m = +us[1]; const d = +us[2];
+    if (y < 100) y += 2000;
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // Fallback: best-effort, but use UTC parts
+  const fallback = new Date(s);
+  if (!isNaN(fallback.getTime())) {
+    return `${fallback.getUTCFullYear()}-${String(fallback.getUTCMonth() + 1).padStart(2, '0')}-${String(fallback.getUTCDate()).padStart(2, '0')}`;
+  }
+  return '';
+}
+
 function autoMap(headers: string[]): Partial<ColumnMapping> {
   const mapping: Partial<ColumnMapping> = {};
   for (const h of headers) {
@@ -122,12 +168,7 @@ export default function ImportSheet() {
 
         const importDate = new Date().toISOString();
         const opps: Opportunity[] = rows.map((row, i) => {
-          const rawDate = row[mapping.closeDate || ''] || '';
-          let closeDate = '';
-          if (rawDate) {
-            const parsed = new Date(rawDate);
-            closeDate = isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
-          }
+          const closeDate = parseImportDate(row[mapping.closeDate || '']);
 
           return {
             id: String(row[mapping.id || ''] || `import-${Date.now()}-${i}`).trim(),

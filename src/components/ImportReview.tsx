@@ -44,6 +44,9 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
     if (existing.stage.trim() !== opp.stage.trim()) changes.push(`Stage: ${existing.stage} → ${opp.stage}`);
     if (existing.repName !== opp.repName) changes.push(`Rep: ${existing.repName} → ${opp.repName}`);
     if (existing.name !== opp.name) changes.push(`Name: ${existing.name} → ${opp.name}`);
+    if ((existing.productName || '') !== (opp.productName || '')) {
+      changes.push(`Product: ${existing.productName || '(empty)'} → ${opp.productName || '(empty)'}`);
+    }
     const resolvedClassification = resolveImportedClassification(existing.classification, opp.classification);
     if (existing.classification !== resolvedClassification) {
       changes.push(`Classification: ${existing.classification} → ${resolvedClassification}`);
