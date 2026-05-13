@@ -1,120 +1,55 @@
+# Fix import data integrity: Close Date & Product
 
-Goal: align Sales Compass commission math with the source calculator, add post-close commission detail inputs, and make Closed Won/omitted states sticky so imports cannot overwrite them or reintroduce excluded deals.
+## Root causes
 
-1. Extend opportunity data with commission-specific fields that survive imports
-- Add optional per-opportunity commission detail fields to `src/types/forecast.ts`, separate from forecast math:
-  - `commissionMrr`
-  - `commissionTermYears`
-  - `commissionPaymentType` (`annual` | `upfront`)
-  - `commissionSpiff`
-  - `commissionNotes`
-- Keep these editable after close so you can enrich deals like Tim Lake’s without changing the imported source fields.
-- Include these fields in backup/restore validation in `src/components/DataBackup.tsx`.
+**1. Close Date not updating on re-import**
 
-2. Make Closed Won and omitted classifications import-safe
-- Update `resolveImportedClassification()` in `src/lib/forecastClassification.ts` so manual terminal states are sticky:
-  - existing `omitted` always stays `omitted`
-  - existing `closed_won` stays `closed_won` unless you explicitly choose to change it in-app
-  - existing `lost` stays `lost` unless you explicitly change it in-app
-- Preserve the current project rule that omitted has the highest priority.
-- Update the startup migration in `src/context/ForecastContext.tsx` so it does not auto-promote stage text over `omitted`, and does not reclassify a manually locked Closed Won record just because a fresh import has a different non-terminal category.
-- In `importOpportunities()`, preserve local manual commission detail fields and notes when merging imported records, not just classification.
-- Update `src/components/ImportReview.tsx` so the review shows the resolved/sticky classification outcome rather than implying imports will overwrite Closed Won deals.
+`src/components/ImportSheet.tsx` reads the workbook with `XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })` — no `cellDates: true`. Excel date cells therefore arrive as **serial numbers** (e.g. `45657`), not date strings.
 
-3. Replace the current commission formula with the source calculator’s model
-- Refactor `src/lib/commissionUtils.ts` to use the same payout basis as the source app:
-  - annual ACV from the commission basis
-  - derived base rate from quota + annual variable comp
-  - LTC / multi-year multipliers
-  - paid-up-front multipliers
-  - quarterly accelerator bands
-  - 50% of annual ACV cap
-  - SPIFF added after payout logic
-- Remove the current monthly bucket-splitting logic as the primary expected commission calculation, since that is what is causing mismatches like `$675.69` vs `$645.81`.
-- Keep the utility pure and deterministic so exact source-app examples can be regression tested.
+The importer then runs `new Date(rawDate)` on that number, which JavaScript interprets as **milliseconds since epoch** — so every Excel date collapses to `1970-01-01`. Two different "real" close dates produce the same garbage `1970-01-01` string, so `ImportReview` sees `existing.closeDate === incoming.closeDate`, marks the row **"unchanged"**, leaves it deselected, and the new close date is never written.
 
-4. Shift the commission settings model to quarter-aware source inputs
-- Update `src/components/CommissionSettings.tsx` and related types so settings use the same vocabulary as the source calculator:
-  - monthly or quarterly MRR quota basis, whichever matches the source logic exactly
-  - annual variable compensation
-  - prior booked / prior payout context for the quarter if needed by the source math
-- Show derived rate as read-only support text rather than the main editable control.
-- Keep per-rep normalization case-insensitive using the existing rep matching rules.
+(`src/lib/transformSalesforce.ts` avoids this with its own `excelDateToString` helper that uses the `(serial - 25569) * 86400 * 1000` conversion. `ImportSheet` was never given that helper.)
 
-5. Add post-close commission detail editing in the commission review
-- Enhance `src/components/CommissionTracker.tsx` so each row can expand or open an inline editor for:
-  - commission MRR / basis
-  - term years
-  - annual vs upfront
-  - SPIFF
-  - optional commission note
-- Recompute expected commission immediately when these details change.
-- Make the row show the actual payout drivers:
-  - annual ACV used
-  - multiplier applied
-  - accelerator applied
-  - cap status
-- Keep the anomaly workflow intact:
-  - expected commission
-  - company statement amount
-  - variance
-  - note
-  - show anomalies only
+**2. Product column not importing**
 
-6. Keep the UI month-filtered, but compute with the proper source context
-- Preserve the month selector and rep filter because that matches your statement review workflow.
-- If the source calculator uses quarter-based accelerator context, compute using quarter state while still displaying rows in the selected month.
-- Replace the current confusing attainment text with labels that match the actual source logic, such as:
-  - starting attainment for accelerator
-  - accelerator band applied
-  - quota context used for the calculation
-- Avoid percentage transitions like `0% -> 445%` unless they are explicitly labeled and meaningful.
+The Product mapping itself is correct — `productName` is written when an opportunity is *new*. The bug only hits **existing** opportunities:
 
-7. Harden omitted-deal exclusion everywhere in commission review
-- Update commission eligibility logic in `src/lib/commissionUtils.ts` so omitted opportunities never appear, even if:
-  - stage text is `Closed Won`
-  - the deal was previously migrated
-  - an import later tries to reclassify it
-- Base eligibility on the normalized app classification, not raw import stage text.
+- `ImportReview.buildIncomingItems` does not compare `productName`, so a row whose only change is a newly-populated Product is classified as **"unchanged"**, deselected, and skipped.
+- Even when other fields force the row into "updated", the changes panel never tells the user that Product is being set, which makes the feature look broken.
 
-8. Preserve manual local edits during imports
-- In `src/context/ForecastContext.tsx`, keep these local/manual fields when an imported opportunity matches an existing one:
-  - classification protections
-  - notes
-  - commission detail fields
-  - any other manually maintained commission review metadata tied to that deal
-- Treat imported Salesforce data as updating source fields like amount, stage, rep, and close date, while local commission enrichment remains authoritative unless explicitly edited by the user.
+## Fix
 
-9. Add regression coverage for the exact failure modes
-- Expand `src/test/commissionUtils.test.ts` to cover:
-  - Tim Lake example producing the source-app result near `$645.81`
-  - multi-year annual vs upfront multipliers
-  - SPIFF handling
-  - quarter/accelerator behavior
-  - omitted Closed Won deals never appearing
-- Add tests for classification merge rules in either `src/test/commissionUtils.test.ts` or a new focused import-classification test:
-  - existing `closed_won` is not downgraded by incoming commit/upside/unclassified
-  - existing `omitted` is never overwritten
-  - manual commission detail fields survive imports
-- Add an Import Review regression case so the previewed change list matches the actual sticky merge behavior.
+### A. Robust date parsing in `src/components/ImportSheet.tsx`
 
-Technical details
-- Files to update:
-  - `src/types/forecast.ts`
-  - `src/lib/forecastClassification.ts`
-  - `src/context/ForecastContext.tsx`
-  - `src/lib/commissionUtils.ts`
-  - `src/components/CommissionSettings.tsx`
-  - `src/components/CommissionTracker.tsx`
-  - `src/components/ImportReview.tsx`
-  - `src/components/DataBackup.tsx`
-  - `src/test/commissionUtils.test.ts`
-  - likely one new import/classification regression test file
-- Key design rule:
-  - Imports may refresh Salesforce fields, but they must not overwrite manual Closed Won / omitted intent or manually entered commission-enrichment data.
+Add a `parseImportDate` helper that handles all three forms Excel/CSV exports produce, and call it from the row mapper:
 
-Expected result
-- Once a deal is Closed Won locally, later imports will not downgrade or overwrite that status.
-- Omitted deals will stay excluded from commission review permanently.
-- You’ll be able to add post-close details like multi-year term, paid-up-front, and SPIFF on each deal, and the commission review will pull them automatically.
-- Deals in Sales Compass will match the source calculator much more closely because both apps will use the same commission model.
+- **Number** → treat as Excel serial: `new Date(Math.round((n - 25569) * 86400 * 1000))`, then format `YYYY-MM-DD` using UTC getters.
+- **`YYYY-MM-DD`** ISO string → construct via `Date.UTC(y, m-1, d)`.
+- **`M/D/YYYY` or `MM/DD/YYYY`** (Salesforce US default) → construct via `Date.UTC(y, m-1, d)`; reject impossible day/month combos.
+- Anything else → empty string (existing behavior).
+
+All output is normalized to `YYYY-MM-DD` so equality checks in `ImportReview` line up with previously-imported values.
+
+### B. Surface Product changes in `src/components/ImportReview.tsx`
+
+In `buildIncomingItems`, add one more diff:
+
+```
+if ((existing.productName || '') !== (opp.productName || ''))
+  changes.push(`Product: ${existing.productName || '(empty)'} → ${opp.productName || '(empty)'}`);
+```
+
+This makes Product-only changes show up as **Updated** (auto-selected), and labels Product changes inside mixed updates so the user can see the field flowing through.
+
+No business-logic changes elsewhere — `ForecastContext.importOpportunities` already spreads `...o` onto the merged record, so `productName` persists once the row is selected.
+
+### Files touched
+
+- `src/components/ImportSheet.tsx` — add `parseImportDate`, replace the inline `new Date(rawDate)` block.
+- `src/components/ImportReview.tsx` — add `productName` to the diff list in `buildIncomingItems`.
+
+### Verification
+
+1. Re-import the latest Salesforce export.
+2. Confirm rows with a changed Close Date now appear under **Updated** with the real `YYYY-MM-DD → YYYY-MM-DD` diff (no more 1970 dates).
+3. Confirm rows that newly gained a Product appear under **Updated** with a `Product: (empty) → <value>` line, and after Apply the Product column in the Opportunity list is populated.
