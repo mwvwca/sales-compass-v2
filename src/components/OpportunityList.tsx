@@ -383,9 +383,24 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                       {isEditing ? (
                         <input value={editState.stage} onChange={e => setEditState(s => ({ ...s, stage: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} />
                       ) : (
-                        <span className="text-secondary-foreground">{formatStageWithPct(opp.stage)}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-secondary-foreground">{formatStageWithPct(opp.stage)}</span>
+                          {(() => {
+                            const s = getStaleness(opp);
+                            if (!s) return null;
+                            const cls = s.tone === 'positive' ? 'bg-positive/10 text-positive border-positive/30'
+                              : s.tone === 'upside' ? 'bg-upside/10 text-upside border-upside/30'
+                              : 'bg-negative/10 text-negative border-negative/30';
+                            return (
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}`} title="Days since last change">
+                                {s.days}d · {s.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       )}
                     </td>
+
                     <td className="px-3 py-2.5">
                       {isEditing ? (
                         <input value={editState.productName} onChange={e => setEditState(s => ({ ...s, productName: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} placeholder="Product" />
