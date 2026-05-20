@@ -238,44 +238,8 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
               className="bg-secondary border border-border rounded px-2 pl-6 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-44"
             />
           </div>
-          <div className="flex gap-1 bg-secondary rounded-md p-0.5">
-            <button
-              onClick={() => handleMonthChange('all')}
-              className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedMonth === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              All
-            </button>
-            {months.map(m => (
-              <button
-                key={m}
-                onClick={() => handleMonthChange(m)}
-                className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedMonth === m ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {getMonthLabel(m)}
-              </button>
-            ))}
-          </div>
-          {selectedMonth !== 'all' && weeks.length > 0 && (
-            <div className="flex gap-1 bg-secondary rounded-md p-0.5">
-              <button
-                onClick={() => setSelectedWeek('all')}
-                className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedWeek === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                All
-              </button>
-              {weeks.map((w, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedWeek(i)}
-                  className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedWeek === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-                  title={`${w.start.toLocaleDateString()} – ${w.end.toLocaleDateString()}`}
-                >
-                  {w.label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
+
         <div className="flex items-center gap-1">
           {classificationFilters.map(f => {
             const active = activeFilters.has(f.key);
