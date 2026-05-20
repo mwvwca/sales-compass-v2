@@ -368,8 +368,8 @@ export default function DrQuality() {
                 {detailRows.slice(0, 500).map(({ opp, score }) => {
                   const isExp = expanded.has(opp.id);
                   return (
-                    <>
-                      <TableRow key={opp.id} className="cursor-pointer" onClick={() => toggle(opp.id)}>
+                    <React.Fragment key={opp.id}>
+                      <TableRow className="cursor-pointer" onClick={() => toggle(opp.id)}>
                         <TableCell className="p-2">
                           {isExp ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                         </TableCell>
