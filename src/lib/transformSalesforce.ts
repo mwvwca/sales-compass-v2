@@ -13,6 +13,7 @@ export interface ForecastRow {
   Upside?: string;
   "Account Name"?: string;
   Product?: string;
+  "Channel Account Manager"?: string;
 }
 
 const STAGE_PROBABILITY_MAP: Record<string, string> = {
