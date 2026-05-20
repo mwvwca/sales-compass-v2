@@ -535,7 +535,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       )}
 
       <Dialog open={!!notesOpp} onOpenChange={(open) => { if (!open) setNotesOpp(null); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm">Notes — {notesOpp?.name}</DialogTitle>
           </DialogHeader>
@@ -554,8 +554,65 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
               }
             }}>Save</Button>
           </div>
+
+          {notesOpp && (() => {
+            const entries = changelog
+              .filter(e => e.opportunityId === notesOpp.id)
+              .sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+            const groups = entries.reduce<Record<string, ChangeLogEntry[]>>((acc, e) => {
+              const k = `${e.importDate}__${e.fileName}`;
+              (acc[k] ||= []).push(e);
+              return acc;
+            }, {});
+            const groupKeys = Object.keys(groups);
+            const fieldLabel = (f: ChangeLogEntry['field']) =>
+              f === 'closeDate' ? 'Close Date' : f === 'amount' ? 'Amount' : f.charAt(0).toUpperCase() + f.slice(1);
+            const fieldClass = (f: ChangeLogEntry['field']) =>
+              f === 'amount' ? 'bg-commit/10 text-commit'
+              : f === 'closeDate' ? 'bg-upside/10 text-upside'
+              : f === 'stage' ? 'bg-positive/10 text-positive'
+              : f === 'classification' ? 'bg-secondary text-foreground'
+              : 'bg-secondary text-muted-foreground';
+            const fmtVal = (f: ChangeLogEntry['field'], v: string) => f === 'amount' ? fmt(Number(v) || 0) : v;
+            return (
+              <div className="mt-2 pt-3 border-t border-border">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Change history</h4>
+                {groupKeys.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No changes recorded yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {groupKeys.map(k => {
+                      const items = groups[k];
+                      const first = items[0];
+                      const d = new Date(first.importDate);
+                      const label = `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                      return (
+                        <div key={k} className="border border-border rounded-md overflow-hidden">
+                          <div className="bg-secondary/50 px-3 py-1.5 flex items-center justify-between text-[10px]">
+                            <span className="font-medium truncate">{first.fileName}</span>
+                            <span className="text-muted-foreground font-mono">{label}</span>
+                          </div>
+                          <ul className="divide-y divide-border">
+                            {items.map(e => (
+                              <li key={e.id} className="px-3 py-1.5 flex items-center gap-2 text-xs flex-wrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${fieldClass(e.field)}`}>{fieldLabel(e.field)}</span>
+                                <span className="font-mono text-muted-foreground line-through">{fmtVal(e.field, e.oldValue)}</span>
+                                <span className="text-muted-foreground">→</span>
+                                <span className="font-mono font-medium">{fmtVal(e.field, e.newValue)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
