@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, TrendingUp } from 'lucide-react';
 import CommissionLock from '@/components/CommissionLock';
