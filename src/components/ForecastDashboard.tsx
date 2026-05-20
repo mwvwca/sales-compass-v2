@@ -17,7 +17,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
 export default function ForecastDashboard() {
-  const { reps, opportunities } = useForecast();
+  const { reps, opportunities, monthlyCommits, annualStretchGoals } = useForecast();
   const [scope, setScope] = useState<Scope>('quarterly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
