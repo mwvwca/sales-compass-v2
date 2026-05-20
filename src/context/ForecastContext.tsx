@@ -220,6 +220,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.commissionSettings, state.commissionSettings);
     saveToStorage(STORAGE_KEYS.commissionReviews, state.commissionReviews);
     saveToStorage(STORAGE_KEYS.commissionPinHash, state.commissionPinHash);
+    saveToStorage(STORAGE_KEYS.monthlyCommits, state.monthlyCommits);
+    saveToStorage(STORAGE_KEYS.annualStretchGoals, state.annualStretchGoals);
 
     const sizeKB = getStorageSizeKB();
     if (sizeKB > 4000) {
@@ -234,6 +236,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.commissionSettings,
     state.commissionReviews,
     state.commissionPinHash,
+    state.monthlyCommits,
+    state.annualStretchGoals,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
