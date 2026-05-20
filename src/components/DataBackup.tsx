@@ -118,13 +118,15 @@ export default function DataBackup() {
     commissionSettings,
     commissionReviews,
     commissionPinHash,
+    monthlyCommits,
+    annualStretchGoals,
     restoreFromBackup,
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleSave = () => {
-    const backup = {
+    downloadBackup({
       reps,
       opportunities,
       imports,
@@ -132,15 +134,9 @@ export default function DataBackup() {
       commissionSettings,
       commissionReviews,
       commissionPinHash,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `forecast-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+      monthlyCommits,
+      annualStretchGoals,
+    });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };
 
