@@ -114,6 +114,37 @@ export default function ForecastDashboard() {
 
   const variance = totalWon - totalGoal;
 
+  // Mgmt Commit aggregation for current scope
+  const mgmtCommitTotal = useMemo(() => {
+    const yr = anchor.getUTCFullYear();
+    let monthKeys: string[] = [];
+    if (scope === 'monthly' || scope === 'weekly') {
+      monthKeys = [anchorMonthKey];
+    } else if (scope === 'quarterly') {
+      monthKeys = getQuarterMonths(anchorQuarter);
+    } else {
+      monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+    }
+    const matched = monthlyCommits.filter(m => monthKeys.includes(m.monthKey));
+    if (matched.length === 0) return null;
+    return matched.reduce((s, m) => s + m.commitAmount, 0);
+  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyCommits]);
+
+  // Stretch aggregation (prorated)
+  const stretchForYear = annualStretchGoals.find(g => g.year === anchor.getUTCFullYear());
+  const stretchProrated = useMemo(() => {
+    if (!stretchForYear) return null;
+    const a = stretchForYear.stretchAmount;
+    if (scope === 'weekly') return a / 52;
+    if (scope === 'monthly') return a / 12;
+    if (scope === 'quarterly') return a / 4;
+    return a;
+  }, [stretchForYear, scope]);
+
+  const goToGoals = () => {
+    window.dispatchEvent(new CustomEvent('forecast:navigate-tab', { detail: 'goals' }));
+  };
+
   // Per-rep summary, bucketed
   const summaryByRep = useMemo(() => {
     const summary: Record<string, {
