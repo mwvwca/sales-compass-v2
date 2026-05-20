@@ -212,6 +212,7 @@ export default function ImportSheet() {
             importDate,
             accountName: String(row[mapping.accountName || ''] || '').trim() || undefined,
             productName: String(row[mapping.productName || ''] || '').trim() || undefined,
+            channelAccountManager: String(row[mapping.channelAccountManager || ''] || '').trim() || undefined,
           };
         });
 
