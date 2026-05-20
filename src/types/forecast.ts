@@ -54,6 +54,24 @@ export interface Opportunity {
   channelAccountManager?: string;
 }
 
+export interface MonthlyCommit {
+  id: string;
+  monthKey: string;
+  commitAmount: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnnualStretchGoal {
+  id: string;
+  year: number;
+  stretchAmount: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ImportRecord {
   id: string;
   date: string;

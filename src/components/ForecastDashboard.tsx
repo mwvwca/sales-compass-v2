@@ -17,7 +17,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
 export default function ForecastDashboard() {
-  const { reps, opportunities } = useForecast();
+  const { reps, opportunities, monthlyCommits, annualStretchGoals } = useForecast();
   const [scope, setScope] = useState<Scope>('quarterly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
@@ -113,6 +113,37 @@ export default function ForecastDashboard() {
   }, [selectedRep, repNames, reps, scopeQuarters, goalDivisor]);
 
   const variance = totalWon - totalGoal;
+
+  // Mgmt Commit aggregation for current scope
+  const mgmtCommitTotal = useMemo(() => {
+    const yr = anchor.getUTCFullYear();
+    let monthKeys: string[] = [];
+    if (scope === 'monthly' || scope === 'weekly') {
+      monthKeys = [anchorMonthKey];
+    } else if (scope === 'quarterly') {
+      monthKeys = getQuarterMonths(anchorQuarter);
+    } else {
+      monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+    }
+    const matched = monthlyCommits.filter(m => monthKeys.includes(m.monthKey));
+    if (matched.length === 0) return null;
+    return matched.reduce((s, m) => s + m.commitAmount, 0);
+  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyCommits]);
+
+  // Stretch aggregation (prorated)
+  const stretchForYear = annualStretchGoals.find(g => g.year === anchor.getUTCFullYear());
+  const stretchProrated = useMemo(() => {
+    if (!stretchForYear) return null;
+    const a = stretchForYear.stretchAmount;
+    if (scope === 'weekly') return a / 52;
+    if (scope === 'monthly') return a / 12;
+    if (scope === 'quarterly') return a / 4;
+    return a;
+  }, [stretchForYear, scope]);
+
+  const goToGoals = () => {
+    window.dispatchEvent(new CustomEvent('forecast:navigate-tab', { detail: 'goals' }));
+  };
 
   // Per-rep summary, bucketed
   const summaryByRep = useMemo(() => {
@@ -235,11 +266,41 @@ export default function ForecastDashboard() {
       {/* Summary Cards */}
       <div className="space-y-2">
         <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{scopeLabel} View</span>
-        <div className="grid grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Row 1: AE Quota, Mgmt Commit, Stretch, Closed Won */}
+          <div className="bg-card border border-border rounded-lg p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">AE Quota</p>
+            <p className="text-xl font-mono font-semibold">{fmt(totalGoal)}</p>
+            <p className="text-xs font-mono mt-0.5 text-muted-foreground">Sum of rep quotas</p>
+          </div>
+          <div className="bg-card border border-border rounded-lg p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Mgmt Commit</p>
+            {mgmtCommitTotal !== null ? (
+              <p className="text-xl font-mono font-semibold text-commit">{fmt(mgmtCommitTotal)}</p>
+            ) : (
+              <p className="text-xl font-mono font-semibold text-muted-foreground">
+                Not set <button onClick={goToGoals} className="ml-1 text-[11px] underline text-primary">Set now</button>
+              </p>
+            )}
+          </div>
+          <div className="bg-card border border-border rounded-lg p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Stretch</p>
+            {stretchProrated !== null ? (
+              <p className="text-xl font-mono font-semibold text-upside">{fmt(stretchProrated)}</p>
+            ) : (
+              <p className="text-xl font-mono font-semibold text-muted-foreground">
+                Not set <button onClick={goToGoals} className="ml-1 text-[11px] underline text-primary">Set now</button>
+              </p>
+            )}
+          </div>
+          <div className="bg-card border border-border rounded-lg p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Closed Won</p>
+            <p className="text-xl font-mono font-semibold text-positive">{fmt(totalWon)}</p>
+            <p className="text-xs font-mono mt-0.5 text-positive">{pct(totalWon, totalGoal)} of goal</p>
+          </div>
+          {/* Row 2: Total Pipe, Commit, Upside, Variance */}
           {[
-            { label: 'Goal', value: fmt(totalGoal), sub: null as string | null, color: '' },
             { label: 'Total Pipe', value: fmt(totalPipe), sub: pct(totalPipe, totalGoal), color: 'text-foreground' },
-            { label: 'Closed Won', value: fmt(totalWon), sub: pct(totalWon, totalGoal), color: 'text-positive' },
             { label: 'Commit', value: fmt(totalCommit), sub: pct(totalCommit, totalGoal), color: 'text-commit' },
             { label: 'Upside', value: fmt(totalUpside), sub: pct(totalUpside, totalGoal), color: 'text-upside' },
             { label: 'Variance', value: fmt(variance), sub: pct(totalWon, totalGoal), color: variance >= 0 ? 'text-positive' : 'text-negative' },
@@ -247,11 +308,12 @@ export default function ForecastDashboard() {
             <div key={c.label} className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
               <p className={`text-xl font-mono font-semibold ${c.color}`}>{c.value}</p>
-              {c.sub && <p className={`text-xs font-mono mt-0.5 ${c.color || 'text-muted-foreground'}`}>{c.sub} of goal</p>}
+              <p className={`text-xs font-mono mt-0.5 ${c.color}`}>{c.sub} of goal</p>
             </div>
           ))}
         </div>
       </div>
+
 
       {/* Pipeline Coverage */}
       <PipelineCoverage

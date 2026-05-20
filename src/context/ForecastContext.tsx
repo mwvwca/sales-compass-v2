@@ -8,6 +8,8 @@ import type {
   CommissionReviewsMap,
   CommissionSettingsMap,
   RepCommissionSettings,
+  MonthlyCommit,
+  AnnualStretchGoal,
 } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
@@ -22,6 +24,8 @@ const STORAGE_KEYS = {
   commissionSettings: 'forecast_commission_settings',
   commissionReviews: 'forecast_commission_reviews',
   commissionPinHash: 'forecast_commission_pin_hash',
+  monthlyCommits: 'forecast_monthly_commits',
+  annualStretchGoals: 'forecast_annual_stretch_goals',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -111,6 +115,8 @@ interface ForecastState {
   commissionSettings: CommissionSettingsMap;
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;
+  monthlyCommits: MonthlyCommit[];
+  annualStretchGoals: AnnualStretchGoal[];
   loading: boolean;
 }
 
@@ -132,6 +138,10 @@ interface ForecastContextValue extends ForecastState {
   updateCommissionOpportunityReview: (repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => void;
   updateOpportunityCommissionDetails: (id: string, updates: Pick<Opportunity, 'commissionMrr' | 'commissionTermYears' | 'commissionPaymentType' | 'commissionSpiff' | 'commissionNotes'>) => void;
   setCommissionPinHash: (pinHash: string | null) => void;
+  setMonthlyCommit: (monthKey: string, amount: number, notes?: string) => void;
+  getMonthlyCommit: (monthKey: string) => MonthlyCommit | undefined;
+  setAnnualStretch: (year: number, amount: number, notes?: string) => void;
+  getAnnualStretch: (year: number) => AnnualStretchGoal | undefined;
   restoreFromBackup: (data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -141,6 +151,8 @@ interface ForecastContextValue extends ForecastState {
     commissionSettings?: CommissionSettingsMap;
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
+    monthlyCommits?: MonthlyCommit[];
+    annualStretchGoals?: AnnualStretchGoal[];
   }) => void;
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
 }
@@ -187,6 +199,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionSettings: loadFromStorage(STORAGE_KEYS.commissionSettings, {}),
       commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
       commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
+      monthlyCommits: loadFromStorage<MonthlyCommit[]>(STORAGE_KEYS.monthlyCommits, []),
+      annualStretchGoals: loadFromStorage<AnnualStretchGoal[]>(STORAGE_KEYS.annualStretchGoals, []),
       loading: false,
     };
   });
@@ -206,6 +220,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.commissionSettings, state.commissionSettings);
     saveToStorage(STORAGE_KEYS.commissionReviews, state.commissionReviews);
     saveToStorage(STORAGE_KEYS.commissionPinHash, state.commissionPinHash);
+    saveToStorage(STORAGE_KEYS.monthlyCommits, state.monthlyCommits);
+    saveToStorage(STORAGE_KEYS.annualStretchGoals, state.annualStretchGoals);
 
     const sizeKB = getStorageSizeKB();
     if (sizeKB > 4000) {
@@ -220,6 +236,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.commissionSettings,
     state.commissionReviews,
     state.commissionPinHash,
+    state.monthlyCommits,
+    state.annualStretchGoals,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
@@ -475,6 +493,48 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, commissionPinHash: pinHash }));
   }, []);
 
+  const setMonthlyCommit = useCallback((monthKey: string, amount: number, notes?: string) => {
+    setState(s => {
+      const now = new Date().toISOString();
+      const existing = s.monthlyCommits.find(m => m.monthKey === monthKey);
+      const trimmedNotes = notes?.trim() ? notes.trim() : undefined;
+      const next: MonthlyCommit = existing
+        ? { ...existing, commitAmount: amount, notes: trimmedNotes, updatedAt: now }
+        : { id: crypto.randomUUID(), monthKey, commitAmount: amount, notes: trimmedNotes, createdAt: now, updatedAt: now };
+      return {
+        ...s,
+        monthlyCommits: existing
+          ? s.monthlyCommits.map(m => (m.monthKey === monthKey ? next : m))
+          : [...s.monthlyCommits, next],
+      };
+    });
+  }, []);
+
+  const getMonthlyCommit = useCallback((monthKey: string) => {
+    return state.monthlyCommits.find(m => m.monthKey === monthKey);
+  }, [state.monthlyCommits]);
+
+  const setAnnualStretch = useCallback((year: number, amount: number, notes?: string) => {
+    setState(s => {
+      const now = new Date().toISOString();
+      const existing = s.annualStretchGoals.find(g => g.year === year);
+      const trimmedNotes = notes?.trim() ? notes.trim() : undefined;
+      const next: AnnualStretchGoal = existing
+        ? { ...existing, stretchAmount: amount, notes: trimmedNotes, updatedAt: now }
+        : { id: crypto.randomUUID(), year, stretchAmount: amount, notes: trimmedNotes, createdAt: now, updatedAt: now };
+      return {
+        ...s,
+        annualStretchGoals: existing
+          ? s.annualStretchGoals.map(g => (g.year === year ? next : g))
+          : [...s.annualStretchGoals, next],
+      };
+    });
+  }, []);
+
+  const getAnnualStretch = useCallback((year: number) => {
+    return state.annualStretchGoals.find(g => g.year === year);
+  }, [state.annualStretchGoals]);
+
   const restoreFromBackup = useCallback((data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -484,6 +544,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     commissionSettings?: CommissionSettingsMap;
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
+    monthlyCommits?: MonthlyCommit[];
+    annualStretchGoals?: AnnualStretchGoal[];
   }) => {
     setState(s => ({
       ...s,
@@ -495,6 +557,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionSettings: data.commissionSettings || {},
       commissionReviews: data.commissionReviews || {},
       commissionPinHash: data.commissionPinHash ?? null,
+      monthlyCommits: data.monthlyCommits || [],
+      annualStretchGoals: data.annualStretchGoals || [],
     }));
   }, []);
 
@@ -523,6 +587,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     updateCommissionOpportunityReview,
     updateOpportunityCommissionDetails,
     setCommissionPinHash,
+    setMonthlyCommit,
+    getMonthlyCommit,
+    setAnnualStretch,
+    getAnnualStretch,
     restoreFromBackup,
     getOpportunityHistory,
   };

@@ -4,6 +4,7 @@ import { Download, Upload } from 'lucide-react';
 import { useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
+import { downloadBackup } from '@/lib/backupDownload';
 
 const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted']);
 
@@ -77,6 +78,24 @@ const commissionMonthlyReviewSchema = z.object({
   opportunities: z.record(z.string(), commissionOpportunityReviewSchema),
 });
 
+const monthlyCommitSchema = z.object({
+  id: z.string(),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  commitAmount: z.number().finite().min(0),
+  notes: z.string().max(1000).optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const annualStretchSchema = z.object({
+  id: z.string(),
+  year: z.number().int().min(2020).max(2040),
+  stretchAmount: z.number().finite().min(0),
+  notes: z.string().max(1000).optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 const backupSchema = z.object({
   reps: z.array(repSchema).max(1000),
   opportunities: z.array(opportunitySchema).max(10000),
@@ -85,6 +104,8 @@ const backupSchema = z.object({
   commissionSettings: z.record(z.string(), commissionSettingSchema).optional(),
   commissionReviews: z.record(z.string(), commissionMonthlyReviewSchema).optional(),
   commissionPinHash: z.string().max(256).nullable().optional(),
+  monthlyCommits: z.array(monthlyCommitSchema).max(120).optional(),
+  annualStretchGoals: z.array(annualStretchSchema).max(20).optional(),
   exportedAt: z.string().optional(),
 });
 
@@ -97,13 +118,15 @@ export default function DataBackup() {
     commissionSettings,
     commissionReviews,
     commissionPinHash,
+    monthlyCommits,
+    annualStretchGoals,
     restoreFromBackup,
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleSave = () => {
-    const backup = {
+    downloadBackup({
       reps,
       opportunities,
       imports,
@@ -111,15 +134,9 @@ export default function DataBackup() {
       commissionSettings,
       commissionReviews,
       commissionPinHash,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `forecast-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+      monthlyCommits,
+      annualStretchGoals,
+    });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };
 
