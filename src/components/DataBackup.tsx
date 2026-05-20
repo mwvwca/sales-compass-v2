@@ -4,6 +4,7 @@ import { Download, Upload } from 'lucide-react';
 import { useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
+import { downloadBackup } from '@/lib/backupDownload';
 
 const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted']);
 
