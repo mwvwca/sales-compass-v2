@@ -147,6 +147,29 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
+  // Per-opp last-change index from the changelog (fallback to importDate)
+  const lastChangeByOpp = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of changelog) {
+      const t = new Date(e.importDate).getTime();
+      const cur = map.get(e.opportunityId);
+      if (!cur || t > cur) map.set(e.opportunityId, t);
+    }
+    return map;
+  }, [changelog]);
+
+  const getStaleness = (opp: Opportunity) => {
+    const last = lastChangeByOpp.get(opp.id);
+    const ref = last || new Date(opp.importDate).getTime();
+    if (!ref || isNaN(ref)) return null;
+    const days = Math.floor((Date.now() - ref) / 86400000);
+    if (days < 0) return null;
+    if (days <= 14) return { days, label: 'active', tone: 'positive' as const };
+    if (days <= 30) return { days, label: 'aging', tone: 'upside' as const };
+    return { days, label: 'stale', tone: 'negative' as const };
+  };
+
+
   const startEdit = (opp: Opportunity) => {
     setEditingId(opp.id);
     setEditState({
