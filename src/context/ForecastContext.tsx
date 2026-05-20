@@ -115,6 +115,8 @@ interface ForecastState {
   commissionSettings: CommissionSettingsMap;
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;
+  monthlyCommits: MonthlyCommit[];
+  annualStretchGoals: AnnualStretchGoal[];
   loading: boolean;
 }
 
@@ -136,6 +138,10 @@ interface ForecastContextValue extends ForecastState {
   updateCommissionOpportunityReview: (repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => void;
   updateOpportunityCommissionDetails: (id: string, updates: Pick<Opportunity, 'commissionMrr' | 'commissionTermYears' | 'commissionPaymentType' | 'commissionSpiff' | 'commissionNotes'>) => void;
   setCommissionPinHash: (pinHash: string | null) => void;
+  setMonthlyCommit: (monthKey: string, amount: number, notes?: string) => void;
+  getMonthlyCommit: (monthKey: string) => MonthlyCommit | undefined;
+  setAnnualStretch: (year: number, amount: number, notes?: string) => void;
+  getAnnualStretch: (year: number) => AnnualStretchGoal | undefined;
   restoreFromBackup: (data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -145,6 +151,8 @@ interface ForecastContextValue extends ForecastState {
     commissionSettings?: CommissionSettingsMap;
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
+    monthlyCommits?: MonthlyCommit[];
+    annualStretchGoals?: AnnualStretchGoal[];
   }) => void;
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
 }
