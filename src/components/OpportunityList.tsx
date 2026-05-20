@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import type { Opportunity } from '@/types/forecast';
-import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
+import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
+import { getMonthKey, type Quarter } from '@/types/forecast';
 import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle } from 'lucide-react';
 import { getStagePercentage, formatStageWithPct } from '@/lib/utils';
 import OpportunityHistory from './OpportunityHistory';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+
 
 type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification' | 'productName';
 type SortDir = 'asc' | 'desc';
@@ -39,17 +40,10 @@ const classificationFilters: { key: Classification; label: string }[] = [
 
 // Filter out lost opps from the main list
 
-export default function OpportunityList({ opportunities, lostOpportunities = [], quarter }: Props) {
-  const { classifyOpportunity, updateOpportunity } = useForecast();
+export default function OpportunityList({ opportunities, lostOpportunities = [], quarter: _quarter }: Props) {
+  const { classifyOpportunity, updateOpportunity, changelog } = useForecast();
   const [notesOpp, setNotesOpp] = useState<{ id: string; name: string } | null>(null);
   const [notesText, setNotesText] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState<string | 'all'>(() => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const months = getQuarterMonths(quarter);
-    return months.includes(currentMonth) ? currentMonth : 'all';
-  });
-  const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,17 +55,6 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   // Filter out lost/graveyard opps from the main list (but keep omitted — they show greyed out)
   const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost'), [opportunities]);
 
-  const months = getQuarterMonths(quarter);
-  const weeks: WeekRange[] = useMemo(() => {
-    if (selectedMonth === 'all') return [];
-    return getWeeksInMonth(selectedMonth);
-  }, [selectedMonth]);
-
-  const handleMonthChange = (m: string | 'all') => {
-    setSelectedMonth(m);
-    setSelectedWeek('all');
-  };
-
   const toggleFilter = (cls: Classification) => {
     setActiveFilters(prev => {
       const next = new Set(prev);
@@ -81,29 +64,16 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     });
   };
 
-  const monthFiltered = selectedMonth === 'all'
-    ? activeOpportunities
-    : activeOpportunities.filter(o => getMonthKey(o.closeDate) === selectedMonth);
-
-  const weekFiltered = useMemo(() => {
-    if (selectedWeek === 'all' || weeks.length === 0) return monthFiltered;
-    const week = weeks[selectedWeek];
-    if (!week) return monthFiltered;
-    return monthFiltered.filter(o => {
-      const d = new Date(o.closeDate);
-      return d >= week.start && d <= week.end;
-    });
-  }, [monthFiltered, selectedWeek, weeks]);
-
   const searchFiltered = useMemo(() => {
-    if (!searchQuery.trim()) return weekFiltered;
+    if (!searchQuery.trim()) return activeOpportunities;
     const q = searchQuery.toLowerCase();
-    return weekFiltered.filter(o =>
+    return activeOpportunities.filter(o =>
       o.name.toLowerCase().includes(q) ||
       o.repName.toLowerCase().includes(q) ||
       o.stage.toLowerCase().includes(q)
     );
-  }, [weekFiltered, searchQuery]);
+  }, [activeOpportunities, searchQuery]);
+
 
   const classFiltered = searchFiltered.filter(o => activeFilters.has(o.classification));
 
@@ -176,6 +146,29 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   };
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+  // Per-opp last-change index from the changelog (fallback to importDate)
+  const lastChangeByOpp = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of changelog) {
+      const t = new Date(e.importDate).getTime();
+      const cur = map.get(e.opportunityId);
+      if (!cur || t > cur) map.set(e.opportunityId, t);
+    }
+    return map;
+  }, [changelog]);
+
+  const getStaleness = (opp: Opportunity) => {
+    const last = lastChangeByOpp.get(opp.id);
+    const ref = last || new Date(opp.importDate).getTime();
+    if (!ref || isNaN(ref)) return null;
+    const days = Math.floor((Date.now() - ref) / 86400000);
+    if (days < 0) return null;
+    if (days <= 14) return { days, label: 'active', tone: 'positive' as const };
+    if (days <= 30) return { days, label: 'aging', tone: 'upside' as const };
+    return { days, label: 'stale', tone: 'negative' as const };
+  };
+
 
   const startEdit = (opp: Opportunity) => {
     setEditingId(opp.id);
@@ -268,44 +261,8 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
               className="bg-secondary border border-border rounded px-2 pl-6 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-44"
             />
           </div>
-          <div className="flex gap-1 bg-secondary rounded-md p-0.5">
-            <button
-              onClick={() => handleMonthChange('all')}
-              className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedMonth === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              All
-            </button>
-            {months.map(m => (
-              <button
-                key={m}
-                onClick={() => handleMonthChange(m)}
-                className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedMonth === m ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {getMonthLabel(m)}
-              </button>
-            ))}
-          </div>
-          {selectedMonth !== 'all' && weeks.length > 0 && (
-            <div className="flex gap-1 bg-secondary rounded-md p-0.5">
-              <button
-                onClick={() => setSelectedWeek('all')}
-                className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedWeek === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                All
-              </button>
-              {weeks.map((w, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedWeek(i)}
-                  className={`px-2 py-1 text-xs font-mono rounded transition-colors ${selectedWeek === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}
-                  title={`${w.start.toLocaleDateString()} – ${w.end.toLocaleDateString()}`}
-                >
-                  {w.label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
+
         <div className="flex items-center gap-1">
           {classificationFilters.map(f => {
             const active = activeFilters.has(f.key);
@@ -333,9 +290,8 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                 const movedClassifications = new Set(moved.map(o => o.classification));
                 setActiveFilters(movedClassifications);
                 setSearchQuery('');
-                setSelectedMonth('all');
-                setSelectedWeek('all');
               }}
+
               className="ml-2 text-xs text-upside flex items-center gap-1 hover:underline cursor-pointer transition-colors hover:text-upside/80"
             >
               <ArrowRightLeft size={12} /> {moved.length} moved
@@ -427,9 +383,24 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                       {isEditing ? (
                         <input value={editState.stage} onChange={e => setEditState(s => ({ ...s, stage: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} />
                       ) : (
-                        <span className="text-secondary-foreground">{formatStageWithPct(opp.stage)}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-secondary-foreground">{formatStageWithPct(opp.stage)}</span>
+                          {(() => {
+                            const s = getStaleness(opp);
+                            if (!s) return null;
+                            const cls = s.tone === 'positive' ? 'bg-positive/10 text-positive border-positive/30'
+                              : s.tone === 'upside' ? 'bg-upside/10 text-upside border-upside/30'
+                              : 'bg-negative/10 text-negative border-negative/30';
+                            return (
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}`} title="Days since last change">
+                                {s.days}d · {s.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       )}
                     </td>
+
                     <td className="px-3 py-2.5">
                       {isEditing ? (
                         <input value={editState.productName} onChange={e => setEditState(s => ({ ...s, productName: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} placeholder="Product" />
@@ -564,7 +535,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       )}
 
       <Dialog open={!!notesOpp} onOpenChange={(open) => { if (!open) setNotesOpp(null); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm">Notes — {notesOpp?.name}</DialogTitle>
           </DialogHeader>
@@ -583,8 +554,65 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
               }
             }}>Save</Button>
           </div>
+
+          {notesOpp && (() => {
+            const entries = changelog
+              .filter(e => e.opportunityId === notesOpp.id)
+              .sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+            const groups = entries.reduce<Record<string, ChangeLogEntry[]>>((acc, e) => {
+              const k = `${e.importDate}__${e.fileName}`;
+              (acc[k] ||= []).push(e);
+              return acc;
+            }, {});
+            const groupKeys = Object.keys(groups);
+            const fieldLabel = (f: ChangeLogEntry['field']) =>
+              f === 'closeDate' ? 'Close Date' : f === 'amount' ? 'Amount' : f.charAt(0).toUpperCase() + f.slice(1);
+            const fieldClass = (f: ChangeLogEntry['field']) =>
+              f === 'amount' ? 'bg-commit/10 text-commit'
+              : f === 'closeDate' ? 'bg-upside/10 text-upside'
+              : f === 'stage' ? 'bg-positive/10 text-positive'
+              : f === 'classification' ? 'bg-secondary text-foreground'
+              : 'bg-secondary text-muted-foreground';
+            const fmtVal = (f: ChangeLogEntry['field'], v: string) => f === 'amount' ? fmt(Number(v) || 0) : v;
+            return (
+              <div className="mt-2 pt-3 border-t border-border">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Change history</h4>
+                {groupKeys.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No changes recorded yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {groupKeys.map(k => {
+                      const items = groups[k];
+                      const first = items[0];
+                      const d = new Date(first.importDate);
+                      const label = `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                      return (
+                        <div key={k} className="border border-border rounded-md overflow-hidden">
+                          <div className="bg-secondary/50 px-3 py-1.5 flex items-center justify-between text-[10px]">
+                            <span className="font-medium truncate">{first.fileName}</span>
+                            <span className="text-muted-foreground font-mono">{label}</span>
+                          </div>
+                          <ul className="divide-y divide-border">
+                            {items.map(e => (
+                              <li key={e.id} className="px-3 py-1.5 flex items-center gap-2 text-xs flex-wrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${fieldClass(e.field)}`}>{fieldLabel(e.field)}</span>
+                                <span className="font-mono text-muted-foreground line-through">{fmtVal(e.field, e.oldValue)}</span>
+                                <span className="text-muted-foreground">→</span>
+                                <span className="font-mono font-medium">{fmtVal(e.field, e.newValue)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
