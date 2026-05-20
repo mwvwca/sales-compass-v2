@@ -40,17 +40,10 @@ const classificationFilters: { key: Classification; label: string }[] = [
 
 // Filter out lost opps from the main list
 
-export default function OpportunityList({ opportunities, lostOpportunities = [], quarter }: Props) {
-  const { classifyOpportunity, updateOpportunity } = useForecast();
+export default function OpportunityList({ opportunities, lostOpportunities = [], quarter: _quarter }: Props) {
+  const { classifyOpportunity, updateOpportunity, changelog } = useForecast();
   const [notesOpp, setNotesOpp] = useState<{ id: string; name: string } | null>(null);
   const [notesText, setNotesText] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState<string | 'all'>(() => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const months = getQuarterMonths(quarter);
-    return months.includes(currentMonth) ? currentMonth : 'all';
-  });
-  const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -62,17 +55,6 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   // Filter out lost/graveyard opps from the main list (but keep omitted — they show greyed out)
   const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost'), [opportunities]);
 
-  const months = getQuarterMonths(quarter);
-  const weeks: WeekRange[] = useMemo(() => {
-    if (selectedMonth === 'all') return [];
-    return getWeeksInMonth(selectedMonth);
-  }, [selectedMonth]);
-
-  const handleMonthChange = (m: string | 'all') => {
-    setSelectedMonth(m);
-    setSelectedWeek('all');
-  };
-
   const toggleFilter = (cls: Classification) => {
     setActiveFilters(prev => {
       const next = new Set(prev);
@@ -82,29 +64,16 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
     });
   };
 
-  const monthFiltered = selectedMonth === 'all'
-    ? activeOpportunities
-    : activeOpportunities.filter(o => getMonthKey(o.closeDate) === selectedMonth);
-
-  const weekFiltered = useMemo(() => {
-    if (selectedWeek === 'all' || weeks.length === 0) return monthFiltered;
-    const week = weeks[selectedWeek];
-    if (!week) return monthFiltered;
-    return monthFiltered.filter(o => {
-      const d = new Date(o.closeDate);
-      return d >= week.start && d <= week.end;
-    });
-  }, [monthFiltered, selectedWeek, weeks]);
-
   const searchFiltered = useMemo(() => {
-    if (!searchQuery.trim()) return weekFiltered;
+    if (!searchQuery.trim()) return activeOpportunities;
     const q = searchQuery.toLowerCase();
-    return weekFiltered.filter(o =>
+    return activeOpportunities.filter(o =>
       o.name.toLowerCase().includes(q) ||
       o.repName.toLowerCase().includes(q) ||
       o.stage.toLowerCase().includes(q)
     );
-  }, [weekFiltered, searchQuery]);
+  }, [activeOpportunities, searchQuery]);
+
 
   const classFiltered = searchFiltered.filter(o => activeFilters.has(o.classification));
 
