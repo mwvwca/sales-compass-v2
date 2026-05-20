@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, TrendingUp } from 'lucide-react';
 import CommissionLock from '@/components/CommissionLock';
 import CommissionSettings from '@/components/CommissionSettings';
 import CommissionTracker from '@/components/CommissionTracker';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { normalizeRepName } from '@/lib/repUtils';
+import { useToast } from '@/hooks/use-toast';
+import { downloadBackup } from '@/lib/backupDownload';
+import { getMonthLabel, getQuarterMonths, getQuarter, addMonthsUTC } from '@/types/forecast';
 
 export default function RepGoalSetup() {
   const {
