@@ -58,6 +58,9 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'opportunity product product family': 'productName',
   'product 2 product name': 'productName',
   'product2 product name': 'productName',
+  'channel account manager': 'channelAccountManager',
+  'cam': 'channelAccountManager',
+  'channel manager': 'channelAccountManager',
 };
 
 function parseImportDate(raw: unknown): string {
