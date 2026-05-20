@@ -189,6 +189,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       Upside: upsideVal ? "TRUE" : "",
       "Account Name": accountNameCol !== undefined ? String(row[accountNameCol] ?? "").trim() : "",
       Product: productCol !== undefined ? String(row[productCol] ?? "").trim() : "",
+      "Channel Account Manager": camCol !== undefined ? String(row[camCol] ?? "").trim() : "",
     });
   }
 
