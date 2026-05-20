@@ -587,6 +587,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     updateCommissionOpportunityReview,
     updateOpportunityCommissionDetails,
     setCommissionPinHash,
+    setMonthlyCommit,
+    getMonthlyCommit,
+    setAnnualStretch,
+    getAnnualStretch,
     restoreFromBackup,
     getOpportunityHistory,
   };
