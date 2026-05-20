@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ForecastDashboard from '@/components/ForecastDashboard';
 import RepGoalSetup from '@/components/RepGoalSetup';
 import ImportSheet from '@/components/ImportSheet';
@@ -14,6 +14,15 @@ type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'gravey
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<Tab>).detail;
+      if (detail) setTab(detail);
+    };
+    window.addEventListener('forecast:navigate-tab', handler);
+    return () => window.removeEventListener('forecast:navigate-tab', handler);
+  }, []);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'forecast', label: 'Forecast', icon: <BarChart3 size={14} /> },
