@@ -8,9 +8,9 @@ import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
 import DrQuality from '@/components/DrQuality';
-import { BarChart3, Users, Upload, Settings, Skull, History, Layers } from 'lucide-react';
+import { BarChart3, Users, Upload, Skull, History, Layers } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'settings' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
@@ -22,7 +22,6 @@ const Index = () => {
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
     { id: 'dr-quality', label: 'DR Quality', icon: <Layers size={14} /> },
     { id: 'graveyard', label: 'Graveyard', icon: <Skull size={14} /> },
-    { id: 'settings', label: 'Convert', icon: <Settings size={14} /> },
   ];
 
   return (
@@ -63,13 +62,18 @@ const Index = () => {
           </div>
         )}
         {tab === 'import' && (
-          <div>
-            <div className="mb-4">
-              <h2 className="text-sm font-semibold">Import Salesforce Export</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Drop your weekly Salesforce opportunity export. Columns are auto-mapped.</p>
+          <div className="space-y-8">
+            <div>
+              <div className="mb-4">
+                <h2 className="text-sm font-semibold">Import Salesforce Export</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Drop your weekly Salesforce opportunity export. Columns are auto-mapped.</p>
+              </div>
+              <ImportSheet />
+              <ImportChangeLog />
             </div>
-            <ImportSheet />
-            <ImportChangeLog />
+            <div className="border-t border-border pt-8">
+              <SalesDataSync />
+            </div>
           </div>
         )}
         {tab === 'lookback' && (
@@ -99,7 +103,6 @@ const Index = () => {
             <OpportunityGraveyard />
           </div>
         )}
-        {tab === 'settings' && <SalesDataSync />}
       </main>
     </div>
   );
