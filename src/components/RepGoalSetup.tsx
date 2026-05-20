@@ -16,6 +16,9 @@ export default function RepGoalSetup() {
   const {
     reps,
     opportunities,
+    imports,
+    changelog,
+    snapshots,
     addRep,
     updateRep,
     deleteRep,
@@ -28,7 +31,14 @@ export default function RepGoalSetup() {
     updateCommissionOpportunityReview,
     updateOpportunityCommissionDetails,
     setCommissionPinHash,
+    monthlyCommits,
+    annualStretchGoals,
+    setMonthlyCommit,
+    getMonthlyCommit,
+    setAnnualStretch,
+    getAnnualStretch,
   } = useForecast();
+  const { toast } = useToast();
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -36,6 +46,81 @@ export default function RepGoalSetup() {
   const [editGoal, setEditGoal] = useState('');
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [commissionOpen, setCommissionOpen] = useState(false);
+  const [stretchOpen, setStretchOpen] = useState(false);
+  const [mgmtOpen, setMgmtOpen] = useState(false);
+
+  // Stretch goal local state
+  const currentYear = new Date().getFullYear();
+  const [stretchYear, setStretchYear] = useState<number>(currentYear);
+  const existingStretch = getAnnualStretch(stretchYear);
+  const [stretchAmount, setStretchAmount] = useState<string>('');
+  const [stretchNotes, setStretchNotes] = useState<string>('');
+
+  // Sync stretch form to year selection
+  useMemo(() => {
+    setStretchAmount(existingStretch ? String(existingStretch.stretchAmount) : '');
+    setStretchNotes(existingStretch?.notes ?? '');
+  }, [stretchYear, existingStretch?.id]);
+
+  // Monthly commit: current quarter's 3 months + next month
+  const visibleMonths = useMemo(() => {
+    const now = new Date();
+    const quarter = getQuarter(now.toISOString());
+    const months = getQuarterMonths(quarter);
+    const next = addMonthsUTC(now, 1);
+    const nextKey = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`;
+    if (!months.includes(nextKey)) months.push(nextKey);
+    return months;
+  }, []);
+  const currentMonthKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
+  const [commitDrafts, setCommitDrafts] = useState<Record<string, { amount: string; notes: string }>>({});
+
+  const getDraft = (mk: string) => {
+    if (commitDrafts[mk]) return commitDrafts[mk];
+    const existing = getMonthlyCommit(mk);
+    return { amount: existing ? String(existing.commitAmount) : '', notes: existing?.notes ?? '' };
+  };
+
+  const triggerBackup = () => {
+    downloadBackup({
+      reps,
+      opportunities,
+      imports,
+      changelog,
+      snapshots,
+      commissionSettings,
+      commissionReviews,
+      commissionPinHash,
+      monthlyCommits,
+      annualStretchGoals,
+    }, 'forecast-backup-goals');
+  };
+
+  const handleSaveStretch = () => {
+    const amount = parseFloat(stretchAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
+      return;
+    }
+    setAnnualStretch(stretchYear, amount, stretchNotes);
+    triggerBackup();
+    toast({ title: 'Goal saved and backup downloaded.' });
+  };
+
+  const handleSaveCommit = (mk: string) => {
+    const d = getDraft(mk);
+    const amount = parseFloat(d.amount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
+      return;
+    }
+    setMonthlyCommit(mk, amount, d.notes);
+    triggerBackup();
+    toast({ title: 'Goal saved and backup downloaded.' });
+  };
+
+  const fmtTs = (iso?: string) => iso ? new Date(iso).toLocaleString() : '';
+  const fmtMoney = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
   const handleAdd = () => {
     if (!name.trim() || !goal) return;
