@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { computeDrQuality, computeDrScores, type DrScoreResult, type DrTier } from '@/lib/drQuality';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
