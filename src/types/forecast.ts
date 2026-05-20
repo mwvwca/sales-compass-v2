@@ -199,4 +199,4 @@ export function getYearQuarters(year: number): Quarter[] {
   return [1, 2, 3, 4].map(q => `${year}-Q${q}` as Quarter);
 }
 
-}
+
