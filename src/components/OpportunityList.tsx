@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import type { Opportunity } from '@/types/forecast';
-import { getMonthKey, getMonthLabel, getQuarterMonths, getWeeksInMonth, type Quarter, type WeekRange } from '@/types/forecast';
+import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
+import { getMonthKey, type Quarter } from '@/types/forecast';
 import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle } from 'lucide-react';
 import { getStagePercentage, formatStageWithPct } from '@/lib/utils';
 import OpportunityHistory from './OpportunityHistory';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+
 
 type SortField = 'name' | 'repName' | 'amount' | 'closeDate' | 'stage' | 'classification' | 'productName';
 type SortDir = 'asc' | 'desc';
