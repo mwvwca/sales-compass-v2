@@ -130,6 +130,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
   const upsideCol = colMap["Upside"] ?? colMap["Upside Deal"];
   const accountNameCol = findColumn(colMap, ["Account Name", "Account"]);
   const productCol = findColumn(colMap, ["Product", "Products", "Product Name", "Product Family", "Primary Product", "Product: Product Name", "Product: Product Family", "Opportunity Product: Product Name", "Opportunity Product: Product Family"]);
+  const camCol = findColumn(colMap, ["Channel Account Manager", "CAM", "Channel Manager"]);
 
   const results: ForecastRow[] = [];
   const skipped: SkippedRow[] = [];
