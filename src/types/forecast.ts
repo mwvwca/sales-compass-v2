@@ -168,7 +168,34 @@ export function getWeeksInMonth(monthKey: string): WeekRange[] {
     endDate.setUTCHours(23, 59, 59, 999);
     weeks.push({ label: `W${weekNum}`, start, end: endDate });
     cursor.setUTCDate(cursor.getUTCDate() + 7);
-  }
+}
+
+/** ISO-style week range (Monday–Sunday) containing the given date, in UTC. */
+export function getISOWeekRange(date: Date): { start: Date; end: Date; label: string } {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay() || 7; // Sun=0 -> 7
+  const start = new Date(d);
+  start.setUTCDate(d.getUTCDate() - (day - 1));
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  end.setUTCHours(23, 59, 59, 999);
+  const fmt = (x: Date) => `${x.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+  return { start, end, label: `${fmt(start)} – ${fmt(end)}` };
+}
+
+export function addDaysUTC(date: Date, n: number): Date {
+  const d = new Date(date); d.setUTCDate(d.getUTCDate() + n); return d;
+}
+
+export function addMonthsUTC(date: Date, n: number): Date {
+  const d = new Date(date); d.setUTCMonth(d.getUTCMonth() + n); return d;
+}
+
+export function getYearQuarters(year: number): Quarter[] {
+  return [1, 2, 3, 4].map(q => `${year}-Q${q}` as Quarter);
+}
+
 
   return weeks;
 }
