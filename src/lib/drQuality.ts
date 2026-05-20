@@ -1,6 +1,176 @@
 import type { Opportunity } from '@/types/forecast';
 import { normalizeRepName } from '@/lib/repUtils';
 
+// ============================================================================
+// DR Quality Scoring Engine
+// ============================================================================
+
+export type DrTier = 'Strong' | 'Marginal' | 'Weak' | 'Disqualified';
+
+export interface DrScoreResult {
+  opportunityId: string;
+  score: number;
+  tier: DrTier;
+  disqualified: boolean;
+  disqualifyReason: string;
+  subscores: {
+    stageVelocity: number;
+    closeDateIntegrity: number;
+    amountCredibility: number;
+    forecastCredibility: number;
+    accountStacking: number;
+    closeDateRealism: number;
+  };
+}
+
+const DISQUALIFY_STAGES = new Set([
+  'closed lost', 'omitted', 'unqualified', 'rejected',
+]);
+
+const SCORE_WEIGHTS = {
+  stageVelocity: 0.25,
+  closeDateIntegrity: 0.20,
+  amountCredibility: 0.15,
+  forecastCredibility: 0.15,
+  accountStacking: 0.15,
+  closeDateRealism: 0.10,
+};
+
+function daysUntil(dateStr: string | undefined): number | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const now = new Date();
+  return Math.floor((d.getTime() - now.getTime()) / 86400000);
+}
+
+function stageVelocityScore(days: number | null): number {
+  if (days === null) return 20;
+  if (days < 0) return 0;
+  if (days <= 14) return 60;
+  if (days <= 30) return 80;
+  if (days <= 90) return 100;
+  return 90;
+}
+
+function closeDateIntegrityScore(days: number | null, isOpen: boolean): number {
+  if (days === null) return 10;
+  if (days < 0 && isOpen) return 0;
+  if (days > 365) return 60;
+  return 100;
+}
+
+function amountCredibilityScore(amount: number): number {
+  if (!amount || amount <= 0) return 0;
+  if (amount < 100) return 20;
+  if (amount <= 1000 && amount % 500 === 0) return 40;
+  if (amount > 1000 && amount % 1000 === 0) return 70;
+  return 100;
+}
+
+function forecastCredibilityScore(o: Opportunity): number {
+  switch (o.classification) {
+    case 'commit': return 100;
+    case 'closed_won': return 100;
+    case 'upside': return 70;
+    case 'unclassified': return 50;
+    case 'omitted': return 0;
+    case 'lost': return 0;
+    default: return 40;
+  }
+}
+
+function accountStackingScore(openCount: number, hasAccount: boolean): number {
+  if (!hasAccount) return 50;
+  if (openCount <= 1) return 100;
+  if (openCount === 2) return 75;
+  if (openCount <= 4) return 40;
+  return 0;
+}
+
+function closeDateRealismScore(days: number | null, isOpen: boolean): number {
+  if (days === null) return 100;
+  if (days < 0 && isOpen) return 0;
+  return 100;
+}
+
+function tierFor(score: number): DrTier {
+  if (score >= 75) return 'Strong';
+  if (score >= 50) return 'Marginal';
+  return 'Weak';
+}
+
+export function computeDrScores(opps: Opportunity[]): Map<string, DrScoreResult> {
+  // open opps per account
+  const openByAccount = new Map<string, number>();
+  for (const o of opps) {
+    const key = (o.accountName || '').trim().toLowerCase();
+    if (!key) continue;
+    if (o.classification === 'closed_won' || o.classification === 'lost' || o.classification === 'omitted') continue;
+    openByAccount.set(key, (openByAccount.get(key) || 0) + 1);
+  }
+
+  const out = new Map<string, DrScoreResult>();
+  for (const o of opps) {
+    const stageLower = (o.stage || '').toLowerCase().trim();
+    const isOpen = o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted';
+
+    let dqReason = '';
+    if (!o.amount || o.amount <= 0) dqReason = 'Zero or missing amount';
+    else if (DISQUALIFY_STAGES.has(stageLower) || o.classification === 'lost' || o.classification === 'omitted') {
+      dqReason = `Stage: ${o.stage || o.classification}`;
+    } else if (typeof o.probability === 'number' && o.probability > 0 && o.probability < 25) {
+      dqReason = `Probability ${o.probability}% < 25%`;
+    }
+
+    if (dqReason) {
+      out.set(o.id, {
+        opportunityId: o.id,
+        score: 0,
+        tier: 'Disqualified',
+        disqualified: true,
+        disqualifyReason: dqReason,
+        subscores: { stageVelocity: 0, closeDateIntegrity: 0, amountCredibility: 0, forecastCredibility: 0, accountStacking: 0, closeDateRealism: 0 },
+      });
+      continue;
+    }
+
+    const days = daysUntil(o.closeDate);
+    const acctKey = (o.accountName || '').trim().toLowerCase();
+    const openCount = acctKey ? (openByAccount.get(acctKey) || 1) : 0;
+
+    const sub = {
+      stageVelocity: stageVelocityScore(days),
+      closeDateIntegrity: closeDateIntegrityScore(days, isOpen),
+      amountCredibility: amountCredibilityScore(o.amount),
+      forecastCredibility: forecastCredibilityScore(o),
+      accountStacking: accountStackingScore(openCount, !!acctKey),
+      closeDateRealism: closeDateRealismScore(days, isOpen),
+    };
+
+    const weighted = Math.round(
+      sub.stageVelocity * SCORE_WEIGHTS.stageVelocity +
+      sub.closeDateIntegrity * SCORE_WEIGHTS.closeDateIntegrity +
+      sub.amountCredibility * SCORE_WEIGHTS.amountCredibility +
+      sub.forecastCredibility * SCORE_WEIGHTS.forecastCredibility +
+      sub.accountStacking * SCORE_WEIGHTS.accountStacking +
+      sub.closeDateRealism * SCORE_WEIGHTS.closeDateRealism
+    );
+
+    out.set(o.id, {
+      opportunityId: o.id,
+      score: weighted,
+      tier: tierFor(weighted),
+      disqualified: false,
+      disqualifyReason: '',
+      subscores: sub,
+    });
+  }
+  return out;
+}
+
+
+
 /**
  * DR Quality analytics — quantifies multi-product concentration on the same
  * account and the win-rate delta between single-product and multi-product

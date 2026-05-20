@@ -18,6 +18,7 @@ interface ColumnMapping {
   upsideFlag?: string;
   accountName?: string;
   productName?: string;
+  channelAccountManager?: string;
 }
 
 function normalizeHeader(header: string): string {
@@ -57,6 +58,9 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'opportunity product product family': 'productName',
   'product 2 product name': 'productName',
   'product2 product name': 'productName',
+  'channel account manager': 'channelAccountManager',
+  'cam': 'channelAccountManager',
+  'channel manager': 'channelAccountManager',
 };
 
 function parseImportDate(raw: unknown): string {
@@ -208,6 +212,7 @@ export default function ImportSheet() {
             importDate,
             accountName: String(row[mapping.accountName || ''] || '').trim() || undefined,
             productName: String(row[mapping.productName || ''] || '').trim() || undefined,
+            channelAccountManager: String(row[mapping.channelAccountManager || ''] || '').trim() || undefined,
           };
         });
 
