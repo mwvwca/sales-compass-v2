@@ -57,7 +57,7 @@ export default function RepGoalSetup() {
   const [stretchNotes, setStretchNotes] = useState<string>('');
 
   // Sync stretch form to year selection
-  useMemo(() => {
+  useEffect(() => {
     setStretchAmount(existingStretch ? String(existingStretch.stretchAmount) : '');
     setStretchNotes(existingStretch?.notes ?? '');
   }, [stretchYear, existingStretch?.id]);
