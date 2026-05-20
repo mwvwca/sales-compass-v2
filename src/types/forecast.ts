@@ -51,6 +51,7 @@ export interface Opportunity {
   commissionNotes?: string;
   accountName?: string;
   productName?: string;
+  channelAccountManager?: string;
 }
 
 export interface ImportRecord {
