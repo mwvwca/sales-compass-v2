@@ -18,6 +18,7 @@ interface ColumnMapping {
   upsideFlag?: string;
   accountName?: string;
   productName?: string;
+  channelAccountManager?: string;
 }
 
 function normalizeHeader(header: string): string {
