@@ -198,7 +198,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
 
 export function createForecastWorkbook(rows: ForecastRow[], version: string): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows, {
-    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside", "Account Name", "Product"],
+    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside", "Account Name", "Product", "Channel Account Manager"],
   });
 
   ws["!cols"] = [
@@ -213,6 +213,7 @@ export function createForecastWorkbook(rows: ForecastRow[], version: string): XL
     { wch: 10 },
     { wch: 28 },
     { wch: 28 },
+    { wch: 24 },
   ];
 
   const wb = XLSX.utils.book_new();
