@@ -264,6 +264,133 @@ export default function RepGoalSetup() {
         </CollapsibleContent>
       </Collapsible>
 
+      {/* Section A — Annual Stretch Goal */}
+      <Collapsible open={stretchOpen} onOpenChange={setStretchOpen} className="space-y-4 border-t border-border pt-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-2">
+            <TrendingUp className="h-4 w-4 mt-0.5 text-upside" />
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Annual stretch goal</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">Your personal target above quota. For your eyes only.</p>
+            </div>
+          </div>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5">
+              {stretchOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {stretchOpen ? 'Hide' : 'Show'}
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent className="space-y-4">
+          <div className="flex gap-3 items-end flex-wrap">
+            <div className="w-28 space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Year</label>
+              <input
+                type="number"
+                value={stretchYear}
+                onChange={e => setStretchYear(parseInt(e.target.value) || currentYear)}
+                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div className="w-44 space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Stretch target ($)</label>
+              <input
+                type="number"
+                value={stretchAmount}
+                onChange={e => setStretchAmount(e.target.value)}
+                placeholder="2000000"
+                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <Button onClick={handleSaveStretch} size="sm" className="gap-1.5">
+              <Check size={14} /> Save
+            </Button>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Notes (optional)</label>
+            <Textarea
+              rows={3}
+              value={stretchNotes}
+              onChange={e => setStretchNotes(e.target.value)}
+              placeholder="Why this number matters to you..."
+              className="text-sm"
+            />
+          </div>
+          {existingStretch && (
+            <p className="text-xs text-muted-foreground">
+              Saved: <span className="font-mono text-foreground">{fmtMoney(existingStretch.stretchAmount)}</span>
+              {' · updated '}{fmtTs(existingStretch.updatedAt)}
+            </p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Section B — Monthly Management Commit */}
+      <Collapsible open={mgmtOpen} onOpenChange={setMgmtOpen} className="space-y-4 border-t border-border pt-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-2">
+            <Target className="h-4 w-4 mt-0.5 text-commit" />
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Monthly management commit</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">What you rolled up to leadership this month. Set at the start of each month.</p>
+            </div>
+          </div>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5">
+              {mgmtOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {mgmtOpen ? 'Hide' : 'Show'}
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {visibleMonths.map(mk => {
+              const existing = getMonthlyCommit(mk);
+              const draft = getDraft(mk);
+              const isCurrent = mk === currentMonthKey;
+              return (
+                <div
+                  key={mk}
+                  className={`rounded-md border p-3 space-y-2 bg-card ${isCurrent ? 'border-primary/60 ring-1 ring-primary/30' : 'border-border'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{getMonthLabel(mk)}</span>
+                    {existing && (
+                      <span className="text-xs text-positive font-mono flex items-center gap-1">
+                        <Check size={12} /> {fmtMoney(existing.commitAmount)}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    value={draft.amount}
+                    onChange={e => setCommitDrafts(d => ({ ...d, [mk]: { ...draft, amount: e.target.value } }))}
+                    placeholder="Commit amount"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <input
+                    type="text"
+                    value={draft.notes}
+                    onChange={e => setCommitDrafts(d => ({ ...d, [mk]: { ...draft, notes: e.target.value } }))}
+                    placeholder="Notes (optional)"
+                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <div className="flex items-center justify-between">
+                    {existing ? (
+                      <span className="text-[10px] text-muted-foreground">Updated {fmtTs(existing.updatedAt)}</span>
+                    ) : <span />}
+                    <Button onClick={() => handleSaveCommit(mk)} size="sm" variant="outline" className="h-7 gap-1 text-xs">
+                      <Check size={12} /> Save
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+
       <Collapsible open={commissionOpen} onOpenChange={setCommissionOpen} className="space-y-4 border-t border-border pt-6">
         <div className="flex items-start justify-between gap-4">
           <div>
