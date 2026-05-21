@@ -692,6 +692,8 @@ interface ExportArgs {
   byCam: any[];
   hasCam: boolean;
   issues: { severity: string; title: string; desc: string }[];
+  fromQuarter: Quarter;
+  toQuarter: Quarter;
 }
 
 function setCell(ws: XLSX.WorkSheet, addr: string, value: any, style?: any) {
