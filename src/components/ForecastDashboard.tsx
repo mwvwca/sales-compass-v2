@@ -278,16 +278,8 @@ export default function ForecastDashboard() {
               </p>
             )}
           </div>
-          <div className="bg-card border border-border rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Stretch</p>
-            {stretchProrated !== null ? (
-              <p className="text-xl font-mono font-semibold text-upside">{fmt(stretchProrated)}</p>
-            ) : (
-              <p className="text-xl font-mono font-semibold text-muted-foreground">
-                Not set <button onClick={goToGoals} className="ml-1 text-[11px] underline text-primary">Set now</button>
-              </p>
-            )}
-          </div>
+          {/* Closed Won placed in row 1 to keep 4-col grid clean */}
+
           <div className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Closed Won</p>
             <p className="text-xl font-mono font-semibold text-positive">{fmt(totalWon)}</p>
