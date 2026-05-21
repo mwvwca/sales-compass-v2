@@ -4,7 +4,7 @@ import { Download, Upload } from 'lucide-react';
 import { useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
-import { downloadBackup } from '@/lib/backupDownload';
+import { downloadBackupNow } from '@/lib/backupUtils';
 
 const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted']);
 
@@ -78,19 +78,12 @@ const commissionMonthlyReviewSchema = z.object({
   opportunities: z.record(z.string(), commissionOpportunityReviewSchema),
 });
 
-const monthlyCommitSchema = z.object({
+const monthlyRepCommitSchema = z.object({
   id: z.string(),
+  repId: z.string(),
+  repName: z.string().max(200),
   monthKey: z.string().regex(/^\d{4}-\d{2}$/),
   commitAmount: z.number().finite().min(0),
-  notes: z.string().max(1000).optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const annualStretchSchema = z.object({
-  id: z.string(),
-  year: z.number().int().min(2020).max(2040),
-  stretchAmount: z.number().finite().min(0),
   notes: z.string().max(1000).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -104,8 +97,7 @@ const backupSchema = z.object({
   commissionSettings: z.record(z.string(), commissionSettingSchema).optional(),
   commissionReviews: z.record(z.string(), commissionMonthlyReviewSchema).optional(),
   commissionPinHash: z.string().max(256).nullable().optional(),
-  monthlyCommits: z.array(monthlyCommitSchema).max(120).optional(),
-  annualStretchGoals: z.array(annualStretchSchema).max(20).optional(),
+  monthlyRepCommits: z.array(monthlyRepCommitSchema).max(5000).optional(),
   exportedAt: z.string().optional(),
 });
 
@@ -115,27 +107,27 @@ export default function DataBackup() {
     opportunities,
     imports,
     changelog,
+    snapshots,
     commissionSettings,
     commissionReviews,
     commissionPinHash,
-    monthlyCommits,
-    annualStretchGoals,
+    monthlyRepCommits,
     restoreFromBackup,
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleSave = () => {
-    downloadBackup({
+    downloadBackupNow({
       reps,
       opportunities,
       imports,
       changelog,
+      snapshots,
       commissionSettings,
       commissionReviews,
       commissionPinHash,
-      monthlyCommits,
-      annualStretchGoals,
+      monthlyRepCommits,
     });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };
