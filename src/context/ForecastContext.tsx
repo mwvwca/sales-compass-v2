@@ -235,8 +235,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.commissionSettings,
     state.commissionReviews,
     state.commissionPinHash,
-    state.monthlyCommits,
-    state.annualStretchGoals,
+    state.monthlyRepCommits,
+
   ]);
 
   const addRep = useCallback((rep: Rep) => {
