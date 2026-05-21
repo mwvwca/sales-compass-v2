@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target } from 'lucide-react';
 import CommissionLock from '@/components/CommissionLock';
 import CommissionSettings from '@/components/CommissionSettings';
 import CommissionTracker from '@/components/CommissionTracker';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { normalizeRepName } from '@/lib/repUtils';
 import { useToast } from '@/hooks/use-toast';
-import { downloadBackup } from '@/lib/backupDownload';
-import { getMonthLabel, getQuarterMonths, getQuarter, addMonthsUTC } from '@/types/forecast';
+import { downloadBackupNow } from '@/lib/backupUtils';
+import { getMonthLabel, getQuarter } from '@/types/forecast';
 
 export default function RepGoalSetup() {
   const {
@@ -31,12 +30,9 @@ export default function RepGoalSetup() {
     updateCommissionOpportunityReview,
     updateOpportunityCommissionDetails,
     setCommissionPinHash,
-    monthlyCommits,
-    annualStretchGoals,
-    setMonthlyCommit,
-    getMonthlyCommit,
-    setAnnualStretch,
-    getAnnualStretch,
+    monthlyRepCommits,
+    setMonthlyRepCommit,
+    getMonthlyRepCommit,
   } = useForecast();
   const { toast } = useToast();
   const [name, setName] = useState('');
@@ -46,43 +42,41 @@ export default function RepGoalSetup() {
   const [editGoal, setEditGoal] = useState('');
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [commissionOpen, setCommissionOpen] = useState(false);
-  const [stretchOpen, setStretchOpen] = useState(false);
   const [mgmtOpen, setMgmtOpen] = useState(false);
 
-  // Stretch goal local state
-  const currentYear = new Date().getFullYear();
-  const [stretchYear, setStretchYear] = useState<number>(currentYear);
-  const existingStretch = getAnnualStretch(stretchYear);
-  const [stretchAmount, setStretchAmount] = useState<string>('');
-  const [stretchNotes, setStretchNotes] = useState<string>('');
-
-  // Sync stretch form to year selection
-  useEffect(() => {
-    setStretchAmount(existingStretch ? String(existingStretch.stretchAmount) : '');
-    setStretchNotes(existingStretch?.notes ?? '');
-  }, [stretchYear, existingStretch?.id]);
-
-  // Monthly commit: current quarter's 3 months + next month
-  const visibleMonths = useMemo(() => {
-    const now = new Date();
-    const quarter = getQuarter(now.toISOString());
-    const months = getQuarterMonths(quarter);
-    const next = addMonthsUTC(now, 1);
-    const nextKey = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`;
-    if (!months.includes(nextKey)) months.push(nextKey);
-    return months;
-  }, []);
+  // Monthly commit selector — single month at a time
   const currentMonthKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
-  const [commitDrafts, setCommitDrafts] = useState<Record<string, { amount: string; notes: string }>>({});
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
+  const isCurrentMonth = selectedMonth === currentMonthKey;
 
-  const getDraft = (mk: string) => {
-    if (commitDrafts[mk]) return commitDrafts[mk];
-    const existing = getMonthlyCommit(mk);
+  // Build a 24-month rolling option list centered on now
+  const monthOptions = useMemo(() => {
+    const list: string[] = [];
+    const now = new Date();
+    for (let i = -6; i <= 17; i++) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+      list.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
+    }
+    return list;
+  }, []);
+
+  // Per-rep draft inputs keyed by `${repId}::${monthKey}`
+  const [drafts, setDrafts] = useState<Record<string, { amount: string; notes: string }>>({});
+  const draftKey = (repId: string, mk: string) => `${repId}::${mk}`;
+  const getDraft = (repId: string, mk: string) => {
+    const k = draftKey(repId, mk);
+    if (drafts[k]) return drafts[k];
+    const existing = getMonthlyRepCommit(repId, mk);
     return { amount: existing ? String(existing.commitAmount) : '', notes: existing?.notes ?? '' };
+  };
+  const setDraft = (repId: string, mk: string, patch: Partial<{ amount: string; notes: string }>) => {
+    const k = draftKey(repId, mk);
+    const current = getDraft(repId, mk);
+    setDrafts(d => ({ ...d, [k]: { ...current, ...patch } }));
   };
 
   const triggerBackup = () => {
-    downloadBackup({
+    downloadBackupNow({
       reps,
       opportunities,
       imports,
@@ -91,36 +85,35 @@ export default function RepGoalSetup() {
       commissionSettings,
       commissionReviews,
       commissionPinHash,
-      monthlyCommits,
-      annualStretchGoals,
-    }, 'forecast-backup-goals');
+      monthlyRepCommits,
+    });
   };
 
-  const handleSaveStretch = () => {
-    const amount = parseFloat(stretchAmount);
-    if (!Number.isFinite(amount) || amount < 0) {
-      toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
-      return;
-    }
-    setAnnualStretch(stretchYear, amount, stretchNotes);
-    triggerBackup();
-    toast({ title: 'Goal saved and backup downloaded.' });
-  };
-
-  const handleSaveCommit = (mk: string) => {
-    const d = getDraft(mk);
+  const handleSaveRepCommit = (repId: string, repName: string, mk: string) => {
+    const d = getDraft(repId, mk);
     const amount = parseFloat(d.amount);
     if (!Number.isFinite(amount) || amount < 0) {
       toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
       return;
     }
-    setMonthlyCommit(mk, amount, d.notes);
+    setMonthlyRepCommit(repId, repName, mk, amount, d.notes);
     triggerBackup();
-    toast({ title: 'Goal saved and backup downloaded.' });
+    toast({ title: 'Commit saved and backup downloaded.' });
   };
 
   const fmtTs = (iso?: string) => iso ? new Date(iso).toLocaleString() : '';
   const fmtMoney = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+  // Rollup for selected month
+  const rollup = useMemo(() => {
+    const commitTotal = monthlyRepCommits
+      .filter(m => m.monthKey === selectedMonth)
+      .reduce((s, m) => s + m.commitAmount, 0);
+    const quarter = getQuarter(`${selectedMonth}-01T00:00:00Z`);
+    const quotaTotal = reps.reduce((s, r) => s + ((r.quarterlyGoals[quarter] || 0) / 3), 0);
+    const gap = quotaTotal - commitTotal;
+    return { commitTotal, quotaTotal, gap };
+  }, [monthlyRepCommits, selectedMonth, reps]);
 
   const handleAdd = () => {
     if (!name.trim() || !goal) return;
@@ -264,75 +257,21 @@ export default function RepGoalSetup() {
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Section A — Annual Stretch Goal */}
-      <Collapsible open={stretchOpen} onOpenChange={setStretchOpen} className="space-y-4 border-t border-border pt-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-2">
-            <TrendingUp className="h-4 w-4 mt-0.5 text-upside" />
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Annual stretch goal</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">Your personal target above quota. For your eyes only.</p>
-            </div>
-          </div>
-          <CollapsibleTrigger asChild>
-            <Button type="button" variant="outline" size="sm" className="gap-1.5">
-              {stretchOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              {stretchOpen ? 'Hide' : 'Show'}
-            </Button>
-          </CollapsibleTrigger>
-        </div>
-        <CollapsibleContent className="space-y-4">
-          <div className="flex gap-3 items-end flex-wrap">
-            <div className="w-28 space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Year</label>
-              <input
-                type="number"
-                value={stretchYear}
-                onChange={e => setStretchYear(parseInt(e.target.value) || currentYear)}
-                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-            <div className="w-44 space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Stretch target ($)</label>
-              <input
-                type="number"
-                value={stretchAmount}
-                onChange={e => setStretchAmount(e.target.value)}
-                placeholder="2000000"
-                className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-            <Button onClick={handleSaveStretch} size="sm" className="gap-1.5">
-              <Check size={14} /> Save
-            </Button>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Notes (optional)</label>
-            <Textarea
-              rows={3}
-              value={stretchNotes}
-              onChange={e => setStretchNotes(e.target.value)}
-              placeholder="Why this number matters to you..."
-              className="text-sm"
-            />
-          </div>
-          {existingStretch && (
-            <p className="text-xs text-muted-foreground">
-              Saved: <span className="font-mono text-foreground">{fmtMoney(existingStretch.stretchAmount)}</span>
-              {' · updated '}{fmtTs(existingStretch.updatedAt)}
-            </p>
-          )}
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Section B — Monthly Management Commit */}
+      {/* Monthly Management Commits per Rep */}
       <Collapsible open={mgmtOpen} onOpenChange={setMgmtOpen} className="space-y-4 border-t border-border pt-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-2">
             <Target className="h-4 w-4 mt-0.5 text-commit" />
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Monthly management commit</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">What you rolled up to leadership this month. Set at the start of each month.</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Monthly management commits</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">What you committed to leadership per rep this month. Set at the start of each month.</p>
+              </div>
+              {isCurrentMonth && (
+                <span className="text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full border border-primary/60 text-primary bg-primary/10">
+                  Current month
+                </span>
+              )}
             </div>
           </div>
           <CollapsibleTrigger asChild>
@@ -342,54 +281,102 @@ export default function RepGoalSetup() {
             </Button>
           </CollapsibleTrigger>
         </div>
-        <CollapsibleContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {visibleMonths.map(mk => {
-              const existing = getMonthlyCommit(mk);
-              const draft = getDraft(mk);
-              const isCurrent = mk === currentMonthKey;
-              return (
-                <div
-                  key={mk}
-                  className={`rounded-md border p-3 space-y-2 bg-card ${isCurrent ? 'border-primary/60 ring-1 ring-primary/30' : 'border-border'}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{getMonthLabel(mk)}</span>
-                    {existing && (
-                      <span className="text-xs text-positive font-mono flex items-center gap-1">
-                        <Check size={12} /> {fmtMoney(existing.commitAmount)}
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    value={draft.amount}
-                    onChange={e => setCommitDrafts(d => ({ ...d, [mk]: { ...draft, amount: e.target.value } }))}
-                    placeholder="Commit amount"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                  <input
-                    type="text"
-                    value={draft.notes}
-                    onChange={e => setCommitDrafts(d => ({ ...d, [mk]: { ...draft, notes: e.target.value } }))}
-                    placeholder="Notes (optional)"
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                  <div className="flex items-center justify-between">
-                    {existing ? (
-                      <span className="text-[10px] text-muted-foreground">Updated {fmtTs(existing.updatedAt)}</span>
-                    ) : <span />}
-                    <Button onClick={() => handleSaveCommit(mk)} size="sm" variant="outline" className="h-7 gap-1 text-xs">
-                      <Check size={12} /> Save
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+
+        <CollapsibleContent className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Month</label>
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              {monthOptions.map(mk => (
+                <option key={mk} value={mk}>{getMonthLabel(mk)}</option>
+              ))}
+            </select>
           </div>
+
+          {reps.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">Add reps above first.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {reps.map(rep => {
+                const existing = getMonthlyRepCommit(rep.id, selectedMonth);
+                const draft = getDraft(rep.id, selectedMonth);
+                return (
+                  <div key={rep.id} className="rounded-md border border-border p-3 space-y-2 bg-card">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-foreground">{rep.name}</span>
+                      {existing && (
+                        <span className="text-xs text-positive font-mono flex items-center gap-1">
+                          <Check size={12} /> {fmtMoney(existing.commitAmount)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Your commit ($)</label>
+                      <input
+                        type="number"
+                        value={draft.amount}
+                        onChange={e => setDraft(rep.id, selectedMonth, { amount: e.target.value })}
+                        placeholder="0"
+                        className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">1:1 notes</label>
+                      <input
+                        type="text"
+                        value={draft.notes}
+                        onChange={e => setDraft(rep.id, selectedMonth, { notes: e.target.value })}
+                        placeholder="Optional context"
+                        className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      {existing ? (
+                        <span className="text-[10px] text-muted-foreground">Saved {fmtTs(existing.updatedAt)}</span>
+                      ) : <span />}
+                      <Button
+                        onClick={() => handleSaveRepCommit(rep.id, rep.name, selectedMonth)}
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1 text-xs"
+                      >
+                        <Check size={12} /> Save
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Rollup */}
+          {reps.length > 0 && (
+            <div className="border border-border rounded-md p-3 bg-secondary/30 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total commit</p>
+                <p className="text-sm font-mono font-semibold text-commit">{fmtMoney(rollup.commitTotal)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AE quota total</p>
+                <p className="text-sm font-mono font-semibold">{fmtMoney(rollup.quotaTotal)}</p>
+                <p className="text-[10px] text-muted-foreground">Q goal ÷ 3</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gap</p>
+                <p className={`text-sm font-mono font-semibold ${rollup.gap > 0 ? 'text-negative' : 'text-positive'}`}>
+                  {fmtMoney(rollup.gap)}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {rollup.gap > 0 ? 'Commits below quota' : 'Commits meet/exceed quota'}
+                </p>
+              </div>
+            </div>
+          )}
         </CollapsibleContent>
       </Collapsible>
-
 
       <Collapsible open={commissionOpen} onOpenChange={setCommissionOpen} className="space-y-4 border-t border-border pt-6">
         <div className="flex items-start justify-between gap-4">
