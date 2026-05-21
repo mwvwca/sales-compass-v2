@@ -19,6 +19,7 @@ type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
 export default function ForecastDashboard() {
   const { reps, opportunities, monthlyRepCommits } = useForecast();
+  const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('quarterly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
