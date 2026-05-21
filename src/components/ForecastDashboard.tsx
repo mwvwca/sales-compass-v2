@@ -11,6 +11,8 @@ import ExecutiveReport from './ExecutiveReport';
 import ExecutiveReportVisual from './ExecutiveReportVisual';
 import PipelineCoverage from './PipelineCoverage';
 import SalesIntelligence from './SalesIntelligence';
+import CommitAccuracySection from './CommitAccuracySection';
+import CoverageTrendCard from './CoverageTrendCard';
 import { Switch } from '@/components/ui/switch';
 import { ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentationButtonLabel } from '@/lib/monthlyPresentationExport';
@@ -18,7 +20,7 @@ import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentation
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, changelog, snapshots } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('quarterly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
