@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, TrendingDown, TrendingUp, Layers, Filter, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { normalizeRepName } from '@/lib/repUtils';
-import type { Opportunity } from '@/types/forecast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { Opportunity, Quarter } from '@/types/forecast';
+import { quarterStart, quarterEnd, getCurrentQuarter, getYearQuarters } from '@/types/forecast';
 import * as XLSX from '@e965/xlsx';
 
 const fmt$ = (n: number) =>
