@@ -415,6 +415,8 @@ export default function RepGoalSetup() {
           </CommissionLock>
         </CollapsibleContent>
       </Collapsible>
+
+      <CommissionReconciliation />
     </div>
   );
 }
