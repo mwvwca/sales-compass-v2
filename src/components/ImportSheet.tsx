@@ -146,7 +146,7 @@ export default function ImportSheet() {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastImport, setLastImport] = useState<{ name: string; count: number } | null>(null);
-  const [review, setReview] = useState<{ opps: Opportunity[]; fileName: string } | null>(null);
+  const [review, setReview] = useState<{ opps: Opportunity[]; fileName: string; headers: string[]; mapping: Record<string, string> } | null>(null);
 
   const processFile = useCallback((file: File) => {
     setError(null);
