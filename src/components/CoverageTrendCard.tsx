@@ -31,13 +31,48 @@ export default function CoverageTrendCard({
       if (closedOrInactive.has(s.classification)) return false;
       return true;
     });
-    const dates = Array.from(new Set(inQuarter.map(s => s.importDate.slice(0, 10)))).sort();
-    return dates.map(date => {
+
+    if (inQuarter.length === 0) return [];
+
+    const qStart = quarterStart(quarter);
+    const qStartWeek = getISOWeekRange(qStart);
+    const firstMonday = qStartWeek.start;
+
+    // Find the latest import date in each ISO week
+    const latestImportByWeek = new Map<number, string>();
+    for (const s of inQuarter) {
+      const importDateStr = s.importDate.slice(0, 10);
+      const importDateObj = new Date(s.importDate);
+      const weekStart = getISOWeekRange(importDateObj).start;
+
+      const diffDays = (weekStart.getTime() - firstMonday.getTime()) / (1000 * 60 * 60 * 24);
+      const weekNum = Math.round(diffDays / 7) + 1;
+
+      const existing = latestImportByWeek.get(weekNum);
+      if (!existing || importDateStr > existing) {
+        latestImportByWeek.set(weekNum, importDateStr);
+      }
+    }
+
+    const history: { date: string; coverage: number; total: number }[] = [];
+    for (const [weekNum, latestImport] of latestImportByWeek.entries()) {
       const total = inQuarter
-        .filter(s => s.importDate.slice(0, 10) === date)
+        .filter(s => s.importDate.slice(0, 10) === latestImport)
         .reduce((sum, s) => sum + (s.amount || 0), 0);
-      return { date, coverage: goal > 0 ? total / goal : 0, total };
+      history.push({
+        date: `W${weekNum}`,
+        coverage: goal > 0 ? total / goal : 0,
+        total,
+      });
+    }
+
+    history.sort((a, b) => {
+      const aNum = parseInt(a.date.slice(1));
+      const bNum = parseInt(b.date.slice(1));
+      return aNum - bNum;
     });
+
+    return history;
   }, [snapshots, quarter, goal, selectedRep]);
 
   const current = history[history.length - 1];
