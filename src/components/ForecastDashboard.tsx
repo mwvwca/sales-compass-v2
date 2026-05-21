@@ -257,6 +257,14 @@ export default function ForecastDashboard() {
         <div className="flex items-center gap-3 ml-auto">
           <ExecutiveReport quarter={anchorQuarter} selectedRep={selectedRep} />
           <ExecutiveReportVisual quarter={anchorQuarter} selectedRep={selectedRep} />
+          <button
+            onClick={() => exportMonthlyPresentation(presentationMonth, { reps, opportunities, monthlyRepCommits })}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            title="Download monthly management presentation"
+          >
+            <FileSpreadsheet size={14} />
+            {getPresentationButtonLabel(presentationMonth)}
+          </button>
         </div>
       </div>
 
