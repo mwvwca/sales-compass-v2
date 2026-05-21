@@ -163,6 +163,7 @@ export default function DrQuality() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const pastDue = scoredOpen.filter(s => {
       if (!s.opp.closeDate) return false;
+      if (s.opp.classification === 'closed_won') return false;
       const d = new Date(s.opp.closeDate); return d < today;
     });
     if (pastDue.length / n > 0.1) {
@@ -242,6 +243,7 @@ export default function DrQuality() {
       case 'past-due':
         return scoredOpen.filter(s => {
           if (!s.opp.closeDate) return false;
+          if (s.opp.classification === 'closed_won') return false;
           return new Date(s.opp.closeDate) < today;
         });
       case 'stacking':
