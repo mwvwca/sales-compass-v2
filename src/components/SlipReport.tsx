@@ -279,10 +279,11 @@ export default function SlipReport() {
             {slips.map(s => {
               const isOpen = expanded === s.opportunityId;
               return (
-                <>
-                  <tr key={s.opportunityId}
+                <Fragment key={s.opportunityId}>
+                  <tr
                     onClick={() => setExpanded(isOpen ? null : s.opportunityId)}
                     className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors cursor-pointer">
+
                     <td className="px-2 py-2">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</td>
                     <td className="px-3 py-2 text-xs">{s.opportunityName}</td>
                     <td className="px-3 py-2 text-xs">{s.repName}</td>
