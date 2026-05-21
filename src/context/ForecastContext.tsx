@@ -198,8 +198,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionSettings: loadFromStorage(STORAGE_KEYS.commissionSettings, {}),
       commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
       commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
-      monthlyCommits: loadFromStorage<MonthlyCommit[]>(STORAGE_KEYS.monthlyCommits, []),
-      annualStretchGoals: loadFromStorage<AnnualStretchGoal[]>(STORAGE_KEYS.annualStretchGoals, []),
+      monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
+
       loading: false,
     };
   });
