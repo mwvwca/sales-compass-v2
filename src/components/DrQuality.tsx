@@ -231,6 +231,7 @@ export default function DrQuality() {
     exportDrReport({
       scored, scoredOpen, disqualified, strongList, marginalList, weakList,
       avgScore, totalOpenPipe, strongPipe, byCam, hasCam, issues,
+      fromQuarter, toQuarter,
     });
   };
 
@@ -242,18 +243,40 @@ export default function DrQuality() {
     });
   };
 
+  const subtitle = `${scopedOpps.length.toLocaleString()} deal registrations · ${fromQuarter}${fromQuarter !== toQuarter ? ` – ${toQuarter}` : ''}`;
+
   return (
     <div className="space-y-4">
       {/* Header with export */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-semibold">DR Quality</h2>
-          <p className="text-xs text-muted-foreground">Six-dimension deal-reg scoring across the channel pipeline.</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={handleExport}>
-          <Download size={14} /> Export Report
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">From quarter</label>
+            <Select value={fromQuarter} onValueChange={(v) => handleFromQuarterChange(v as Quarter)}>
+              <SelectTrigger className="h-8 w-[120px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {quarterOptions.map(q => <SelectItem key={q} value={q} className="text-xs">{q}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Showing {fromQuarter} – {toQuarter}</span>
+            <label className="text-xs text-muted-foreground">To quarter</label>
+            <Select value={toQuarter} onValueChange={(v) => handleToQuarterChange(v as Quarter)}>
+              <SelectTrigger className="h-8 w-[120px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {quarterOptions.map(q => <SelectItem key={q} value={q} className="text-xs">{q}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button size="sm" variant="outline" onClick={handleExport}>
+            <Download size={14} /> Export Report
+          </Button>
+        </div>
       </div>
+
 
       {noAccountData && (
         <div className="flex items-start gap-2 rounded-md border border-upside/30 bg-upside/10 px-3 py-2 text-xs">
