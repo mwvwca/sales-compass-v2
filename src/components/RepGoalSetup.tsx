@@ -4,6 +4,7 @@ import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target } from 
 import CommissionLock from '@/components/CommissionLock';
 import CommissionSettings from '@/components/CommissionSettings';
 import CommissionTracker from '@/components/CommissionTracker';
+import CommissionReconciliation from '@/components/CommissionReconciliation';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { normalizeRepName } from '@/lib/repUtils';
