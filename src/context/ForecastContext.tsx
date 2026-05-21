@@ -24,8 +24,8 @@ const STORAGE_KEYS = {
   commissionSettings: 'forecast_commission_settings',
   commissionReviews: 'forecast_commission_reviews',
   commissionPinHash: 'forecast_commission_pin_hash',
-  monthlyCommits: 'forecast_monthly_commits',
-  annualStretchGoals: 'forecast_annual_stretch_goals',
+  monthlyRepCommits: 'forecast_monthly_rep_commits',
+
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
