@@ -3,14 +3,32 @@ import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
-import { Check, Plus, RefreshCw, Minus, Trash2 } from 'lucide-react';
+import { Check, Plus, RefreshCw, Minus, Trash2, AlertTriangle } from 'lucide-react';
 
 interface Props {
   incoming: Opportunity[];
   fileName: string;
   onDone: () => void;
   onCancel: () => void;
+  detectedHeaders?: string[];
+  columnMapping?: Record<string, string>;
 }
+
+const MAPPING_LABELS: Record<string, string> = {
+  id: 'id',
+  name: 'name',
+  repName: 'repName',
+  amount: 'amount',
+  closeDate: 'closeDate',
+  stage: 'stage',
+  probability: 'probability',
+  forecast: 'forecast',
+  forecastCategory: 'forecastCategory',
+  upsideFlag: 'upsideFlag',
+  accountName: 'accountName',
+  productName: 'productName',
+  channelAccountManager: 'channelAccountManager',
+};
 
 type ChangeType = 'new' | 'updated' | 'unchanged' | 'removed';
 
