@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { getQuarter, getCurrentQuarter, type Quarter, type ChangeLogEntry, type Opportunity } from '@/types/forecast';
 import { Badge } from '@/components/ui/badge';
