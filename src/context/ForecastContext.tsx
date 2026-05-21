@@ -528,8 +528,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     commissionSettings?: CommissionSettingsMap;
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
-    monthlyCommits?: MonthlyCommit[];
-    annualStretchGoals?: AnnualStretchGoal[];
+    monthlyRepCommits?: MonthlyRepCommit[];
   }) => {
     setState(s => ({
       ...s,
@@ -541,8 +540,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionSettings: data.commissionSettings || {},
       commissionReviews: data.commissionReviews || {},
       commissionPinHash: data.commissionPinHash ?? null,
-      monthlyCommits: data.monthlyCommits || [],
-      annualStretchGoals: data.annualStretchGoals || [],
+      monthlyRepCommits: data.monthlyRepCommits || [],
+
     }));
   }, []);
 
