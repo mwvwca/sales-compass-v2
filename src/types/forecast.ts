@@ -212,4 +212,18 @@ export function getYearQuarters(year: number): Quarter[] {
   return [1, 2, 3, 4].map(q => `${year}-Q${q}` as Quarter);
 }
 
+/** Returns a Date set to midnight UTC on the first day of the given quarter */
+export function quarterStart(quarter: Quarter): Date {
+  const [year, q] = quarter.split('-Q').map(Number);
+  const month = (q - 1) * 3;
+  return new Date(Date.UTC(year, month, 1));
+}
+
+/** Returns a Date set to 23:59:59.999 UTC on the last day of the given quarter */
+export function quarterEnd(quarter: Quarter): Date {
+  const [year, q] = quarter.split('-Q').map(Number);
+  const month = (q - 1) * 3 + 3;
+  return new Date(Date.UTC(year, month, 1) - 1);
+}
+
 
