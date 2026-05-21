@@ -8,8 +8,8 @@ import type {
   CommissionReviewsMap,
   CommissionSettingsMap,
   RepCommissionSettings,
-  MonthlyCommit,
-  AnnualStretchGoal,
+  MonthlyRepCommit,
+
 } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
