@@ -105,6 +105,15 @@ const Index = () => {
             <DrQuality />
           </div>
         )}
+        {tab === 'slips' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">Slip Report</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Deals that were committed or in upside last quarter but didn't close — and where they are now.</p>
+            </div>
+            <SlipReport />
+          </div>
+        )}
         {tab === 'graveyard' && (
           <div>
             <div className="mb-4">
