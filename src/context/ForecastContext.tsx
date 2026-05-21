@@ -492,47 +492,32 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, commissionPinHash: pinHash }));
   }, []);
 
-  const setMonthlyCommit = useCallback((monthKey: string, amount: number, notes?: string) => {
+  const setMonthlyRepCommit = useCallback((repId: string, repName: string, monthKey: string, amount: number, notes?: string) => {
     setState(s => {
       const now = new Date().toISOString();
-      const existing = s.monthlyCommits.find(m => m.monthKey === monthKey);
+      const existing = s.monthlyRepCommits.find(m => m.repId === repId && m.monthKey === monthKey);
       const trimmedNotes = notes?.trim() ? notes.trim() : undefined;
-      const next: MonthlyCommit = existing
-        ? { ...existing, commitAmount: amount, notes: trimmedNotes, updatedAt: now }
-        : { id: crypto.randomUUID(), monthKey, commitAmount: amount, notes: trimmedNotes, createdAt: now, updatedAt: now };
+      const next: MonthlyRepCommit = existing
+        ? { ...existing, repName, commitAmount: amount, notes: trimmedNotes, updatedAt: now }
+        : { id: crypto.randomUUID(), repId, repName, monthKey, commitAmount: amount, notes: trimmedNotes, createdAt: now, updatedAt: now };
       return {
         ...s,
-        monthlyCommits: existing
-          ? s.monthlyCommits.map(m => (m.monthKey === monthKey ? next : m))
-          : [...s.monthlyCommits, next],
+        monthlyRepCommits: existing
+          ? s.monthlyRepCommits.map(m => (m.repId === repId && m.monthKey === monthKey ? next : m))
+          : [...s.monthlyRepCommits, next],
       };
     });
   }, []);
 
-  const getMonthlyCommit = useCallback((monthKey: string) => {
-    return state.monthlyCommits.find(m => m.monthKey === monthKey);
-  }, [state.monthlyCommits]);
+  const getMonthlyRepCommit = useCallback((repId: string, monthKey: string) => {
+    return state.monthlyRepCommits.find(m => m.repId === repId && m.monthKey === monthKey);
+  }, [state.monthlyRepCommits]);
 
-  const setAnnualStretch = useCallback((year: number, amount: number, notes?: string) => {
-    setState(s => {
-      const now = new Date().toISOString();
-      const existing = s.annualStretchGoals.find(g => g.year === year);
-      const trimmedNotes = notes?.trim() ? notes.trim() : undefined;
-      const next: AnnualStretchGoal = existing
-        ? { ...existing, stretchAmount: amount, notes: trimmedNotes, updatedAt: now }
-        : { id: crypto.randomUUID(), year, stretchAmount: amount, notes: trimmedNotes, createdAt: now, updatedAt: now };
-      return {
-        ...s,
-        annualStretchGoals: existing
-          ? s.annualStretchGoals.map(g => (g.year === year ? next : g))
-          : [...s.annualStretchGoals, next],
-      };
-    });
-  }, []);
+  const getMonthlyCommitsByMonth = useCallback((monthKey: string) => {
+    return state.monthlyRepCommits.filter(m => m.monthKey === monthKey);
+  }, [state.monthlyRepCommits]);
 
-  const getAnnualStretch = useCallback((year: number) => {
-    return state.annualStretchGoals.find(g => g.year === year);
-  }, [state.annualStretchGoals]);
+
 
   const restoreFromBackup = useCallback((data: {
     reps: Rep[];
