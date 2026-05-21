@@ -203,7 +203,7 @@ export default function DrQuality() {
   // Detail table (apply strip threshold)
   const detailRows = useMemo(() => {
     const accountOpenCounts = new Map<string, number>();
-    for (const o of filteredOpps) {
+    for (const o of scopedOpps) {
       const k = (o.accountName || '').trim().toLowerCase();
       if (!k) continue;
       const isOpen = o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted';
@@ -215,7 +215,7 @@ export default function DrQuality() {
       if (!k) return true;
       return (accountOpenCounts.get(k) || 0) < stripThreshold;
     });
-  }, [scored, filteredOpps, stripThreshold]);
+  }, [scored, scopedOpps, stripThreshold]);
 
   const noAccountData = result.accountCoverage < 0.05;
   const winRateDelta = result.singleProductCohort.winRate - result.multiProductCohort.winRate;
