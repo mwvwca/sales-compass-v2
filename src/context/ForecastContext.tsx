@@ -115,8 +115,8 @@ interface ForecastState {
   commissionSettings: CommissionSettingsMap;
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;
-  monthlyCommits: MonthlyCommit[];
-  annualStretchGoals: AnnualStretchGoal[];
+  monthlyRepCommits: MonthlyRepCommit[];
+
   loading: boolean;
 }
 
