@@ -167,7 +167,7 @@ export default function DrQuality() {
   }, [scoredOpen, disqualified]);
 
   // By CAM
-  const hasCam = useMemo(() => filteredOpps.some(o => o.channelAccountManager?.trim()), [filteredOpps]);
+  const hasCam = useMemo(() => scopedOpps.some(o => o.channelAccountManager?.trim()), [scopedOpps]);
   const byCam = useMemo(() => {
     const m = new Map<string, { name: string; opps: typeof scored }>();
     for (const s of scored) {
