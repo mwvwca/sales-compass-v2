@@ -437,25 +437,38 @@ export default function DrQuality() {
           className="text-muted-foreground" />
       </div>
 
-      {/* Section B — Systemic issues */}
+      {/* Section B — Systemic issues (clickable to filter detail table) */}
       {issues.length > 0 && (
         <div className="space-y-2">
-          {issues.map((i, idx) => (
-            <div key={idx}
-              className={`flex items-start gap-2 rounded-md border-l-4 px-3 py-2 text-xs ${
-                i.severity === 'crit'
-                  ? 'border-l-negative bg-negative/10'
-                  : 'border-l-upside bg-upside/10'
-              }`}>
-              <AlertTriangle size={14} className={`mt-0.5 shrink-0 ${i.severity === 'crit' ? 'text-negative' : 'text-upside'}`} />
-              <div>
-                <p className="font-medium">{i.title}</p>
-                <p className="text-muted-foreground">{i.desc}</p>
-              </div>
-            </div>
-          ))}
+          {issues.map((i, idx) => {
+            const key = issueTitleToKey[i.title];
+            const isActive = key && activeIssueFilter === key;
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => key && setActiveIssueFilter(isActive ? null : key)}
+                disabled={!key}
+                className={`w-full text-left flex items-start gap-2 rounded-md border-l-4 px-3 py-2 text-xs transition-colors ${
+                  i.severity === 'crit' ? 'border-l-negative bg-negative/10 hover:bg-negative/15' : 'border-l-upside bg-upside/10 hover:bg-upside/15'
+                } ${isActive ? 'ring-2 ring-primary' : ''} ${!key ? 'cursor-default' : 'cursor-pointer'}`}
+              >
+                <AlertTriangle size={14} className={`mt-0.5 shrink-0 ${i.severity === 'crit' ? 'text-negative' : 'text-upside'}`} />
+                <div className="flex-1">
+                  <p className="font-medium">{i.title}</p>
+                  <p className="text-muted-foreground">{i.desc}</p>
+                </div>
+                {key && (
+                  <span className="text-xs font-medium whitespace-nowrap mt-0.5">
+                    {isActive ? '✕ Clear filter' : 'View deals →'}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
+
 
       {/* Section C — By CAM */}
       <Card>
