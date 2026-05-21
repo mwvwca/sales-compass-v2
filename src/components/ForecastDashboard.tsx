@@ -414,6 +414,9 @@ export default function ForecastDashboard() {
         </div>
       )}
 
+      {/* Commit Accuracy */}
+      <CommitAccuracySection opportunities={opportunities} changelog={changelog} />
+
       {/* Sales Intelligence */}
       <SalesIntelligence
         opportunities={[...hudOpps, ...lostOpps]}
