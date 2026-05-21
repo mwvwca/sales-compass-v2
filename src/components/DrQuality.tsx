@@ -47,6 +47,22 @@ export default function DrQuality() {
   const [stripThreshold, setStripThreshold] = useState(3);
   const [repFilter, setRepFilter] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [sortCol, setSortCol] = useState<string>('score');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [activeIssueFilter, setActiveIssueFilter] = useState<string | null>(null);
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
+  };
+  const setFilter = (k: string, v: string) => setColFilters(prev => ({ ...prev, [k]: v }));
+  const clearFilters = () => setColFilters({});
+  const hasActiveFilter = Object.values(colFilters).some(v => v && v.length > 0);
   const [fromQuarter, setFromQuarter] = useState<Quarter>(() => {
     return (sessionStorage.getItem('drq_fromQuarter') as Quarter) || '2026-Q1';
   });
