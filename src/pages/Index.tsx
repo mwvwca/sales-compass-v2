@@ -8,9 +8,10 @@ import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
 import DrQuality from '@/components/DrQuality';
-import { BarChart3, Users, Upload, Skull, History, Layers } from 'lucide-react';
+import SlipReport from '@/components/SlipReport';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'slips' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
