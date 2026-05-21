@@ -128,6 +128,17 @@ function autoMap(headers: string[]): Partial<ColumnMapping> {
     });
     if (productHeader) mapping.productName = productHeader;
   }
+  if (!mapping.accountName) {
+    const acctHeader = headers.find(h => normalizeHeader(h).includes('account'));
+    if (acctHeader) mapping.accountName = acctHeader;
+  }
+  if (!mapping.channelAccountManager) {
+    const camHeader = headers.find(h => {
+      const n = normalizeHeader(h);
+      return n.includes('channel') || n === 'cam';
+    });
+    if (camHeader) mapping.channelAccountManager = camHeader;
+  }
   return mapping;
 }
 
