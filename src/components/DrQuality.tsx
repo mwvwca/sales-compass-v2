@@ -234,6 +234,85 @@ export default function DrQuality() {
     });
   }, [scored, scopedOpps, stripThreshold]);
 
+  // Issue-filtered rows (bypasses strip threshold and column filters take precedence)
+  const issueFilteredRows = useMemo(() => {
+    if (!activeIssueFilter) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    switch (activeIssueFilter) {
+      case 'past-due':
+        return scoredOpen.filter(s => {
+          if (!s.opp.closeDate) return false;
+          return new Date(s.opp.closeDate) < today;
+        });
+      case 'stacking':
+        return scoredOpen.filter(s => s.score.subscores.accountStacking <= 40);
+      case 'placeholder':
+        return scoredOpen.filter(s => s.score.subscores.amountCredibility <= 40);
+      case 'zero-amount':
+        return disqualified.filter(d => d.score.disqualifyReason.toLowerCase().includes('amount'));
+      default:
+        return null;
+    }
+  }, [activeIssueFilter, scoredOpen, disqualified]);
+
+  const displayRows = useMemo(() => {
+    const base = issueFilteredRows ?? detailRows;
+    let rows = [...base];
+    for (const [col, val] of Object.entries(colFilters)) {
+      if (!val) continue;
+      const v = val.toLowerCase();
+      rows = rows.filter(({ opp, score }) => {
+        switch (col) {
+          case 'name': return (opp.name || '').toLowerCase().includes(v);
+          case 'owner': return (opp.repName || '').toLowerCase().includes(v);
+          case 'cam': return (opp.channelAccountManager || '').toLowerCase().includes(v);
+          case 'stage': return val === '__all__' ? true : (opp.stage || '').toLowerCase() === v;
+          case 'tier': return val === '__all__' ? true : score.tier === val;
+          case 'score_min': return score.score >= parseFloat(val);
+          case 'score_max': return score.score <= parseFloat(val);
+          case 'amount_min': return (opp.amount || 0) >= parseFloat(val);
+          case 'amount_max': return (opp.amount || 0) <= parseFloat(val);
+          default: return true;
+        }
+      });
+    }
+    rows.sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortCol) {
+        case 'name': av = a.opp.name || ''; bv = b.opp.name || ''; break;
+        case 'owner': av = a.opp.repName || ''; bv = b.opp.repName || ''; break;
+        case 'cam': av = a.opp.channelAccountManager || ''; bv = b.opp.channelAccountManager || ''; break;
+        case 'amount': av = a.opp.amount || 0; bv = b.opp.amount || 0; break;
+        case 'closeDate': av = a.opp.closeDate || ''; bv = b.opp.closeDate || ''; break;
+        case 'stage': av = a.opp.stage || ''; bv = b.opp.stage || ''; break;
+        case 'score': av = a.score.score; bv = b.score.score; break;
+        case 'tier':
+          av = ['Strong', 'Marginal', 'Weak', 'Disqualified'].indexOf(a.score.tier);
+          bv = ['Strong', 'Marginal', 'Weak', 'Disqualified'].indexOf(b.score.tier);
+          break;
+        default: return 0;
+      }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return rows;
+  }, [issueFilteredRows, detailRows, colFilters, sortCol, sortDir]);
+
+  const stageOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of scored) if (r.opp.stage?.trim()) s.add(r.opp.stage.trim());
+    return Array.from(s).sort();
+  }, [scored]);
+
+  const issueTitleToKey: Record<string, string> = {
+    'Past-due close dates': 'past-due',
+    'Account stacking': 'stacking',
+    'Placeholder amounts': 'placeholder',
+    'Zero-amount deal regs': 'zero-amount',
+  };
+  const activeIssueTitle = Object.entries(issueTitleToKey).find(([, k]) => k === activeIssueFilter)?.[0];
+
   const noAccountData = result.accountCoverage < 0.05;
   const winRateDelta = result.singleProductCohort.winRate - result.multiProductCohort.winRate;
   const reportedWin = result.reportedPipeline.winRate;
