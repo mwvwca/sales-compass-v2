@@ -12,7 +12,8 @@ import ExecutiveReportVisual from './ExecutiveReportVisual';
 import PipelineCoverage from './PipelineCoverage';
 import SalesIntelligence from './SalesIntelligence';
 import { Switch } from '@/components/ui/switch';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentationButtonLabel } from '@/lib/monthlyPresentationExport';
 
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
