@@ -336,7 +336,7 @@ export default function SlipReport() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
