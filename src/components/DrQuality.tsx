@@ -524,36 +524,96 @@ export default function DrQuality() {
       {/* Section D — Deal detail table */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Deal detail</CardTitle>
-          <CardDescription className="text-xs">
-            Strip threshold filters out deals on accounts with this many or more open opps.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm">Deal detail</CardTitle>
+              <CardDescription className="text-xs">
+                {activeIssueTitle
+                  ? <>Showing deals matching: <span className="font-semibold text-foreground">{activeIssueTitle}</span> (strip threshold bypassed)</>
+                  : 'Strip threshold filters out deals on accounts with this many or more open opps.'}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeIssueFilter && (
+                <Button size="sm" variant="outline" onClick={() => setActiveIssueFilter(null)}>
+                  <X size={12} /> Clear issue filter
+                </Button>
+              )}
+              {hasActiveFilter && (
+                <Button size="sm" variant="outline" onClick={clearFilters}>
+                  <X size={12} /> Clear column filters
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between text-xs mb-2">
-              <span className="text-muted-foreground">Strip threshold</span>
-              <span className="font-mono font-semibold">{stripThreshold}+</span>
+          {!activeIssueFilter && (
+            <div>
+              <div className="flex items-center justify-between text-xs mb-2">
+                <span className="text-muted-foreground">Strip threshold</span>
+                <span className="font-mono font-semibold">{stripThreshold}+</span>
+              </div>
+              <Slider value={[stripThreshold]} onValueChange={v => setStripThreshold(v[0])} min={2} max={10} step={1} />
             </div>
-            <Slider value={[stripThreshold]} onValueChange={v => setStripThreshold(v[0])} min={2} max={10} step={1} />
-          </div>
+          )}
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs w-6" />
-                  <TableHead className="text-xs">Opportunity</TableHead>
-                  <TableHead className="text-xs">Owner</TableHead>
-                  <TableHead className="text-xs">CAM</TableHead>
-                  <TableHead className="text-xs text-right">Amount</TableHead>
-                  <TableHead className="text-xs">Close Date</TableHead>
-                  <TableHead className="text-xs">Stage</TableHead>
-                  <TableHead className="text-xs text-right">Score</TableHead>
-                  <TableHead className="text-xs">Tier</TableHead>
+                  <SortableHead label="Opportunity" col="name" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Owner" col="owner" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="CAM" col="cam" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Amount" col="amount" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Close Date" col="closeDate" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Stage" col="stage" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Score" col="score" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Tier" col="tier" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                </TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="p-1" />
+                  <TableHead className="p-1"><Input value={colFilters.name || ''} onChange={e => setFilter('name', e.target.value)} placeholder="filter…" className="h-6 text-xs px-2" /></TableHead>
+                  <TableHead className="p-1"><Input value={colFilters.owner || ''} onChange={e => setFilter('owner', e.target.value)} placeholder="filter…" className="h-6 text-xs px-2" /></TableHead>
+                  <TableHead className="p-1"><Input value={colFilters.cam || ''} onChange={e => setFilter('cam', e.target.value)} placeholder="filter…" className="h-6 text-xs px-2" /></TableHead>
+                  <TableHead className="p-1">
+                    <div className="flex gap-1">
+                      <Input value={colFilters.amount_min || ''} onChange={e => setFilter('amount_min', e.target.value)} placeholder="min" className="h-6 text-xs px-2" type="number" />
+                      <Input value={colFilters.amount_max || ''} onChange={e => setFilter('amount_max', e.target.value)} placeholder="max" className="h-6 text-xs px-2" type="number" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="p-1" />
+                  <TableHead className="p-1">
+                    <Select value={colFilters.stage || '__all__'} onValueChange={v => setFilter('stage', v)}>
+                      <SelectTrigger className="h-6 text-xs px-2"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__" className="text-xs">All</SelectItem>
+                        {stageOptions.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </TableHead>
+                  <TableHead className="p-1">
+                    <div className="flex gap-1">
+                      <Input value={colFilters.score_min || ''} onChange={e => setFilter('score_min', e.target.value)} placeholder="min" className="h-6 text-xs px-2" type="number" />
+                      <Input value={colFilters.score_max || ''} onChange={e => setFilter('score_max', e.target.value)} placeholder="max" className="h-6 text-xs px-2" type="number" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="p-1">
+                    <Select value={colFilters.tier || '__all__'} onValueChange={v => setFilter('tier', v)}>
+                      <SelectTrigger className="h-6 text-xs px-2"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__" className="text-xs">All</SelectItem>
+                        <SelectItem value="Strong" className="text-xs">Strong</SelectItem>
+                        <SelectItem value="Marginal" className="text-xs">Marginal</SelectItem>
+                        <SelectItem value="Weak" className="text-xs">Weak</SelectItem>
+                        <SelectItem value="Disqualified" className="text-xs">Disqualified</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {detailRows.slice(0, 500).map(({ opp, score }) => {
+                {displayRows.slice(0, 500).map(({ opp, score }) => {
                   const isExp = expanded.has(opp.id);
                   return (
                     <React.Fragment key={opp.id}>
@@ -596,12 +656,14 @@ export default function DrQuality() {
                 })}
               </TableBody>
             </Table>
-            {detailRows.length > 500 && (
-              <p className="mt-2 text-xs text-muted-foreground">Showing first 500 of {detailRows.length}. Export for the full list.</p>
-            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Showing {Math.min(displayRows.length, 500)} of {displayRows.length}
+              {displayRows.length > 500 ? ' — refine filters or export for the full list.' : ''}
+            </p>
           </div>
         </CardContent>
       </Card>
+
 
       {/* Section E — existing legacy analysis */}
       <Card>
