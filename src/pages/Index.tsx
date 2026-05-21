@@ -31,6 +31,7 @@ const Index = () => {
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
     { id: 'dr-quality', label: 'DR Quality', icon: <Layers size={14} /> },
+    { id: 'slips', label: 'Slips', icon: <TrendingDown size={14} /> },
     { id: 'graveyard', label: 'Graveyard', icon: <Skull size={14} /> },
   ];
 
