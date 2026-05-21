@@ -236,7 +236,7 @@ export default function ImportSheet() {
           };
         });
 
-        setReview({ opps, fileName: file.name });
+        setReview({ opps, fileName: file.name, headers, mapping: mapping as Record<string, string> });
       } catch (err) {
         setError('Failed to parse file. Ensure it is a valid Excel or CSV file.');
       }
