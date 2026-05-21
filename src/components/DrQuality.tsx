@@ -122,10 +122,10 @@ export default function DrQuality() {
 
   // Portfolio scorecard
   const scored = useMemo(() => {
-    return filteredOpps
+    return scopedOpps
       .map(o => ({ opp: o, score: scoreMap.get(o.id)! }))
       .filter(x => x.score);
-  }, [filteredOpps, scoreMap]);
+  }, [scopedOpps, scoreMap]);
 
   const scoredOpen = scored.filter(s => !s.score.disqualified);
   const disqualified = scored.filter(s => s.score.disqualified);
