@@ -812,6 +812,23 @@ function ScoreCard({ label, value, sub, className }: { label: string; value: str
   );
 }
 
+function SortableHead({ label, col, align, sortCol, sortDir, onSort }: { label: string; col: string; align?: 'left' | 'right'; sortCol: string; sortDir: 'asc' | 'desc'; onSort: (c: string) => void }) {
+  const active = sortCol === col;
+  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <TableHead className={`text-xs ${align === 'right' ? 'text-right' : ''}`}>
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${active ? 'text-foreground font-semibold' : ''}`}
+      >
+        {label}
+        <Icon size={10} className={active ? 'opacity-100' : 'opacity-40'} />
+      </button>
+    </TableHead>
+  );
+}
+
 function SubScore({ label, v }: { label: string; v: number }) {
   const color = v >= 75 ? 'text-positive' : v >= 50 ? 'text-upside' : 'text-negative';
   return (
