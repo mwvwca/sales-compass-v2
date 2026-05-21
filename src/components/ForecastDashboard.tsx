@@ -114,7 +114,7 @@ export default function ForecastDashboard() {
 
   const variance = totalWon - totalGoal;
 
-  // Mgmt Commit aggregation for current scope
+  // Mgmt Commit aggregation for current scope (filtered by selected rep)
   const mgmtCommitTotal = useMemo(() => {
     const yr = anchor.getUTCFullYear();
     let monthKeys: string[] = [];
@@ -125,21 +125,16 @@ export default function ForecastDashboard() {
     } else {
       monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
     }
-    const matched = monthlyCommits.filter(m => monthKeys.includes(m.monthKey));
+    const matched = monthlyRepCommits.filter(m => {
+      if (!monthKeys.includes(m.monthKey)) return false;
+      if (selectedRep !== 'all' && m.repName !== selectedRep) return false;
+      return true;
+    });
     if (matched.length === 0) return null;
     return matched.reduce((s, m) => s + m.commitAmount, 0);
-  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyCommits]);
+  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyRepCommits, selectedRep]);
 
-  // Stretch aggregation (prorated)
-  const stretchForYear = annualStretchGoals.find(g => g.year === anchor.getUTCFullYear());
-  const stretchProrated = useMemo(() => {
-    if (!stretchForYear) return null;
-    const a = stretchForYear.stretchAmount;
-    if (scope === 'weekly') return a / 52;
-    if (scope === 'monthly') return a / 12;
-    if (scope === 'quarterly') return a / 4;
-    return a;
-  }, [stretchForYear, scope]);
+
 
   const goToGoals = () => {
     window.dispatchEvent(new CustomEvent('forecast:navigate-tab', { detail: 'goals' }));
