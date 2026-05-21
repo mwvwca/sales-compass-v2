@@ -40,7 +40,7 @@ interface ReviewItem {
   selected: boolean;
 }
 
-export default function ImportReview({ incoming, fileName, onDone, onCancel }: Props) {
+export default function ImportReview({ incoming, fileName, onDone, onCancel, detectedHeaders = [], columnMapping = {} }: Props) {
   const { opportunities, importOpportunities, archiveToGraveyard } = useForecast();
 
   const existingMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
