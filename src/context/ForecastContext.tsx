@@ -570,10 +570,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     updateCommissionOpportunityReview,
     updateOpportunityCommissionDetails,
     setCommissionPinHash,
-    setMonthlyCommit,
-    getMonthlyCommit,
-    setAnnualStretch,
-    getAnnualStretch,
+    setMonthlyRepCommit,
+    getMonthlyRepCommit,
+    getMonthlyCommitsByMonth,
+
     restoreFromBackup,
     getOpportunityHistory,
   };
