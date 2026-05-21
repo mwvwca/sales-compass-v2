@@ -46,6 +46,48 @@ export default function DrQuality() {
   const [stripThreshold, setStripThreshold] = useState(3);
   const [repFilter, setRepFilter] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [fromQuarter, setFromQuarter] = useState<Quarter>(() => {
+    return (sessionStorage.getItem('drq_fromQuarter') as Quarter) || '2026-Q1';
+  });
+  const [toQuarter, setToQuarter] = useState<Quarter>(() => {
+    return (sessionStorage.getItem('drq_toQuarter') as Quarter) || getCurrentQuarter();
+  });
+
+  const quarterOptions = useMemo<Quarter[]>(() => {
+    const current = getCurrentQuarter();
+    const [cy, cq] = current.split('-Q').map(Number);
+    // end = current + 2 future quarters
+    let endYear = cy;
+    let endQ = cq + 2;
+    while (endQ > 4) { endQ -= 4; endYear += 1; }
+    const opts: Quarter[] = [];
+    for (let y = 2026; y <= endYear; y++) {
+      for (const q of getYearQuarters(y)) {
+        const [qy, qq] = q.split('-Q').map(Number);
+        if (qy > endYear || (qy === endYear && qq > endQ)) break;
+        opts.push(q);
+      }
+    }
+    return opts;
+  }, []);
+
+  const handleFromQuarterChange = (q: Quarter) => {
+    setFromQuarter(q);
+    sessionStorage.setItem('drq_fromQuarter', q);
+    if (q > toQuarter) {
+      setToQuarter(q);
+      sessionStorage.setItem('drq_toQuarter', q);
+    }
+  };
+
+  const handleToQuarterChange = (q: Quarter) => {
+    setToQuarter(q);
+    sessionStorage.setItem('drq_toQuarter', q);
+    if (q < fromQuarter) {
+      setFromQuarter(q);
+      sessionStorage.setItem('drq_fromQuarter', q);
+    }
+  };
 
   const allReps = useMemo(() => {
     const set = new Set<string>();
@@ -59,11 +101,23 @@ export default function DrQuality() {
     return opportunities.filter(o => set.has(normalizeRepName(o.repName)));
   }, [opportunities, repFilter]);
 
-  const scoreMap = useMemo(() => computeDrScores(filteredOpps), [filteredOpps]);
+  const scopedOpps = useMemo(() => {
+    const qStart = quarterStart(fromQuarter);
+    const qEnd = quarterEnd(toQuarter);
+    return filteredOpps.filter(o => {
+      const dateStr = o.closeDate || o.importDate;
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return false;
+      return d >= qStart && d <= qEnd;
+    });
+  }, [filteredOpps, fromQuarter, toQuarter]);
+
+  const scoreMap = useMemo(() => computeDrScores(scopedOpps), [scopedOpps]);
 
   const result = useMemo(
-    () => computeDrQuality(opportunities, { stripThreshold, repFilter }),
-    [opportunities, stripThreshold, repFilter],
+    () => computeDrQuality(scopedOpps, { stripThreshold, repFilter }),
+    [scopedOpps, stripThreshold, repFilter],
   );
 
   // Portfolio scorecard
