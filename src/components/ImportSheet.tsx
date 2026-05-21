@@ -262,6 +262,8 @@ export default function ImportSheet() {
       <ImportReview
         incoming={review.opps}
         fileName={review.fileName}
+        detectedHeaders={review.headers}
+        columnMapping={review.mapping}
         onDone={() => {
           setLastImport({ name: review.fileName, count: review.opps.length });
           setReview(null);
