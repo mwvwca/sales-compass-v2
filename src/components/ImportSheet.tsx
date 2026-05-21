@@ -177,19 +177,23 @@ export default function ImportSheet() {
         // Fallback: use first row as header
         if (headerRowIdx < 0) headerRowIdx = 0;
 
-        const headers = rawRows[headerRowIdx].map((c: any) => String(c).trim());
+        const rawHeaders = rawRows[headerRowIdx].map((c: any) => String(c ?? '').trim());
+        // Preserve original column index — skip blank/null/undefined headers so they don't shift downstream columns
+        const headerCols = rawHeaders
+          .map((name, idx) => ({ idx, name }))
+          .filter(({ name }) => name !== '' && name.toLowerCase() !== 'undefined' && name.toLowerCase() !== 'null');
+        const headers = headerCols.map(h => h.name);
         const mapping = autoMap(headers);
 
-        // Build rows as objects from headerRowIdx + 1 onward
+        // Build rows as objects using original column indices
         const rows: Record<string, any>[] = [];
         for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
           const obj: Record<string, any> = {};
           let hasValue = false;
-          for (let j = 0; j < headers.length; j++) {
-            if (headers[j]) {
-              obj[headers[j]] = rawRows[i]?.[j] ?? '';
-              if (String(rawRows[i]?.[j] ?? '').trim()) hasValue = true;
-            }
+          for (const { idx, name } of headerCols) {
+            const val = rawRows[i]?.[idx] ?? '';
+            obj[name] = val;
+            if (String(val).trim()) hasValue = true;
           }
           if (hasValue) rows.push(obj);
         }
