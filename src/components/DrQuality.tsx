@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, TrendingDown, TrendingUp, Layers, Filter, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { normalizeRepName } from '@/lib/repUtils';
-import type { Opportunity } from '@/types/forecast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { Opportunity, Quarter } from '@/types/forecast';
+import { quarterStart, quarterEnd, getCurrentQuarter, getYearQuarters } from '@/types/forecast';
 import * as XLSX from '@e965/xlsx';
 
 const fmt$ = (n: number) =>
@@ -44,6 +46,48 @@ export default function DrQuality() {
   const [stripThreshold, setStripThreshold] = useState(3);
   const [repFilter, setRepFilter] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [fromQuarter, setFromQuarter] = useState<Quarter>(() => {
+    return (sessionStorage.getItem('drq_fromQuarter') as Quarter) || '2026-Q1';
+  });
+  const [toQuarter, setToQuarter] = useState<Quarter>(() => {
+    return (sessionStorage.getItem('drq_toQuarter') as Quarter) || getCurrentQuarter();
+  });
+
+  const quarterOptions = useMemo<Quarter[]>(() => {
+    const current = getCurrentQuarter();
+    const [cy, cq] = current.split('-Q').map(Number);
+    // end = current + 2 future quarters
+    let endYear = cy;
+    let endQ = cq + 2;
+    while (endQ > 4) { endQ -= 4; endYear += 1; }
+    const opts: Quarter[] = [];
+    for (let y = 2026; y <= endYear; y++) {
+      for (const q of getYearQuarters(y)) {
+        const [qy, qq] = q.split('-Q').map(Number);
+        if (qy > endYear || (qy === endYear && qq > endQ)) break;
+        opts.push(q);
+      }
+    }
+    return opts;
+  }, []);
+
+  const handleFromQuarterChange = (q: Quarter) => {
+    setFromQuarter(q);
+    sessionStorage.setItem('drq_fromQuarter', q);
+    if (q > toQuarter) {
+      setToQuarter(q);
+      sessionStorage.setItem('drq_toQuarter', q);
+    }
+  };
+
+  const handleToQuarterChange = (q: Quarter) => {
+    setToQuarter(q);
+    sessionStorage.setItem('drq_toQuarter', q);
+    if (q < fromQuarter) {
+      setFromQuarter(q);
+      sessionStorage.setItem('drq_fromQuarter', q);
+    }
+  };
 
   const allReps = useMemo(() => {
     const set = new Set<string>();
@@ -57,19 +101,31 @@ export default function DrQuality() {
     return opportunities.filter(o => set.has(normalizeRepName(o.repName)));
   }, [opportunities, repFilter]);
 
-  const scoreMap = useMemo(() => computeDrScores(filteredOpps), [filteredOpps]);
+  const scopedOpps = useMemo(() => {
+    const qStart = quarterStart(fromQuarter);
+    const qEnd = quarterEnd(toQuarter);
+    return filteredOpps.filter(o => {
+      const dateStr = o.closeDate || o.importDate;
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return false;
+      return d >= qStart && d <= qEnd;
+    });
+  }, [filteredOpps, fromQuarter, toQuarter]);
+
+  const scoreMap = useMemo(() => computeDrScores(scopedOpps), [scopedOpps]);
 
   const result = useMemo(
-    () => computeDrQuality(opportunities, { stripThreshold, repFilter }),
-    [opportunities, stripThreshold, repFilter],
+    () => computeDrQuality(scopedOpps, { stripThreshold, repFilter }),
+    [scopedOpps, stripThreshold, repFilter],
   );
 
   // Portfolio scorecard
   const scored = useMemo(() => {
-    return filteredOpps
+    return scopedOpps
       .map(o => ({ opp: o, score: scoreMap.get(o.id)! }))
       .filter(x => x.score);
-  }, [filteredOpps, scoreMap]);
+  }, [scopedOpps, scoreMap]);
 
   const scoredOpen = scored.filter(s => !s.score.disqualified);
   const disqualified = scored.filter(s => s.score.disqualified);
@@ -111,7 +167,7 @@ export default function DrQuality() {
   }, [scoredOpen, disqualified]);
 
   // By CAM
-  const hasCam = useMemo(() => filteredOpps.some(o => o.channelAccountManager?.trim()), [filteredOpps]);
+  const hasCam = useMemo(() => scopedOpps.some(o => o.channelAccountManager?.trim()), [scopedOpps]);
   const byCam = useMemo(() => {
     const m = new Map<string, { name: string; opps: typeof scored }>();
     for (const s of scored) {
@@ -147,7 +203,7 @@ export default function DrQuality() {
   // Detail table (apply strip threshold)
   const detailRows = useMemo(() => {
     const accountOpenCounts = new Map<string, number>();
-    for (const o of filteredOpps) {
+    for (const o of scopedOpps) {
       const k = (o.accountName || '').trim().toLowerCase();
       if (!k) continue;
       const isOpen = o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted';
@@ -159,7 +215,7 @@ export default function DrQuality() {
       if (!k) return true;
       return (accountOpenCounts.get(k) || 0) < stripThreshold;
     });
-  }, [scored, filteredOpps, stripThreshold]);
+  }, [scored, scopedOpps, stripThreshold]);
 
   const noAccountData = result.accountCoverage < 0.05;
   const winRateDelta = result.singleProductCohort.winRate - result.multiProductCohort.winRate;
@@ -175,6 +231,7 @@ export default function DrQuality() {
     exportDrReport({
       scored, scoredOpen, disqualified, strongList, marginalList, weakList,
       avgScore, totalOpenPipe, strongPipe, byCam, hasCam, issues,
+      fromQuarter, toQuarter,
     });
   };
 
@@ -186,18 +243,40 @@ export default function DrQuality() {
     });
   };
 
+  const subtitle = `${scopedOpps.length.toLocaleString()} deal registrations · ${fromQuarter}${fromQuarter !== toQuarter ? ` – ${toQuarter}` : ''}`;
+
   return (
     <div className="space-y-4">
       {/* Header with export */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-semibold">DR Quality</h2>
-          <p className="text-xs text-muted-foreground">Six-dimension deal-reg scoring across the channel pipeline.</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={handleExport}>
-          <Download size={14} /> Export Report
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">From quarter</label>
+            <Select value={fromQuarter} onValueChange={(v) => handleFromQuarterChange(v as Quarter)}>
+              <SelectTrigger className="h-8 w-[120px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {quarterOptions.map(q => <SelectItem key={q} value={q} className="text-xs">{q}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Showing {fromQuarter} – {toQuarter}</span>
+            <label className="text-xs text-muted-foreground">To quarter</label>
+            <Select value={toQuarter} onValueChange={(v) => handleToQuarterChange(v as Quarter)}>
+              <SelectTrigger className="h-8 w-[120px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {quarterOptions.map(q => <SelectItem key={q} value={q} className="text-xs">{q}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button size="sm" variant="outline" onClick={handleExport}>
+            <Download size={14} /> Export Report
+          </Button>
+        </div>
       </div>
+
 
       {noAccountData && (
         <div className="flex items-start gap-2 rounded-md border border-upside/30 bg-upside/10 px-3 py-2 text-xs">
@@ -613,6 +692,8 @@ interface ExportArgs {
   byCam: any[];
   hasCam: boolean;
   issues: { severity: string; title: string; desc: string }[];
+  fromQuarter: Quarter;
+  toQuarter: Quarter;
 }
 
 function setCell(ws: XLSX.WorkSheet, addr: string, value: any, style?: any) {
@@ -629,8 +710,8 @@ function exportDrReport(a: ExportArgs) {
   const headerStyle = { fill: { fgColor: { rgb: 'FF1C2B4A' } }, font: { color: { rgb: 'FFFFFFFF' }, bold: true, sz: 14 } };
   const labelStyle = { font: { bold: true } };
   const sum: any[][] = [];
-  sum.push([`DR Quality Report — Channel Pipeline Analysis`]);
-  sum.push([`Generated: ${today}`]);
+  sum.push([`DR Quality Report — ${a.fromQuarter === a.toQuarter ? a.fromQuarter : `${a.fromQuarter} to ${a.toQuarter}`}`]);
+  sum.push([`Generated: ${today}  ·  Scoped to ${a.fromQuarter}${a.fromQuarter !== a.toQuarter ? ` – ${a.toQuarter}` : ''}`]);
   sum.push([]);
   sum.push(['KPI', 'Value']);
   sum.push(['Total Deal Regs', a.scored.length]);
