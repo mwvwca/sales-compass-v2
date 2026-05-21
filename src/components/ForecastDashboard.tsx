@@ -290,6 +290,14 @@ export default function ForecastDashboard() {
               </p>
             )}
           </div>
+          {scope === 'quarterly' && (
+            <CoverageTrendCard
+              snapshots={snapshots}
+              quarter={anchorQuarter}
+              goal={totalGoal}
+              selectedRep={selectedRep}
+            />
+          )}
           {/* Closed Won placed in row 1 to keep 4-col grid clean */}
 
           <div className="bg-card border border-border rounded-lg p-4">
