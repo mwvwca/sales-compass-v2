@@ -710,8 +710,8 @@ function exportDrReport(a: ExportArgs) {
   const headerStyle = { fill: { fgColor: { rgb: 'FF1C2B4A' } }, font: { color: { rgb: 'FFFFFFFF' }, bold: true, sz: 14 } };
   const labelStyle = { font: { bold: true } };
   const sum: any[][] = [];
-  sum.push([`DR Quality Report — Channel Pipeline Analysis`]);
-  sum.push([`Generated: ${today}`]);
+  sum.push([`DR Quality Report — ${a.fromQuarter === a.toQuarter ? a.fromQuarter : `${a.fromQuarter} to ${a.toQuarter}`}`]);
+  sum.push([`Generated: ${today}  ·  Scoped to ${a.fromQuarter}${a.fromQuarter !== a.toQuarter ? ` – ${a.toQuarter}` : ''}`]);
   sum.push([]);
   sum.push(['KPI', 'Value']);
   sum.push(['Total Deal Regs', a.scored.length]);
