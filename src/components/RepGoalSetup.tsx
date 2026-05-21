@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { normalizeRepName } from '@/lib/repUtils';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBackupNow } from '@/lib/backupUtils';
-import { getMonthLabel, getQuarter, getQuarterMonths } from '@/types/forecast';
+import { getMonthLabel, getQuarter } from '@/types/forecast';
 
 export default function RepGoalSetup() {
   const {
