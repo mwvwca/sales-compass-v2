@@ -8,9 +8,10 @@ import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
 import DrQuality from '@/components/DrQuality';
-import { BarChart3, Users, Upload, Skull, History, Layers } from 'lucide-react';
+import SlipReport from '@/components/SlipReport';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'slips' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
@@ -30,6 +31,7 @@ const Index = () => {
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
     { id: 'dr-quality', label: 'DR Quality', icon: <Layers size={14} /> },
+    { id: 'slips', label: 'Slips', icon: <TrendingDown size={14} /> },
     { id: 'graveyard', label: 'Graveyard', icon: <Skull size={14} /> },
   ];
 
@@ -101,6 +103,15 @@ const Index = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Quantify how much of your pipeline is real vs. multi-product DR padding on the same accounts.</p>
             </div>
             <DrQuality />
+          </div>
+        )}
+        {tab === 'slips' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">Slip Report</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Deals that were committed or in upside last quarter but didn't close — and where they are now.</p>
+            </div>
+            <SlipReport />
           </div>
         )}
         {tab === 'graveyard' && (
