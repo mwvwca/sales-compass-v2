@@ -6,7 +6,8 @@ import { Slider } from '@/components/ui/slider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, TrendingDown, TrendingUp, Layers, Filter, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, TrendingDown, TrendingUp, Layers, Filter, Download, ChevronDown, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { normalizeRepName } from '@/lib/repUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Opportunity, Quarter } from '@/types/forecast';
@@ -46,6 +47,22 @@ export default function DrQuality() {
   const [stripThreshold, setStripThreshold] = useState(3);
   const [repFilter, setRepFilter] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [sortCol, setSortCol] = useState<string>('score');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [activeIssueFilter, setActiveIssueFilter] = useState<string | null>(null);
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
+  };
+  const setFilter = (k: string, v: string) => setColFilters(prev => ({ ...prev, [k]: v }));
+  const clearFilters = () => setColFilters({});
+  const hasActiveFilter = Object.values(colFilters).some(v => v && v.length > 0);
   const [fromQuarter, setFromQuarter] = useState<Quarter>(() => {
     return (sessionStorage.getItem('drq_fromQuarter') as Quarter) || '2026-Q1';
   });
@@ -217,6 +234,85 @@ export default function DrQuality() {
     });
   }, [scored, scopedOpps, stripThreshold]);
 
+  // Issue-filtered rows (bypasses strip threshold and column filters take precedence)
+  const issueFilteredRows = useMemo(() => {
+    if (!activeIssueFilter) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    switch (activeIssueFilter) {
+      case 'past-due':
+        return scoredOpen.filter(s => {
+          if (!s.opp.closeDate) return false;
+          return new Date(s.opp.closeDate) < today;
+        });
+      case 'stacking':
+        return scoredOpen.filter(s => s.score.subscores.accountStacking <= 40);
+      case 'placeholder':
+        return scoredOpen.filter(s => s.score.subscores.amountCredibility <= 40);
+      case 'zero-amount':
+        return disqualified.filter(d => d.score.disqualifyReason.toLowerCase().includes('amount'));
+      default:
+        return null;
+    }
+  }, [activeIssueFilter, scoredOpen, disqualified]);
+
+  const displayRows = useMemo(() => {
+    const base = issueFilteredRows ?? detailRows;
+    let rows = [...base];
+    for (const [col, val] of Object.entries(colFilters)) {
+      if (!val) continue;
+      const v = val.toLowerCase();
+      rows = rows.filter(({ opp, score }) => {
+        switch (col) {
+          case 'name': return (opp.name || '').toLowerCase().includes(v);
+          case 'owner': return (opp.repName || '').toLowerCase().includes(v);
+          case 'cam': return (opp.channelAccountManager || '').toLowerCase().includes(v);
+          case 'stage': return val === '__all__' ? true : (opp.stage || '').toLowerCase() === v;
+          case 'tier': return val === '__all__' ? true : score.tier === val;
+          case 'score_min': return score.score >= parseFloat(val);
+          case 'score_max': return score.score <= parseFloat(val);
+          case 'amount_min': return (opp.amount || 0) >= parseFloat(val);
+          case 'amount_max': return (opp.amount || 0) <= parseFloat(val);
+          default: return true;
+        }
+      });
+    }
+    rows.sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortCol) {
+        case 'name': av = a.opp.name || ''; bv = b.opp.name || ''; break;
+        case 'owner': av = a.opp.repName || ''; bv = b.opp.repName || ''; break;
+        case 'cam': av = a.opp.channelAccountManager || ''; bv = b.opp.channelAccountManager || ''; break;
+        case 'amount': av = a.opp.amount || 0; bv = b.opp.amount || 0; break;
+        case 'closeDate': av = a.opp.closeDate || ''; bv = b.opp.closeDate || ''; break;
+        case 'stage': av = a.opp.stage || ''; bv = b.opp.stage || ''; break;
+        case 'score': av = a.score.score; bv = b.score.score; break;
+        case 'tier':
+          av = ['Strong', 'Marginal', 'Weak', 'Disqualified'].indexOf(a.score.tier);
+          bv = ['Strong', 'Marginal', 'Weak', 'Disqualified'].indexOf(b.score.tier);
+          break;
+        default: return 0;
+      }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return rows;
+  }, [issueFilteredRows, detailRows, colFilters, sortCol, sortDir]);
+
+  const stageOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of scored) if (r.opp.stage?.trim()) s.add(r.opp.stage.trim());
+    return Array.from(s).sort();
+  }, [scored]);
+
+  const issueTitleToKey: Record<string, string> = {
+    'Past-due close dates': 'past-due',
+    'Account stacking': 'stacking',
+    'Placeholder amounts': 'placeholder',
+    'Zero-amount deal regs': 'zero-amount',
+  };
+  const activeIssueTitle = Object.entries(issueTitleToKey).find(([, k]) => k === activeIssueFilter)?.[0];
+
   const noAccountData = result.accountCoverage < 0.05;
   const winRateDelta = result.singleProductCohort.winRate - result.multiProductCohort.winRate;
   const reportedWin = result.reportedPipeline.winRate;
@@ -341,25 +437,38 @@ export default function DrQuality() {
           className="text-muted-foreground" />
       </div>
 
-      {/* Section B — Systemic issues */}
+      {/* Section B — Systemic issues (clickable to filter detail table) */}
       {issues.length > 0 && (
         <div className="space-y-2">
-          {issues.map((i, idx) => (
-            <div key={idx}
-              className={`flex items-start gap-2 rounded-md border-l-4 px-3 py-2 text-xs ${
-                i.severity === 'crit'
-                  ? 'border-l-negative bg-negative/10'
-                  : 'border-l-upside bg-upside/10'
-              }`}>
-              <AlertTriangle size={14} className={`mt-0.5 shrink-0 ${i.severity === 'crit' ? 'text-negative' : 'text-upside'}`} />
-              <div>
-                <p className="font-medium">{i.title}</p>
-                <p className="text-muted-foreground">{i.desc}</p>
-              </div>
-            </div>
-          ))}
+          {issues.map((i, idx) => {
+            const key = issueTitleToKey[i.title];
+            const isActive = key && activeIssueFilter === key;
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => key && setActiveIssueFilter(isActive ? null : key)}
+                disabled={!key}
+                className={`w-full text-left flex items-start gap-2 rounded-md border-l-4 px-3 py-2 text-xs transition-colors ${
+                  i.severity === 'crit' ? 'border-l-negative bg-negative/10 hover:bg-negative/15' : 'border-l-upside bg-upside/10 hover:bg-upside/15'
+                } ${isActive ? 'ring-2 ring-primary' : ''} ${!key ? 'cursor-default' : 'cursor-pointer'}`}
+              >
+                <AlertTriangle size={14} className={`mt-0.5 shrink-0 ${i.severity === 'crit' ? 'text-negative' : 'text-upside'}`} />
+                <div className="flex-1">
+                  <p className="font-medium">{i.title}</p>
+                  <p className="text-muted-foreground">{i.desc}</p>
+                </div>
+                {key && (
+                  <span className="text-xs font-medium whitespace-nowrap mt-0.5">
+                    {isActive ? '✕ Clear filter' : 'View deals →'}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
+
 
       {/* Section C — By CAM */}
       <Card>
@@ -415,36 +524,96 @@ export default function DrQuality() {
       {/* Section D — Deal detail table */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Deal detail</CardTitle>
-          <CardDescription className="text-xs">
-            Strip threshold filters out deals on accounts with this many or more open opps.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm">Deal detail</CardTitle>
+              <CardDescription className="text-xs">
+                {activeIssueTitle
+                  ? <>Showing deals matching: <span className="font-semibold text-foreground">{activeIssueTitle}</span> (strip threshold bypassed)</>
+                  : 'Strip threshold filters out deals on accounts with this many or more open opps.'}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeIssueFilter && (
+                <Button size="sm" variant="outline" onClick={() => setActiveIssueFilter(null)}>
+                  <X size={12} /> Clear issue filter
+                </Button>
+              )}
+              {hasActiveFilter && (
+                <Button size="sm" variant="outline" onClick={clearFilters}>
+                  <X size={12} /> Clear column filters
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between text-xs mb-2">
-              <span className="text-muted-foreground">Strip threshold</span>
-              <span className="font-mono font-semibold">{stripThreshold}+</span>
+          {!activeIssueFilter && (
+            <div>
+              <div className="flex items-center justify-between text-xs mb-2">
+                <span className="text-muted-foreground">Strip threshold</span>
+                <span className="font-mono font-semibold">{stripThreshold}+</span>
+              </div>
+              <Slider value={[stripThreshold]} onValueChange={v => setStripThreshold(v[0])} min={2} max={10} step={1} />
             </div>
-            <Slider value={[stripThreshold]} onValueChange={v => setStripThreshold(v[0])} min={2} max={10} step={1} />
-          </div>
+          )}
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs w-6" />
-                  <TableHead className="text-xs">Opportunity</TableHead>
-                  <TableHead className="text-xs">Owner</TableHead>
-                  <TableHead className="text-xs">CAM</TableHead>
-                  <TableHead className="text-xs text-right">Amount</TableHead>
-                  <TableHead className="text-xs">Close Date</TableHead>
-                  <TableHead className="text-xs">Stage</TableHead>
-                  <TableHead className="text-xs text-right">Score</TableHead>
-                  <TableHead className="text-xs">Tier</TableHead>
+                  <SortableHead label="Opportunity" col="name" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Owner" col="owner" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="CAM" col="cam" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Amount" col="amount" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Close Date" col="closeDate" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Stage" col="stage" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Score" col="score" align="right" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Tier" col="tier" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                </TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="p-1" />
+                  <TableHead className="p-1"><Input value={colFilters.name || ''} onChange={e => setFilter('name', e.target.value)} placeholder="filter…" className="h-6 text-xs px-2" /></TableHead>
+                  <TableHead className="p-1"><Input value={colFilters.owner || ''} onChange={e => setFilter('owner', e.target.value)} placeholder="filter…" className="h-6 text-xs px-2" /></TableHead>
+                  <TableHead className="p-1"><Input value={colFilters.cam || ''} onChange={e => setFilter('cam', e.target.value)} placeholder="filter…" className="h-6 text-xs px-2" /></TableHead>
+                  <TableHead className="p-1">
+                    <div className="flex gap-1">
+                      <Input value={colFilters.amount_min || ''} onChange={e => setFilter('amount_min', e.target.value)} placeholder="min" className="h-6 text-xs px-2" type="number" />
+                      <Input value={colFilters.amount_max || ''} onChange={e => setFilter('amount_max', e.target.value)} placeholder="max" className="h-6 text-xs px-2" type="number" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="p-1" />
+                  <TableHead className="p-1">
+                    <Select value={colFilters.stage || '__all__'} onValueChange={v => setFilter('stage', v)}>
+                      <SelectTrigger className="h-6 text-xs px-2"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__" className="text-xs">All</SelectItem>
+                        {stageOptions.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </TableHead>
+                  <TableHead className="p-1">
+                    <div className="flex gap-1">
+                      <Input value={colFilters.score_min || ''} onChange={e => setFilter('score_min', e.target.value)} placeholder="min" className="h-6 text-xs px-2" type="number" />
+                      <Input value={colFilters.score_max || ''} onChange={e => setFilter('score_max', e.target.value)} placeholder="max" className="h-6 text-xs px-2" type="number" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="p-1">
+                    <Select value={colFilters.tier || '__all__'} onValueChange={v => setFilter('tier', v)}>
+                      <SelectTrigger className="h-6 text-xs px-2"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__" className="text-xs">All</SelectItem>
+                        <SelectItem value="Strong" className="text-xs">Strong</SelectItem>
+                        <SelectItem value="Marginal" className="text-xs">Marginal</SelectItem>
+                        <SelectItem value="Weak" className="text-xs">Weak</SelectItem>
+                        <SelectItem value="Disqualified" className="text-xs">Disqualified</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {detailRows.slice(0, 500).map(({ opp, score }) => {
+                {displayRows.slice(0, 500).map(({ opp, score }) => {
                   const isExp = expanded.has(opp.id);
                   return (
                     <React.Fragment key={opp.id}>
@@ -487,12 +656,14 @@ export default function DrQuality() {
                 })}
               </TableBody>
             </Table>
-            {detailRows.length > 500 && (
-              <p className="mt-2 text-xs text-muted-foreground">Showing first 500 of {detailRows.length}. Export for the full list.</p>
-            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Showing {Math.min(displayRows.length, 500)} of {displayRows.length}
+              {displayRows.length > 500 ? ' — refine filters or export for the full list.' : ''}
+            </p>
           </div>
         </CardContent>
       </Card>
+
 
       {/* Section E — existing legacy analysis */}
       <Card>
@@ -638,6 +809,23 @@ function ScoreCard({ label, value, sub, className }: { label: string; value: str
         {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
       </CardContent>
     </Card>
+  );
+}
+
+function SortableHead({ label, col, align, sortCol, sortDir, onSort }: { label: string; col: string; align?: 'left' | 'right'; sortCol: string; sortDir: 'asc' | 'desc'; onSort: (c: string) => void }) {
+  const active = sortCol === col;
+  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <TableHead className={`text-xs ${align === 'right' ? 'text-right' : ''}`}>
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${active ? 'text-foreground font-semibold' : ''}`}
+      >
+        {label}
+        <Icon size={10} className={active ? 'opacity-100' : 'opacity-40'} />
+      </button>
+    </TableHead>
   );
 }
 

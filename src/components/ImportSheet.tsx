@@ -44,9 +44,14 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'forecast category': 'forecastCategory',
   'upside': 'upsideFlag',
   'upside deal': 'upsideFlag',
-  'account name': 'accountName',
   'account': 'accountName',
+  'account name': 'accountName',
   'account id': 'accountName',
+  'billing account': 'accountName',
+  'company': 'accountName',
+  'company name': 'accountName',
+  'organization': 'accountName',
+  'org': 'accountName',
   'product': 'productName',
   'product name': 'productName',
   'product family': 'productName',
@@ -123,6 +128,17 @@ function autoMap(headers: string[]): Partial<ColumnMapping> {
     });
     if (productHeader) mapping.productName = productHeader;
   }
+  if (!mapping.accountName) {
+    const acctHeader = headers.find(h => normalizeHeader(h).includes('account'));
+    if (acctHeader) mapping.accountName = acctHeader;
+  }
+  if (!mapping.channelAccountManager) {
+    const camHeader = headers.find(h => {
+      const n = normalizeHeader(h);
+      return n.includes('channel') || n === 'cam';
+    });
+    if (camHeader) mapping.channelAccountManager = camHeader;
+  }
   return mapping;
 }
 
@@ -130,7 +146,7 @@ export default function ImportSheet() {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastImport, setLastImport] = useState<{ name: string; count: number } | null>(null);
-  const [review, setReview] = useState<{ opps: Opportunity[]; fileName: string } | null>(null);
+  const [review, setReview] = useState<{ opps: Opportunity[]; fileName: string; headers: string[]; mapping: Record<string, string> } | null>(null);
 
   const processFile = useCallback((file: File) => {
     setError(null);
@@ -161,19 +177,23 @@ export default function ImportSheet() {
         // Fallback: use first row as header
         if (headerRowIdx < 0) headerRowIdx = 0;
 
-        const headers = rawRows[headerRowIdx].map((c: any) => String(c).trim());
+        const rawHeaders = rawRows[headerRowIdx].map((c: any) => String(c ?? '').trim());
+        // Preserve original column index — skip blank/null/undefined headers so they don't shift downstream columns
+        const headerCols = rawHeaders
+          .map((name, idx) => ({ idx, name }))
+          .filter(({ name }) => name !== '' && name.toLowerCase() !== 'undefined' && name.toLowerCase() !== 'null');
+        const headers = headerCols.map(h => h.name);
         const mapping = autoMap(headers);
 
-        // Build rows as objects from headerRowIdx + 1 onward
+        // Build rows as objects using original column indices
         const rows: Record<string, any>[] = [];
         for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
           const obj: Record<string, any> = {};
           let hasValue = false;
-          for (let j = 0; j < headers.length; j++) {
-            if (headers[j]) {
-              obj[headers[j]] = rawRows[i]?.[j] ?? '';
-              if (String(rawRows[i]?.[j] ?? '').trim()) hasValue = true;
-            }
+          for (const { idx, name } of headerCols) {
+            const val = rawRows[i]?.[idx] ?? '';
+            obj[name] = val;
+            if (String(val).trim()) hasValue = true;
           }
           if (hasValue) rows.push(obj);
         }
@@ -216,7 +236,7 @@ export default function ImportSheet() {
           };
         });
 
-        setReview({ opps, fileName: file.name });
+        setReview({ opps, fileName: file.name, headers, mapping: mapping as Record<string, string> });
       } catch (err) {
         setError('Failed to parse file. Ensure it is a valid Excel or CSV file.');
       }
@@ -242,6 +262,8 @@ export default function ImportSheet() {
       <ImportReview
         incoming={review.opps}
         fileName={review.fileName}
+        detectedHeaders={review.headers}
+        columnMapping={review.mapping}
         onDone={() => {
           setLastImport({ name: review.fileName, count: review.opps.length });
           setReview(null);

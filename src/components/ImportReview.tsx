@@ -3,14 +3,32 @@ import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
-import { Check, Plus, RefreshCw, Minus, Trash2 } from 'lucide-react';
+import { Check, Plus, RefreshCw, Minus, Trash2, AlertTriangle } from 'lucide-react';
 
 interface Props {
   incoming: Opportunity[];
   fileName: string;
   onDone: () => void;
   onCancel: () => void;
+  detectedHeaders?: string[];
+  columnMapping?: Record<string, string>;
 }
+
+const MAPPING_LABELS: Record<string, string> = {
+  id: 'id',
+  name: 'name',
+  repName: 'repName',
+  amount: 'amount',
+  closeDate: 'closeDate',
+  stage: 'stage',
+  probability: 'probability',
+  forecast: 'forecast',
+  forecastCategory: 'forecastCategory',
+  upsideFlag: 'upsideFlag',
+  accountName: 'accountName',
+  productName: 'productName',
+  channelAccountManager: 'channelAccountManager',
+};
 
 type ChangeType = 'new' | 'updated' | 'unchanged' | 'removed';
 
@@ -22,7 +40,7 @@ interface ReviewItem {
   selected: boolean;
 }
 
-export default function ImportReview({ incoming, fileName, onDone, onCancel }: Props) {
+export default function ImportReview({ incoming, fileName, onDone, onCancel, detectedHeaders = [], columnMapping = {} }: Props) {
   const { opportunities, importOpportunities, archiveToGraveyard } = useForecast();
 
   const existingMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
@@ -121,8 +139,54 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel }: P
     onDone();
   };
 
+  // Column mapping panel data
+  const mappedEntries = Object.entries(columnMapping).filter(([, h]) => h);
+  const mappedHeaderSet = new Set(mappedEntries.map(([, h]) => h));
+  const unmappedHeaders = detectedHeaders.filter(h => !mappedHeaderSet.has(h));
+  const accountMapped = !!columnMapping.accountName;
+  const camMapped = !!columnMapping.channelAccountManager;
+  const productMapped = !!columnMapping.productName;
+
   return (
     <div className="space-y-4">
+      {detectedHeaders.length > 0 && (
+        <div className="border border-border rounded-lg p-3 space-y-2">
+          {!accountMapped && (
+            <div className="flex items-start gap-2 rounded-md border border-negative/30 bg-negative/10 px-2 py-1.5 text-xs">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-negative" />
+              <span>
+                <span className="font-medium">Account Name column not found</span> — DR Quality analysis will be limited.
+                Add "Account Name" to your Salesforce report and re-import.
+              </span>
+            </div>
+          )}
+          <details>
+            <summary className="text-xs font-medium cursor-pointer text-muted-foreground hover:text-foreground">
+              Column mapping ({mappedEntries.length} mapped, {unmappedHeaders.length} unmapped)
+              {accountMapped && <span className="ml-2 text-positive">Account ✓</span>}
+              {camMapped && <span className="ml-2 text-positive">CAM ✓</span>}
+              {productMapped && <span className="ml-2 text-positive">Product ✓</span>}
+            </summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 mt-2 text-xs font-mono">
+              {mappedEntries.map(([field, header]) => {
+                const isImportant = field === 'accountName' || field === 'channelAccountManager' || field === 'productName';
+                return (
+                  <div key={field} className="flex items-center gap-1">
+                    <span className="truncate text-foreground">{header}</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="text-muted-foreground">{MAPPING_LABELS[field] || field}</span>
+                    {isImportant && <span className="text-positive">✓</span>}
+                  </div>
+                );
+              })}
+              {unmappedHeaders.map(h => (
+                <div key={h} className="text-muted-foreground/60 truncate">{h} <span className="text-muted-foreground/40">(unmapped)</span></div>
+              ))}
+            </div>
+          </details>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
         <h3 className="text-sm font-semibold">Review Import: {fileName}</h3>
         <div className="flex gap-2 text-xs">
