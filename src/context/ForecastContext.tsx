@@ -9,7 +9,8 @@ import type {
   CommissionSettingsMap,
   RepCommissionSettings,
   MonthlyRepCommit,
-
+  DealRegistration,
+  DrBatch,
 } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
@@ -25,7 +26,8 @@ const STORAGE_KEYS = {
   commissionReviews: 'forecast_commission_reviews',
   commissionPinHash: 'forecast_commission_pin_hash',
   monthlyRepCommits: 'forecast_monthly_rep_commits',
-
+  dealRegistrations: 'forecast_deal_registrations',
+  drBatches: 'forecast_dr_batches',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -116,6 +118,8 @@ interface ForecastState {
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;
   monthlyRepCommits: MonthlyRepCommit[];
+  dealRegistrations: DealRegistration[];
+  drBatches: DrBatch[];
 
   loading: boolean;
 }
@@ -141,6 +145,8 @@ interface ForecastContextValue extends ForecastState {
   setMonthlyRepCommit: (repId: string, repName: string, monthKey: string, amount: number, notes?: string) => void;
   getMonthlyRepCommit: (repId: string, monthKey: string) => MonthlyRepCommit | undefined;
   getMonthlyCommitsByMonth: (monthKey: string) => MonthlyRepCommit[];
+  importDrBatch: (records: DealRegistration[], batch: DrBatch) => void;
+  clearDrData: () => void;
   restoreFromBackup: (data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -151,6 +157,8 @@ interface ForecastContextValue extends ForecastState {
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
+    dealRegistrations?: DealRegistration[];
+    drBatches?: DrBatch[];
   }) => void;
 
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
@@ -199,6 +207,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
       commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
       monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
+      dealRegistrations: loadFromStorage<DealRegistration[]>(STORAGE_KEYS.dealRegistrations, []),
+      drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
 
       loading: false,
     };
@@ -220,6 +230,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.commissionReviews, state.commissionReviews);
     saveToStorage(STORAGE_KEYS.commissionPinHash, state.commissionPinHash);
     saveToStorage(STORAGE_KEYS.monthlyRepCommits, state.monthlyRepCommits);
+    saveToStorage(STORAGE_KEYS.dealRegistrations, state.dealRegistrations);
+    saveToStorage(STORAGE_KEYS.drBatches, state.drBatches);
 
 
     const sizeKB = getStorageSizeKB();
@@ -236,7 +248,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.commissionReviews,
     state.commissionPinHash,
     state.monthlyRepCommits,
-
+    state.dealRegistrations,
+    state.drBatches,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
@@ -519,6 +532,18 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
 
 
+  const importDrBatch = useCallback((records: DealRegistration[], batch: DrBatch) => {
+    setState(s => ({
+      ...s,
+      dealRegistrations: records,
+      drBatches: [...s.drBatches, batch],
+    }));
+  }, []);
+
+  const clearDrData = useCallback(() => {
+    setState(s => ({ ...s, dealRegistrations: [], drBatches: [] }));
+  }, []);
+
   const restoreFromBackup = useCallback((data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -529,6 +554,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
+    dealRegistrations?: DealRegistration[];
+    drBatches?: DrBatch[];
   }) => {
     setState(s => ({
       ...s,
@@ -541,7 +568,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionReviews: data.commissionReviews || {},
       commissionPinHash: data.commissionPinHash ?? null,
       monthlyRepCommits: data.monthlyRepCommits || [],
-
+      dealRegistrations: data.dealRegistrations || [],
+      drBatches: data.drBatches || [],
     }));
   }, []);
 
@@ -573,7 +601,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setMonthlyRepCommit,
     getMonthlyRepCommit,
     getMonthlyCommitsByMonth,
-
+    importDrBatch,
+    clearDrData,
     restoreFromBackup,
     getOpportunityHistory,
   };

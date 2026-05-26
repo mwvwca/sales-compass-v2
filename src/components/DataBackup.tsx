@@ -89,6 +89,41 @@ const monthlyRepCommitSchema = z.object({
   updatedAt: z.string(),
 });
 
+const dealRegistrationSchema = z.object({
+  opportunityId: z.string(),
+  opportunityName: z.string().max(500),
+  accountName: z.string().max(500),
+  repName: z.string().max(200),
+  secondOwner: z.string().max(200).optional(),
+  channelAccountManager: z.string().max(200).optional(),
+  resellerName: z.string().max(500).optional(),
+  distributorReseller: z.string().max(500).optional(),
+  product: z.string().max(500).optional(),
+  stage: z.string().max(200),
+  probability: z.number().finite().min(0).max(1),
+  amount: z.number().finite().min(0).optional(),
+  expectedRevenue: z.number().finite().min(0).optional(),
+  closeDate: z.string().optional(),
+  createdDate: z.string(),
+  lastActivity: z.string().optional(),
+  ageDays: z.number().finite().min(0),
+  billingState: z.string().max(200).optional(),
+  leadSource: z.string().max(200).optional(),
+  type: z.string().max(200).optional(),
+  registeredDeal: z.boolean(),
+  importedAt: z.string(),
+  batchId: z.string(),
+  isSql: z.boolean(),
+});
+
+const drBatchSchema = z.object({
+  id: z.string(),
+  importedAt: z.string(),
+  fileName: z.string().max(500),
+  recordCount: z.number().finite().min(0),
+  asOfDate: z.string(),
+});
+
 const backupSchema = z.object({
   reps: z.array(repSchema).max(1000),
   opportunities: z.array(opportunitySchema).max(10000),
@@ -98,6 +133,9 @@ const backupSchema = z.object({
   commissionReviews: z.record(z.string(), commissionMonthlyReviewSchema).optional(),
   commissionPinHash: z.string().max(256).nullable().optional(),
   monthlyRepCommits: z.array(monthlyRepCommitSchema).max(5000).optional(),
+  dealRegistrations: z.array(dealRegistrationSchema).max(20000).optional(),
+  drBatches: z.array(drBatchSchema).max(1000).optional(),
+  drScores: z.any().optional(),
   exportedAt: z.string().optional(),
 });
 

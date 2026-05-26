@@ -7,11 +7,11 @@ import DataBackup from '@/components/DataBackup';
 import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
-import DrQuality from '@/components/DrQuality';
+import DrPipeline from '@/components/DrPipeline';
 import SlipReport from '@/components/SlipReport';
 import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'slips' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'slips' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
@@ -30,7 +30,7 @@ const Index = () => {
     { id: 'goals', label: 'Goals', icon: <Users size={14} /> },
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
-    { id: 'dr-quality', label: 'DR Quality', icon: <Layers size={14} /> },
+    { id: 'dr-pipeline', label: 'DR Pipeline', icon: <Layers size={14} /> },
     { id: 'slips', label: 'Slips', icon: <TrendingDown size={14} /> },
     { id: 'graveyard', label: 'Graveyard', icon: <Skull size={14} /> },
   ];
@@ -96,13 +96,13 @@ const Index = () => {
             <PipelineLookback />
           </div>
         )}
-        {tab === 'dr-quality' && (
+        {tab === 'dr-pipeline' && (
           <div>
             <div className="mb-4">
-              <h2 className="text-sm font-semibold">DR Quality</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Quantify how much of your pipeline is real vs. multi-product DR padding on the same accounts.</p>
+              <h2 className="text-sm font-semibold">DR Pipeline</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Upload the Salesforce DR report to analyze CAM funnel, staleness, and account padding.</p>
             </div>
-            <DrQuality />
+            <DrPipeline />
           </div>
         )}
         {tab === 'slips' && (
