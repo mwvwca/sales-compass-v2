@@ -11,7 +11,7 @@ import DrPipeline from '@/components/DrPipeline';
 import SlipReport from '@/components/SlipReport';
 import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-quality' | 'slips' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'slips' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
