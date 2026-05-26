@@ -136,9 +136,9 @@ export function parseDrExport(rawRows: any[][]): {
     const row = rawRows[r];
     if (!row || row.every((c: any) => c === null || c === undefined || c === '')) continue;
 
-    const raw: Partial<RawDr> = {};
+    const raw: Record<string, any> = {};
     for (const { idx, field } of colMap) {
-      raw[field] = row[idx] as any;
+      raw[field] = row[idx];
     }
 
     const opportunityId = String(raw.opportunityId ?? '').trim();
