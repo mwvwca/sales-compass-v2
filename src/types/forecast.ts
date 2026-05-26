@@ -85,6 +85,42 @@ export interface ChangeLogEntry {
   newValue: string;
 }
 
+export interface DealRegistration {
+  opportunityId: string;
+  opportunityName: string;
+  accountName: string;
+  repName: string;
+  secondOwner?: string;
+  channelAccountManager?: string;
+  resellerName?: string;
+  distributorReseller?: string;
+  product?: string;
+  stage: string;
+  probability: number;
+  amount?: number;
+  expectedRevenue?: number;
+  closeDate?: string;
+  createdDate: string;
+  lastActivity?: string;
+  ageDays: number;
+  billingState?: string;
+  leadSource?: string;
+  type?: string;
+  registeredDeal: boolean;
+  importedAt: string;
+  batchId: string;
+  isSql: boolean;
+}
+
+export interface DrBatch {
+  id: string;
+  importedAt: string;
+  fileName: string;
+  recordCount: number;
+  asOfDate: string;
+}
+
+
 /** Snapshot of an opportunity captured at each import for history tracking. */
 export interface OpportunitySnapshot {
   opportunityId: string;
