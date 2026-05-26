@@ -207,6 +207,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
       commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
       monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
+      dealRegistrations: loadFromStorage<DealRegistration[]>(STORAGE_KEYS.dealRegistrations, []),
+      drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
 
       loading: false,
     };
