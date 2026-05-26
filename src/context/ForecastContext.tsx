@@ -118,6 +118,8 @@ interface ForecastState {
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;
   monthlyRepCommits: MonthlyRepCommit[];
+  dealRegistrations: DealRegistration[];
+  drBatches: DrBatch[];
 
   loading: boolean;
 }
@@ -143,6 +145,8 @@ interface ForecastContextValue extends ForecastState {
   setMonthlyRepCommit: (repId: string, repName: string, monthKey: string, amount: number, notes?: string) => void;
   getMonthlyRepCommit: (repId: string, monthKey: string) => MonthlyRepCommit | undefined;
   getMonthlyCommitsByMonth: (monthKey: string) => MonthlyRepCommit[];
+  importDrBatch: (records: DealRegistration[], batch: DrBatch) => void;
+  clearDrData: () => void;
   restoreFromBackup: (data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -153,6 +157,8 @@ interface ForecastContextValue extends ForecastState {
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
+    dealRegistrations?: DealRegistration[];
+    drBatches?: DrBatch[];
   }) => void;
 
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
