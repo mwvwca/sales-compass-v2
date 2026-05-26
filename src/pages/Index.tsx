@@ -96,13 +96,13 @@ const Index = () => {
             <PipelineLookback />
           </div>
         )}
-        {tab === 'dr-quality' && (
+        {tab === 'dr-pipeline' && (
           <div>
             <div className="mb-4">
-              <h2 className="text-sm font-semibold">DR Quality</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Quantify how much of your pipeline is real vs. multi-product DR padding on the same accounts.</p>
+              <h2 className="text-sm font-semibold">DR Pipeline</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Upload the Salesforce DR report to analyze CAM funnel, staleness, and account padding.</p>
             </div>
-            <DrQuality />
+            <DrPipeline />
           </div>
         )}
         {tab === 'slips' && (
