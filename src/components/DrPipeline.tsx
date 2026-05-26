@@ -744,7 +744,7 @@ export default function DrPipeline() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </FragmentWithKey>
                     );
                   })}
                 </tbody>
