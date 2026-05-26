@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { Fragment as FragmentWithKey, useCallback, useMemo, useRef, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
