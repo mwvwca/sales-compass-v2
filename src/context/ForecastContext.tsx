@@ -9,7 +9,8 @@ import type {
   CommissionSettingsMap,
   RepCommissionSettings,
   MonthlyRepCommit,
-
+  DealRegistration,
+  DrBatch,
 } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
