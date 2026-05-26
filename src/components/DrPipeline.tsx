@@ -686,7 +686,7 @@ export default function DrPipeline() {
                   {detailRows.map(r => {
                     const isOpen = expandedRow === r.d.opportunityId;
                     return (
-                      <>
+                      <FragmentWithKey key={r.d.opportunityId}>
                         <tr
                           key={r.d.opportunityId}
                           onClick={() => setExpandedRow(isOpen ? null : r.d.opportunityId)}
