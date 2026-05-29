@@ -219,10 +219,12 @@ export function mergeDrBatch(
     if (pipelineClass) {
       const isFirstConversion = !r.convertedAt;
       if (isFirstConversion) convertedCount++;
+      const cycle = pipelineClass.status === 'closed_won' ? computeCycleFields(r, opp) : {};
       merged[i] = {
         ...r,
         status: pipelineClass.status,
         convertedAt: r.convertedAt || importedAt,
+        ...cycle,
       };
       continue;
     }
