@@ -12,12 +12,7 @@ import type { Opportunity } from '@/types/forecast';
 function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opportunity[] {
   const importDate = new Date().toISOString();
   return rows.map((row, i) => {
-    const rawDate = row["Close Date"] || '';
-    let closeDate = '';
-    if (rawDate) {
-      const parsed = new Date(rawDate);
-      closeDate = isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
-    }
+    const closeDate = parseExcelDate(row["Close Date"]) ?? '';
     const probStr = row.Probability?.replace('%', '') || '0';
     const stageLower = (row.Stage || '').toLowerCase().trim();
     const isClosedWon = stageLower === 'closed won';
