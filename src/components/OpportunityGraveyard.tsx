@@ -103,11 +103,24 @@ export default function OpportunityGraveyard() {
 
   return (
     <div className="space-y-4">
+      {/* Filter toggle */}
+      <div className="flex gap-1 text-xs">
+        {(['all','lost','rejected'] as const).map(t => (
+          <button key={t} onClick={() => setTypeFilter(t)} className={`px-2 py-1 rounded border ${typeFilter===t ? 'bg-secondary border-border text-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}>
+            {t === 'all' ? 'All' : t === 'lost' ? 'Closed Lost' : 'Rejected'}
+          </button>
+        ))}
+      </div>
+
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Lost Opportunities</p>
-          <p className="text-xl font-mono font-semibold text-destructive">{lostOpps.length}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Closed Lost</p>
+          <p className="text-xl font-mono font-semibold text-destructive">{lostCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Rejected</p>
+          <p className="text-xl font-mono font-semibold text-muted-foreground">{rejectedCount}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Lost Pipeline Value</p>
