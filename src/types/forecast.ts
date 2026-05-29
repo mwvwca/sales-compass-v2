@@ -39,7 +39,7 @@ export interface Opportunity {
   amount: number;
   closeDate: string;
   stage: string;
-  classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted';
+  classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted' | 'rejected';
   probability: number;
   importDate: string;
   previousClassification?: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted';
