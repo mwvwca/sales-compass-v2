@@ -244,12 +244,44 @@ export default function DrPipeline() {
   const filtersActive = camFilter !== 'all' || repFilter !== 'all' || period !== DEFAULT_PERIOD || !defaultStatusesActive;
   const clearFilters = () => { setCamFilter('all'); setRepFilter('all'); setPeriod(DEFAULT_PERIOD); setStatuses(new Set(DEFAULT_STATUSES)); };
 
+  // ---------- Cohort helpers (per-rep / per-cam vintage table) ----------
+  type CohortRow = {
+    quarter: string; total: number; sql: number; closedWon: number;
+    cohortRate: number; avgCycle: number | null;
+  };
+  function buildCohortRows(deals: DealRegistration[]): CohortRow[] {
+    const byQ = new Map<string, DealRegistration[]>();
+    for (const d of deals) {
+      if (!d.createdDate) continue;
+      // Inline quarter calc to avoid importing — matches getQuarter shape "YYYY-QN"
+      const dd = new Date(d.createdDate);
+      const y = dd.getUTCFullYear();
+      const q = Math.floor(dd.getUTCMonth() / 3) + 1;
+      const key = `${y}-Q${q}`;
+      const arr = byQ.get(key) || []; arr.push(d); byQ.set(key, arr);
+    }
+    const rows: CohortRow[] = Array.from(byQ.entries()).map(([quarter, arr]) => {
+      const total = arr.length;
+      const sql = arr.filter(d => d.isSql || d.sqlDate).length;
+      const wonDeals = arr.filter(d => d.status === 'closed_won');
+      const closedWon = wonDeals.length;
+      const cohortRate = total ? closedWon / total : 0;
+      const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
+      const avgCycle = cycles.length ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
+      return { quarter, total, sql, closedWon, cohortRate, avgCycle };
+    });
+    rows.sort((a, b) => a.quarter.localeCompare(b.quarter));
+    return rows;
+  }
+
   // ---------- Section B: AE Accountability ----------
   type AeRow = {
     rep: string; assigned: number; rejected: number; sqls: number; sqlRate: number;
     stale: number; noActivity: number; avgAge: number;
     converted: number; closedWon: number; convRate: number;
+    cohortRate: number; avgCycle: number | null;
     rejectedByCam: Map<string, { count: number; products: string[] }>;
+    cohort: CohortRow[];
   };
 
   const aeRows: AeRow[] = useMemo(() => {
@@ -271,8 +303,12 @@ export default function DrPipeline() {
       const noActivity = nonRejected.filter(d => !d.lastActivity && (d.status === 'active' || d.status === 'stale')).length;
       const avgAge = denom ? nonRejected.reduce((s, d) => s + d.ageDays, 0) / denom : 0;
       const converted = nonRejected.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
-      const closedWon = nonRejected.filter(d => d.status === 'closed_won').length;
+      const wonDeals = nonRejected.filter(d => d.status === 'closed_won');
+      const closedWon = wonDeals.length;
       const convRate = denom ? closedWon / denom : 0;
+      const cohortRate = denom ? closedWon / denom : 0;
+      const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
+      const avgCycle = cycles.length >= 2 ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
       const rejectedByCam = new Map<string, { count: number; products: string[] }>();
       for (const d of deals) {
         if (d.status !== 'rejected') continue;
@@ -282,7 +318,8 @@ export default function DrPipeline() {
         if (d.product && !e.products.includes(d.product)) e.products.push(d.product);
         rejectedByCam.set(cam, e);
       }
-      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, rejectedByCam };
+      const cohort = buildCohortRows(nonRejected);
+      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, rejectedByCam, cohort };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
     if (!showInactiveReps) {
@@ -334,50 +371,89 @@ export default function DrPipeline() {
     return lines;
   }, [aeRows, aeTotals.convRate]);
 
-  // ---------- Section C: CAM Lead Quality ----------
+  // ---------- Section C: CAM Cohort & Cycle ----------
   type CamRow = {
-    cam: string; registered: number; sqls: number; sqlRate: number;
-    paddedAccts: number; withdrawn: number; withdrawnRate: number;
-    avgAgeAtSql: number; closedWon: number; winRate: number;
+    cam: string; totalDrs: number; sqls: number; sqlRate: number;
+    closedWon: number; cohortRate: number;
+    avgCycle: number | null; fastest: number | null; slowest: number | null;
+    inPeriodWon: number; withdrawn: number; withdrawnRate: number;
+    cohort: CohortRow[];
   };
+
+  const [camSortKey, setCamSortKey] = useState<keyof CamRow>('cohortRate');
+  const [camSortDir, setCamSortDir] = useState<'asc' | 'desc'>('desc');
+  const [expandedCam, setExpandedCam] = useState<string | null>(null);
+
   const camRows: CamRow[] = useMemo(() => {
     const byCam = new Map<string, DealRegistration[]>();
     for (const d of scopeNoStatus) {
+      if (d.status === 'rejected') continue; // CAM table excludes rejected (AE action)
       const k = d.channelAccountManager || '(none)';
       const arr = byCam.get(k) || [];
       arr.push(d);
       byCam.set(k, arr);
     }
-    return Array.from(byCam.entries()).map(([cam, deals]) => {
-      const registered = deals.length;
+    const rows = Array.from(byCam.entries()).map(([cam, deals]) => {
+      const totalDrs = deals.length;
       const sqls = deals.filter(d => d.isSql).length;
-      const sqlRate = registered ? sqls / registered : 0;
-      // padded accts: account with 2+ DRs all pre-SQL with no lastActivity (exclude rejected)
-      const byAcct = new Map<string, DealRegistration[]>();
-      for (const d of deals) {
-        if (d.status === 'rejected') continue;
-        const a = (d.accountName || '(none)').toLowerCase();
-        const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
-      }
-      let paddedAccts = 0;
-      for (const arr of byAcct.values()) {
-        if (arr.length >= 2 && arr.every(d => !d.isSql && !d.lastActivity)) paddedAccts++;
-      }
+      const sqlRate = totalDrs ? sqls / totalDrs : 0;
+      const wonDeals = deals.filter(d => d.status === 'closed_won');
+      const closedWon = wonDeals.length;
+      const cohortRate = totalDrs ? closedWon / totalDrs : 0;
+      const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
+      const avgCycle = cycles.length >= 2 ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
+      const fastest = cycles.length ? Math.min(...cycles) : null;
+      const slowest = cycles.length ? Math.max(...cycles) : null;
+      const inPeriodWon = wonDeals.filter(d => d.inPeriodWon === true).length;
       const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
-      const withdrawnRate = registered ? withdrawn / registered : 0;
-      const sqlDeals = deals.filter(d => d.sqlDate);
-      const avgAgeAtSql = sqlDeals.length
-        ? sqlDeals.reduce((s, d) => s + daysBetween(d.createdDate, d.sqlDate!), 0) / sqlDeals.length
-        : 0;
-      const closedWon = deals.filter(d => d.status === 'closed_won').length;
-      const winRate = registered ? closedWon / registered : 0;
-      return { cam, registered, sqls, sqlRate, paddedAccts, withdrawn, withdrawnRate, avgAgeAtSql, closedWon, winRate };
-    }).sort((a, b) => b.registered - a.registered);
-  }, [scopeNoStatus]);
+      const withdrawnRate = totalDrs ? withdrawn / totalDrs : 0;
+      const cohort = buildCohortRows(deals);
+      return { cam, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, inPeriodWon, withdrawn, withdrawnRate, cohort };
+    });
+    rows.sort((a, b) => {
+      const dir = camSortDir === 'asc' ? 1 : -1;
+      const av = a[camSortKey] as any; const bv = b[camSortKey] as any;
+      if (typeof av === 'string') return av.localeCompare(bv) * dir;
+      return ((av ?? -1) - (bv ?? -1)) * dir;
+    });
+    return rows;
+  }, [scopeNoStatus, camSortKey, camSortDir]);
+
+  const camTotals = useMemo(() => {
+    const t = camRows.reduce((acc, r) => {
+      acc.totalDrs += r.totalDrs;
+      acc.sqls += r.sqls;
+      acc.closedWon += r.closedWon;
+      acc.inPeriodWon += r.inPeriodWon;
+      acc.withdrawn += r.withdrawn;
+      if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
+      return acc;
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, inPeriodWon: 0, withdrawn: 0, cycleSum: 0, cycleN: 0 });
+    return {
+      ...t,
+      sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
+      cohortRate: t.totalDrs ? t.closedWon / t.totalDrs : 0,
+      avgCycle: t.cycleN ? t.cycleSum / t.cycleN : null,
+      withdrawnRate: t.totalDrs ? t.withdrawn / t.totalDrs : 0,
+    };
+  }, [camRows]);
 
   const camInsights = useMemo(() => {
     const out: string[] = [];
-    for (const r of camRows) if (r.withdrawnRate > 0.2 && r.withdrawn > 2) out.push(`⚠ ${r.cam} has ${r.withdrawn} withdrawn DRs (${fmtPct(r.withdrawnRate, 0)}) — registrations disappearing without conversion.`);
+    for (const r of camRows) {
+      if (r.cohortRate < 0.1 && r.totalDrs > 10) {
+        out.push(`⚠ ${r.cam} has registered ${r.totalDrs} DRs with only ${fmtPct(r.cohortRate, 0)} ever closing — review lead quality in next QBR.`);
+      }
+      if (r.avgCycle !== null && r.avgCycle > 180 && r.closedWon > 2) {
+        out.push(`⚠ ${r.cam}'s leads average ${r.avgCycle.toFixed(0)} days to close — long cycles may indicate lead quality or territory fit issues.`);
+      }
+      if (r.withdrawnRate > 0.4) {
+        out.push(`⚠ ${r.cam} has ${fmtPct(r.withdrawnRate, 0)} of registrations withdrawn — partner may not be actively supporting these leads.`);
+      }
+      if (r.fastest !== null && r.fastest < 30 && r.closedWon > 2) {
+        out.push(`✓ ${r.cam} is generating fast-moving deals — fastest close is ${r.fastest} days.`);
+      }
+    }
     return out;
   }, [camRows]);
 
