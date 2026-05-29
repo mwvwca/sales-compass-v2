@@ -34,6 +34,9 @@ const STORAGE_KEYS = {
   commissionReviews: 'forecast_commission_reviews',
   commissionPinHash: 'forecast_commission_pin_hash',
   monthlyRepCommits: 'forecast_monthly_rep_commits',
+  monthlyManagerCommits: 'forecast_monthly_manager_commits',
+  forecastPromotions: 'forecast_promotions',
+  forecastSnapshots: 'forecast_forecast_snapshots',
   dealRegistrations: 'forecast_deal_registrations',
   drBatches: 'forecast_dr_batches',
 };
