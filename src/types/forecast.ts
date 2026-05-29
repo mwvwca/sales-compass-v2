@@ -42,7 +42,7 @@ export interface Opportunity {
   classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted' | 'rejected';
   probability: number;
   importDate: string;
-  previousClassification?: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted';
+  previousClassification?: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted' | 'rejected';
   lostDate?: string;
   lostReason?: string;
   movedAt?: string;
