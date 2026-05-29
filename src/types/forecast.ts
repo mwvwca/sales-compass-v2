@@ -168,6 +168,9 @@ export type RawDrRecord = Omit<
   | 'status'
   | 'rejectedAt'
   | 'convertedAt'
+  | 'closedWonDate'
+  | 'cycleDays'
+  | 'inPeriodWon'
 >;
 
 export interface DrBatch {
