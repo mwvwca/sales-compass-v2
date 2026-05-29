@@ -101,6 +101,9 @@ export default function RepGoalSetup() {
       commissionReviews,
       commissionPinHash,
       monthlyRepCommits,
+      monthlyManagerCommits,
+      forecastPromotions,
+      forecastSnapshots,
     });
   };
 
