@@ -44,16 +44,18 @@ function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus } 
 /** Compute closedWonDate / cycleDays / inPeriodWon for a DR matched to a closed won opp. */
 function computeCycleFields(dr: { createdDate: string }, opp: Opportunity | undefined):
   Pick<DealRegistration, 'closedWonDate' | 'cycleDays' | 'inPeriodWon'> {
-  if (!opp?.closeDate || !dr.createdDate) return {};
-  const closedWonDate = opp.closeDate;
-  const created = new Date(dr.createdDate).getTime();
-  const closed = new Date(closedWonDate).getTime();
-  if (!isFinite(created) || !isFinite(closed)) return { closedWonDate };
-  const raw = Math.floor((closed - created) / 86_400_000);
+  if (!opp?.closeDate || !dr.createdDate) return { cycleDays: undefined, closedWonDate: undefined };
+  const created = parseExcelDate(dr.createdDate);
+  const closed = parseExcelDate(opp.closeDate);
+  if (!created || !closed) return { cycleDays: undefined, closedWonDate: undefined };
+  const createdMs = new Date(created).getTime();
+  const closedMs = new Date(closed).getTime();
+  if (!isFinite(createdMs) || !isFinite(closedMs)) return { cycleDays: undefined, closedWonDate: closed };
+  const raw = Math.floor((closedMs - createdMs) / 86_400_000);
   const cycleDays = raw < 0 ? 0 : raw;
   let inPeriodWon = false;
-  try { inPeriodWon = getQuarter(dr.createdDate) === getQuarter(closedWonDate); } catch { /* noop */ }
-  return { closedWonDate, cycleDays, inPeriodWon };
+  try { inPeriodWon = getQuarter(created) === getQuarter(closed); } catch { /* noop */ }
+  return { closedWonDate: closed, cycleDays, inPeriodWon };
 }
 
 /** Returns whether mutable fields differ between an existing record and incoming raw record. */
