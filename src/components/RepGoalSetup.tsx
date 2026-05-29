@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target } from 'lucide-react';
+import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, RotateCcw } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import CommissionLock from '@/components/CommissionLock';
 import CommissionSettings from '@/components/CommissionSettings';
 import CommissionTracker from '@/components/CommissionTracker';
