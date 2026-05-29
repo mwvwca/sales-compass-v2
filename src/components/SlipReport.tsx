@@ -51,6 +51,7 @@ function computeSlips(
 
   const records: SlipRecord[] = [];
   for (const opp of opps) {
+    if (opp.classification === 'rejected') continue;
     const entries = byOpp.get(opp.id) || [];
     const dateChanges = entries.filter(e => e.field === 'closeDate' && e.oldValue && e.newValue);
     const classChanges = entries.filter(e => e.field === 'classification');
