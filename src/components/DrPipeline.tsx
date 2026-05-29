@@ -811,16 +811,15 @@ export default function DrPipeline() {
                 <thead className="bg-secondary/40 text-muted-foreground">
                   <tr>
                     <th className="text-left px-2 py-1.5 font-medium">Rep</th>
-                    <th className="text-right px-2 py-1.5 font-medium" title="Total DRs including rejected">Assigned DRs</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Total DRs including rejected">Assigned</th>
                     <th className="text-right px-2 py-1.5 font-medium" title="DRs this rep explicitly rejected in Salesforce">Rejected</th>
-                    <th className="text-right px-2 py-1.5 font-medium">SQL'd</th>
                     <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Stale</th>
-                    <th className="text-right px-2 py-1.5 font-medium">No Activity</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Avg Age</th>
                     <th className="text-right px-2 py-1.5 font-medium">Converted</th>
                     <th className="text-right px-2 py-1.5 font-medium">Closed Won</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Conv. Rate</th>
+                    <th className="text-right px-2 py-1.5 font-semibold" title="Closed Won / Assigned (excl. rejected)">Cohort Rate</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Avg Cycle</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Stale</th>
+                    <th className="text-right px-2 py-1.5 font-medium">No Activity</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -830,31 +829,68 @@ export default function DrPipeline() {
                         onClick={() => setExpandedRep(expandedRep === r.rep ? null : r.rep)}
                         className={`border-t border-border cursor-pointer hover:bg-muted/40 ${expandedRep === r.rep ? 'bg-muted/60' : ''}`}>
                         <td className="px-2 py-1.5 font-medium">{r.rep}</td>
-                        <td className="text-right px-2 py-1.5" title={r.rejected > 0 ? `${r.rejected} of ${r.assigned} rejected` : undefined}>{r.assigned}{r.rejected > 0 && <span className="text-muted-foreground text-[10px]"> ({r.rejected} rej)</span>}</td>
+                        <td className="text-right px-2 py-1.5">{r.assigned}</td>
                         <td className={`text-right px-2 py-1.5 ${r.rejected > 15 ? 'text-red-600 dark:text-red-400 font-medium' : r.rejected > 5 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.rejected}</td>
-                        <td className="text-right px-2 py-1.5">{r.sqls}</td>
                         <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
-                        <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
-                        <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
-                        <td className={`text-right px-2 py-1.5 ${colorAge(r.avgAge)}`}>{r.avgAge.toFixed(0)}d</td>
                         <td className="text-right px-2 py-1.5">{r.converted}</td>
                         <td className="text-right px-2 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{r.closedWon}</td>
-                        <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.convRate)}`}>{fmtPct(r.convRate, 1)}</td>
+                        <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 1)}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
+                          {r.avgCycle !== null ? `${r.avgCycle.toFixed(0)} days` : '—'}
+                        </td>
+                        <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
                       </tr>
-                      {expandedRep === r.rep && r.rejected > 0 && (
+                      {expandedRep === r.rep && (
                         <tr className="bg-muted/20 border-t border-border">
-                          <td colSpan={11} className="px-3 py-2">
-                            <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rejected DRs by CAM (coaching context)</p>
-                            <table className="text-[11px]">
-                              <thead className="text-muted-foreground">
-                                <tr><th className="text-left pr-4 py-0.5 font-medium">CAM</th><th className="text-right pr-4 py-0.5 font-medium">Rejected DRs</th><th className="text-left py-0.5 font-medium">Products</th></tr>
-                              </thead>
-                              <tbody>
-                                {Array.from(r.rejectedByCam.entries()).sort((a,b) => b[1].count - a[1].count).map(([cam, info]) => (
-                                  <tr key={cam}><td className="pr-4 py-0.5">{cam}</td><td className="text-right pr-4 py-0.5">{info.count}</td><td className="py-0.5 text-muted-foreground">{info.products.join(', ') || '—'}</td></tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          <td colSpan={10} className="px-3 py-2 space-y-3">
+                            {r.rejected > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rejected DRs by CAM (coaching context)</p>
+                                <table className="text-[11px]">
+                                  <thead className="text-muted-foreground">
+                                    <tr><th className="text-left pr-4 py-0.5 font-medium">CAM</th><th className="text-right pr-4 py-0.5 font-medium">Rejected DRs</th><th className="text-left py-0.5 font-medium">Products</th></tr>
+                                  </thead>
+                                  <tbody>
+                                    {Array.from(r.rejectedByCam.entries()).sort((a,b) => b[1].count - a[1].count).map(([cam, info]) => (
+                                      <tr key={cam}><td className="pr-4 py-0.5">{cam}</td><td className="text-right pr-4 py-0.5">{info.count}</td><td className="py-0.5 text-muted-foreground">{info.products.join(', ') || '—'}</td></tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-[11px] font-semibold text-muted-foreground mb-1">Cohort breakdown by quarter created</p>
+                              {r.cohort.length === 0 ? (
+                                <p className="text-[11px] text-muted-foreground">No data.</p>
+                              ) : (
+                                <table className="text-[11px]">
+                                  <thead className="text-muted-foreground">
+                                    <tr>
+                                      <th className="text-left pr-4 py-0.5 font-medium">Quarter Created</th>
+                                      <th className="text-right pr-4 py-0.5 font-medium">Assigned</th>
+                                      <th className="text-right pr-4 py-0.5 font-medium">SQL'd</th>
+                                      <th className="text-right pr-4 py-0.5 font-medium">Closed Won</th>
+                                      <th className="text-right pr-4 py-0.5 font-medium">Cohort Rate</th>
+                                      <th className="text-right py-0.5 font-medium">Avg Cycle</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {r.cohort.map(c => (
+                                      <tr key={c.quarter}>
+                                        <td className="pr-4 py-0.5">{c.quarter}</td>
+                                        <td className="text-right pr-4 py-0.5">{c.total}</td>
+                                        <td className="text-right pr-4 py-0.5">{c.sql}</td>
+                                        <td className="text-right pr-4 py-0.5">{c.closedWon}</td>
+                                        <td className={`text-right pr-4 py-0.5 ${colorConvRate(c.cohortRate)}`}>{fmtPct(c.cohortRate, 0)}</td>
+                                        <td className="text-right py-0.5">{c.avgCycle !== null ? `${c.avgCycle.toFixed(0)} days` : '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                              <p className="text-[10px] text-muted-foreground mt-1">Recent quarters will show lower rates as deals are still in progress.</p>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -864,14 +900,13 @@ export default function DrPipeline() {
                     <td className="px-2 py-1.5">Team</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.assigned}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.rejected}</td>
-                    <td className="text-right px-2 py-1.5">{aeTotals.sqls}</td>
                     <td className={`text-right px-2 py-1.5 ${colorRate(aeTotals.sqlRate)}`}>{fmtPct(aeTotals.sqlRate, 1)}</td>
-                    <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
-                    <td className="text-right px-2 py-1.5">{aeTotals.noActivity}</td>
-                    <td className={`text-right px-2 py-1.5 ${colorAge(aeTotals.avgAge)}`}>{aeTotals.avgAge.toFixed(0)}d</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.converted}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.closedWon}</td>
-                    <td className={`text-right px-2 py-1.5 ${colorConvRate(aeTotals.convRate)}`}>{fmtPct(aeTotals.convRate, 1)}</td>
+                    <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(aeTotals.convRate)}`}>{fmtPct(aeTotals.convRate, 1)}</td>
+                    <td className="text-right px-2 py-1.5">—</td>
+                    <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
+                    <td className="text-right px-2 py-1.5">{aeTotals.noActivity}</td>
                   </tr>
                 </tbody>
               </table>
