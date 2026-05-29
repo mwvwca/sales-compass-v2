@@ -302,16 +302,20 @@ export default function DrPipeline() {
 
   const aeTotals = useMemo(() => {
     const t = aeRows.reduce((acc, r) => {
-      acc.assigned += r.assigned; acc.sqls += r.sqls; acc.stale += r.stale;
+      const nonRej = r.assigned - r.rejected;
+      acc.assigned += r.assigned;
+      acc.rejected += r.rejected;
+      acc.nonRejected += nonRej;
+      acc.sqls += r.sqls; acc.stale += r.stale;
       acc.noActivity += r.noActivity; acc.converted += r.converted; acc.closedWon += r.closedWon;
-      acc.ageSum += r.avgAge * r.assigned;
+      acc.ageSum += r.avgAge * nonRej;
       return acc;
-    }, { assigned: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0 });
+    }, { assigned: 0, rejected: 0, nonRejected: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0 });
     return {
       ...t,
-      sqlRate: t.assigned ? t.sqls / t.assigned : 0,
-      avgAge: t.assigned ? t.ageSum / t.assigned : 0,
-      convRate: t.assigned ? t.closedWon / t.assigned : 0,
+      sqlRate: t.nonRejected ? t.sqls / t.nonRejected : 0,
+      avgAge: t.nonRejected ? t.ageSum / t.nonRejected : 0,
+      convRate: t.nonRejected ? t.closedWon / t.nonRejected : 0,
     };
   }, [aeRows]);
 
