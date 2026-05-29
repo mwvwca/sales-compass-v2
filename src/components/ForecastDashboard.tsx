@@ -73,6 +73,20 @@ export default function ForecastDashboard() {
     return Array.from(names).sort();
   }, [opportunities, reps]);
 
+  // Partition rep names into active vs inactive for dropdown grouping.
+  // Inactive = exists in reps and isActive === false. Names that only appear
+  // on historical opportunities (no Rep record) are treated as active.
+  const { activeRepNames, inactiveRepNames } = useMemo(() => {
+    const inactiveSet = new Set(reps.filter(r => r.isActive === false).map(r => r.name));
+    const active: string[] = [];
+    const inactive: string[] = [];
+    for (const n of repNames) {
+      if (inactiveSet.has(n)) inactive.push(n);
+      else active.push(n);
+    }
+    return { activeRepNames: active, inactiveRepNames: inactive };
+  }, [repNames, reps]);
+
   const getRepGoal = (repName: string) => {
     const rep = reps.find(r => normalizeRepName(r.name) === normalizeRepName(repName));
     if (!rep) return 0;
@@ -254,7 +268,12 @@ export default function ForecastDashboard() {
         <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
           className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
           <option value="all">All Reps</option>
-          {repNames.map(n => <option key={n} value={n}>{n}</option>)}
+          {activeRepNames.map(n => <option key={n} value={n}>{n}</option>)}
+          {inactiveRepNames.length > 0 && (
+            <optgroup label="Inactive">
+              {inactiveRepNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </optgroup>
+          )}
         </select>
         <div className="flex items-center gap-3 ml-auto">
           <ExecutiveReport quarter={anchorQuarter} selectedRep={selectedRep} />

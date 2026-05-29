@@ -130,6 +130,7 @@ interface ForecastContextValue extends ForecastState {
   addRep: (rep: Rep) => void;
   updateRep: (rep: Rep) => void;
   deleteRep: (id: string) => void;
+  setRepActiveStatus: (repId: string, isActive: boolean, note?: string) => void;
   importOpportunities: (opps: Opportunity[], fileName: string) => void;
   classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted') => void;
   archiveToGraveyard: (id: string, reason?: string) => void;
@@ -203,7 +204,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     });
 
     return {
-      reps: loadFromStorage(STORAGE_KEYS.reps, []),
+      reps: loadFromStorage<Rep[]>(STORAGE_KEYS.reps, []).map((r: any) => ({
+        ...r,
+        isActive: r.isActive === undefined ? true : !!r.isActive,
+      })),
       opportunities: migrated,
       imports: loadFromStorage(STORAGE_KEYS.imports, []),
       changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
@@ -270,6 +274,24 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
   const deleteRep = useCallback((id: string) => {
     setState(s => ({ ...s, reps: s.reps.filter(r => r.id !== id) }));
+  }, []);
+
+  const setRepActiveStatus = useCallback((repId: string, isActive: boolean, note?: string) => {
+    setState(s => ({
+      ...s,
+      reps: s.reps.map(r => {
+        if (r.id !== repId) return r;
+        if (isActive) {
+          return { ...r, isActive: true, inactivatedAt: undefined, inactivatedNote: undefined };
+        }
+        return {
+          ...r,
+          isActive: false,
+          inactivatedAt: new Date().toISOString(),
+          inactivatedNote: note?.trim() ? note.trim() : undefined,
+        };
+      }),
+    }));
   }, []);
 
   const importOpportunities = useCallback((opps: Opportunity[], fileName: string) => {
@@ -610,6 +632,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     addRep,
     updateRep,
     deleteRep,
+    setRepActiveStatus,
     importOpportunities,
     classifyOpportunity,
     updateOpportunityAmount,

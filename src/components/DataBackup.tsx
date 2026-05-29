@@ -12,6 +12,9 @@ const repSchema = z.object({
   id: z.string(),
   name: z.string().max(200),
   quarterlyGoals: z.record(z.string(), z.number().finite().min(0)),
+  isActive: z.boolean().optional(),
+  inactivatedAt: z.string().optional(),
+  inactivatedNote: z.string().max(2000).optional(),
 });
 
 const opportunitySchema = z.object({

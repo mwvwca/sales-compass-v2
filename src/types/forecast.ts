@@ -2,6 +2,9 @@ export interface Rep {
   id: string;
   name: string;
   quarterlyGoals: Record<string, number>;
+  isActive: boolean;
+  inactivatedAt?: string;
+  inactivatedNote?: string;
 }
 
 export interface RepCommissionSettings {
