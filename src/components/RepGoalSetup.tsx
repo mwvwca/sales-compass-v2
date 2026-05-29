@@ -367,38 +367,15 @@ export default function RepGoalSetup() {
                   </tr>
                 </thead>
                 <tbody>
-                  {reps.map(rep => (
-                    <tr key={rep.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                      <td className="px-4 py-2.5 font-medium">{rep.name}</td>
-                      {quarters.map(q => {
-                        const isEditing = editingId === `${rep.id}-${q}`;
-                        const val = rep.quarterlyGoals[q];
-                        return (
-                          <td key={q} className="text-right px-4 py-2.5 font-mono">
-                            {isEditing ? (
-                              <span className="inline-flex items-center gap-1">
-                                <input type="number" value={editGoal} onChange={e => setEditGoal(e.target.value)} className="w-24 bg-secondary border border-border rounded px-2 py-1 text-right text-sm font-mono" autoFocus />
-                                <button onClick={() => saveEdit(rep, q)} title="Save this quarter" className="text-positive"><Check size={14} /></button>
-                                <button onClick={() => saveEdit(rep, q, true)} title="Apply to all quarters this year" className="text-muted-foreground hover:text-foreground"><Copy size={14} /></button>
-                                <button onClick={() => setEditingId(null)} className="text-negative"><X size={14} /></button>
-                              </span>
-                            ) : val !== undefined ? (
-                              <span className="cursor-pointer hover:text-foreground text-secondary-foreground" onClick={() => startEdit(rep.id, q, val)}>
-                                {val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="px-2">
-                        <button onClick={() => deleteRep(rep.id)} className="text-muted-foreground hover:text-negative transition-colors p-1">
-                          <Trash2 size={14} />
-                        </button>
+                  {activeReps.map(rep => renderRepGoalRow(rep))}
+                  {inactiveReps.length > 0 && (
+                    <tr className="bg-muted/30 border-b border-border">
+                      <td colSpan={quarters.length + 2} className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                        Inactive reps — historical data preserved
                       </td>
                     </tr>
-                  ))}
+                  )}
+                  {inactiveReps.map(rep => renderRepGoalRow(rep))}
                 </tbody>
               </table>
             </div>
