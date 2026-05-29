@@ -21,12 +21,17 @@ export default function OpportunityGraveyard() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'lost' | 'rejected'>('all');
 
   const lostOpps = useMemo(() => {
     return opportunities
-      .filter(o => o.classification === 'lost')
+      .filter(o => o.classification === 'lost' || o.classification === 'rejected')
+      .filter(o => typeFilter === 'all' || o.classification === typeFilter)
       .sort((a, b) => new Date(b.lostDate || b.importDate).getTime() - new Date(a.lostDate || a.importDate).getTime());
-  }, [opportunities]);
+  }, [opportunities, typeFilter]);
+
+  const lostCount = useMemo(() => opportunities.filter(o => o.classification === 'lost').length, [opportunities]);
+  const rejectedCount = useMemo(() => opportunities.filter(o => o.classification === 'rejected').length, [opportunities]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return lostOpps;
