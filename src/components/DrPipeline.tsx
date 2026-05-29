@@ -797,7 +797,7 @@ export default function DrPipeline() {
                         <th className="text-right px-2 py-1.5 font-medium">DRs Registered</th>
                         <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
                         <th className="text-right px-2 py-1.5 font-medium">Padded Accts</th>
-                        <th className="text-right px-2 py-1.5 font-medium">Rejected</th>
+                        <th className="text-right px-2 py-1.5 font-medium" title="DRs that disappeared without explicit AE rejection or pipeline conversion">Withdrawn</th>
                         <th className="text-right px-2 py-1.5 font-medium">Avg Age at SQL</th>
                         <th className="text-right px-2 py-1.5 font-medium">Closed Won</th>
                         <th className="text-right px-2 py-1.5 font-medium">Win Rate</th>
