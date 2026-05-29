@@ -680,13 +680,27 @@ export default function DrPipeline() {
 
           {/* Section B: AE Accountability */}
           <section className="border border-border rounded-md">
-            <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+            <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-3 flex-wrap">
               <h3 className="text-xs font-semibold">AE Accountability</h3>
-              {expandedRep && (
-                <button onClick={() => setExpandedRep(null)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
-                  <X size={12} /> Clear rep filter ({expandedRep})
-                </button>
-              )}
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-[11px] text-muted-foreground flex items-center gap-1.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showInactiveReps}
+                    onChange={(e) => setShowInactiveReps(e.target.checked)}
+                    className="h-3 w-3 rounded border-border"
+                  />
+                  Show inactive reps
+                  {hiddenInactiveCount > 0 && !showInactiveReps && (
+                    <span className="text-muted-foreground">({hiddenInactiveCount} hidden)</span>
+                  )}
+                </label>
+                {expandedRep && (
+                  <button onClick={() => setExpandedRep(null)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                    <X size={12} /> Clear rep filter ({expandedRep})
+                  </button>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
