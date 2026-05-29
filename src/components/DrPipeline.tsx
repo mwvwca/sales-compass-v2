@@ -19,6 +19,7 @@ const STATUS_CHIPS: { key: DrStatus; label: string }[] = [
   { key: 'closed_won', label: 'Closed Won' },
   { key: 'closed_lost', label: 'Closed Lost' },
   { key: 'rejected', label: 'Rejected' },
+  { key: 'withdrawn', label: 'Withdrawn' },
 ];
 const DEFAULT_STATUSES: DrStatus[] = ['active', 'sql', 'stale', 'padded', 'converted', 'closed_won', 'closed_lost'];
 
