@@ -203,7 +203,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     });
 
     return {
-      reps: loadFromStorage(STORAGE_KEYS.reps, []),
+      reps: loadFromStorage<Rep[]>(STORAGE_KEYS.reps, []).map((r: any) => ({
+        ...r,
+        isActive: r.isActive === undefined ? true : !!r.isActive,
+      })),
       opportunities: migrated,
       imports: loadFromStorage(STORAGE_KEYS.imports, []),
       changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
