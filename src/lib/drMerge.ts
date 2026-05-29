@@ -128,7 +128,7 @@ export function mergeDrBatch(
         : (prev.stageHistory ?? []);
 
       const wasSql = prev.isSql;
-      const sqlDate = wasSql ? prev.sqlDate : (isSql ? importedAt : undefined);
+      const sqlDate = wasSql ? prev.sqlDate : (isSql ? importedAt.slice(0, 10) : undefined);
 
       const rec: DealRegistration = {
         ...prev,
