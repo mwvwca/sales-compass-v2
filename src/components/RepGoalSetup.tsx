@@ -35,8 +35,19 @@ export default function RepGoalSetup() {
     updateOpportunityCommissionDetails,
     setCommissionPinHash,
     monthlyRepCommits,
+    monthlyManagerCommits,
+    forecastPromotions,
+    forecastSnapshots,
     setMonthlyRepCommit,
     getMonthlyRepCommit,
+    setMonthlyManagerCommit,
+    getMonthlyManagerCommit,
+    promoteOpportunityForecast,
+    demoteOpportunityForecast,
+    isOpportunityPromoted,
+    createForecastSnapshot,
+    reconcileForecastSnapshot,
+    deleteForecastSnapshot,
   } = useForecast();
   const { toast } = useToast();
   const [name, setName] = useState('');
