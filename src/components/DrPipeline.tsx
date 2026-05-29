@@ -91,7 +91,8 @@ function statusBadgeCls(s: DrStatus): string {
     case 'converted': return 'bg-teal-500/15 text-teal-700 dark:text-teal-400';
     case 'closed_won': return 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold';
     case 'closed_lost': return 'bg-red-500/10 text-red-700/70 dark:text-red-400/70';
-    case 'rejected': return 'bg-muted text-muted-foreground';
+    case 'rejected': return 'bg-foreground/15 text-foreground/80';
+    case 'withdrawn': return 'bg-muted text-muted-foreground';
   }
 }
 function statusLabel(s: DrStatus): string {
@@ -100,7 +101,7 @@ function statusLabel(s: DrStatus): string {
 
 // Sort priority for default sort
 const STATUS_SORT_PRIORITY: Record<DrStatus, number> = {
-  stale: 0, padded: 1, active: 2, sql: 3, converted: 4, closed_won: 5, closed_lost: 6, rejected: 7,
+  stale: 0, padded: 1, active: 2, sql: 3, converted: 4, closed_won: 5, closed_lost: 6, rejected: 7, withdrawn: 8,
 };
 
 // ---------- Upload zone ----------
