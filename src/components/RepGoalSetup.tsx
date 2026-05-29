@@ -299,7 +299,7 @@ export default function RepGoalSetup() {
             </td>
           </tr>
         )}
-      </>
+      </React.Fragment>
     );
   };
 
