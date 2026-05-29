@@ -67,15 +67,16 @@ export default function ForecastDashboard() {
     return getYearQuarters(anchor.getUTCFullYear()).map(q => ({ key: q, label: q.split('-')[1], matches: (cd: string) => getQuarter(cd) === q }));
   }, [scope, anchor, anchorMonthKey, anchorQuarter, weekRange]);
 
-  // Active rep names only — inactive reps hidden from dashboard rep list and dropdown.
-  // Historical data remains in pipeline totals via opportunities filter elsewhere.
+  // Inactive reps are hidden ONLY from the rep breakdown table and the rep filter dropdown.
+  // Every aggregate (HUD totals, goals, variance, coverage, etc.) uses the full unfiltered dataset.
   const inactiveSet = useMemo(() => new Set(reps.filter(r => r.isActive === false).map(r => r.name)), [reps]);
-  const repNames = useMemo(() => {
+  const allRepNames = useMemo(() => {
     const names = new Set<string>();
-    for (const o of opportunities) if (!inactiveSet.has(o.repName)) names.add(o.repName);
-    for (const r of reps) if (r.isActive !== false) names.add(r.name);
+    for (const o of opportunities) names.add(o.repName);
+    for (const r of reps) names.add(r.name);
     return Array.from(names).sort();
-  }, [opportunities, reps, inactiveSet]);
+  }, [opportunities, reps]);
+  const repNames = useMemo(() => allRepNames.filter(n => !inactiveSet.has(n)), [allRepNames, inactiveSet]);
 
   const activeRepNames = repNames;
   const inactiveRepNames: string[] = [];
@@ -119,9 +120,9 @@ export default function ForecastDashboard() {
   const totalUpside = hudOpps.filter(o => o.classification === 'upside').reduce((s, o) => s + o.amount, 0);
 
   const totalGoal = useMemo(() => {
-    const activeReps = selectedRep === 'all' ? repNames : [selectedRep];
+    const activeReps = selectedRep === 'all' ? allRepNames : [selectedRep];
     return activeReps.reduce((sum, name) => sum + getRepGoal(name), 0);
-  }, [selectedRep, repNames, reps, scopeQuarters, goalDivisor]);
+  }, [selectedRep, allRepNames, reps, scopeQuarters, goalDivisor]);
 
   const variance = totalWon - totalGoal;
 
