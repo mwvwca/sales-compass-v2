@@ -9,10 +9,16 @@ import type {
   CommissionSettingsMap,
   RepCommissionSettings,
   MonthlyRepCommit,
+  MonthlyManagerCommit,
+  ForecastPromotion,
+  ForecastSnapshot,
+  ForecastDealLine,
+  ForecastSnapshotOutcomeLine,
   DealRegistration,
   DrBatch,
   RawDrRecord,
 } from '@/types/forecast';
+import { getMonthKey, getWeeksInMonth, getDateAtUtcStart } from '@/types/forecast';
 import { mergeDrBatch } from '@/lib/drMerge';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
@@ -28,6 +34,9 @@ const STORAGE_KEYS = {
   commissionReviews: 'forecast_commission_reviews',
   commissionPinHash: 'forecast_commission_pin_hash',
   monthlyRepCommits: 'forecast_monthly_rep_commits',
+  monthlyManagerCommits: 'forecast_monthly_manager_commits',
+  forecastPromotions: 'forecast_promotions',
+  forecastSnapshots: 'forecast_forecast_snapshots',
   dealRegistrations: 'forecast_deal_registrations',
   drBatches: 'forecast_dr_batches',
 };
@@ -120,6 +129,9 @@ interface ForecastState {
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;
   monthlyRepCommits: MonthlyRepCommit[];
+  monthlyManagerCommits: MonthlyManagerCommit[];
+  forecastPromotions: ForecastPromotion[];
+  forecastSnapshots: ForecastSnapshot[];
   dealRegistrations: DealRegistration[];
   drBatches: DrBatch[];
 
@@ -148,6 +160,14 @@ interface ForecastContextValue extends ForecastState {
   setMonthlyRepCommit: (repId: string, repName: string, monthKey: string, amount: number, notes?: string) => void;
   getMonthlyRepCommit: (repId: string, monthKey: string) => MonthlyRepCommit | undefined;
   getMonthlyCommitsByMonth: (monthKey: string) => MonthlyRepCommit[];
+  setMonthlyManagerCommit: (monthKey: string, amount: number) => void;
+  getMonthlyManagerCommit: (monthKey: string) => MonthlyManagerCommit | undefined;
+  promoteOpportunityForecast: (opportunityId: string, monthKey: string) => void;
+  demoteOpportunityForecast: (opportunityId: string, monthKey: string) => void;
+  isOpportunityPromoted: (opportunityId: string, monthKey: string) => boolean;
+  createForecastSnapshot: (monthKey: string) => ForecastSnapshot;
+  reconcileForecastSnapshot: (snapshotId: string) => void;
+  deleteForecastSnapshot: (snapshotId: string) => void;
   importDrBatch: (
     incoming: RawDrRecord[],
     batchMeta: { fileName: string; asOfDate: string; importedAt: string },
@@ -163,6 +183,9 @@ interface ForecastContextValue extends ForecastState {
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
+    monthlyManagerCommits?: MonthlyManagerCommit[];
+    forecastPromotions?: ForecastPromotion[];
+    forecastSnapshots?: ForecastSnapshot[];
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
   }) => void;
@@ -227,6 +250,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
       commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
       monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
+      monthlyManagerCommits: loadFromStorage<MonthlyManagerCommit[]>(STORAGE_KEYS.monthlyManagerCommits, []),
+      forecastPromotions: loadFromStorage<ForecastPromotion[]>(STORAGE_KEYS.forecastPromotions, []),
+      forecastSnapshots: loadFromStorage<ForecastSnapshot[]>(STORAGE_KEYS.forecastSnapshots, []),
       dealRegistrations: loadFromStorage<DealRegistration[]>(STORAGE_KEYS.dealRegistrations, []).map((dr: any) => ({
         ...dr,
         stageHistory: dr.stageHistory ?? [],
@@ -253,6 +279,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.commissionReviews, state.commissionReviews);
     saveToStorage(STORAGE_KEYS.commissionPinHash, state.commissionPinHash);
     saveToStorage(STORAGE_KEYS.monthlyRepCommits, state.monthlyRepCommits);
+    saveToStorage(STORAGE_KEYS.monthlyManagerCommits, state.monthlyManagerCommits);
+    saveToStorage(STORAGE_KEYS.forecastPromotions, state.forecastPromotions);
+    saveToStorage(STORAGE_KEYS.forecastSnapshots, state.forecastSnapshots);
     saveToStorage(STORAGE_KEYS.dealRegistrations, state.dealRegistrations);
     saveToStorage(STORAGE_KEYS.drBatches, state.drBatches);
 
@@ -271,6 +300,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.commissionReviews,
     state.commissionPinHash,
     state.monthlyRepCommits,
+    state.monthlyManagerCommits,
+    state.forecastPromotions,
+    state.forecastSnapshots,
     state.dealRegistrations,
     state.drBatches,
   ]);
@@ -587,6 +619,148 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     return state.monthlyRepCommits.filter(m => m.monthKey === monthKey);
   }, [state.monthlyRepCommits]);
 
+  const setMonthlyManagerCommit = useCallback((monthKey: string, amount: number) => {
+    setState(s => {
+      const now = new Date().toISOString();
+      const existing = s.monthlyManagerCommits.find(m => m.monthKey === monthKey);
+      const next: MonthlyManagerCommit = existing
+        ? { ...existing, commitAmount: amount, updatedAt: now }
+        : { id: crypto.randomUUID(), monthKey, commitAmount: amount, createdAt: now, updatedAt: now };
+      return {
+        ...s,
+        monthlyManagerCommits: existing
+          ? s.monthlyManagerCommits.map(m => (m.monthKey === monthKey ? next : m))
+          : [...s.monthlyManagerCommits, next],
+      };
+    });
+  }, []);
+
+  const getMonthlyManagerCommit = useCallback((monthKey: string) => {
+    return state.monthlyManagerCommits.find(m => m.monthKey === monthKey);
+  }, [state.monthlyManagerCommits]);
+
+  const promoteOpportunityForecast = useCallback((opportunityId: string, monthKey: string) => {
+    setState(s => {
+      if (s.forecastPromotions.some(p => p.opportunityId === opportunityId && p.monthKey === monthKey)) return s;
+      return {
+        ...s,
+        forecastPromotions: [...s.forecastPromotions, { opportunityId, monthKey, promotedAt: new Date().toISOString() }],
+      };
+    });
+  }, []);
+
+  const demoteOpportunityForecast = useCallback((opportunityId: string, monthKey: string) => {
+    setState(s => ({
+      ...s,
+      forecastPromotions: s.forecastPromotions.filter(p => !(p.opportunityId === opportunityId && p.monthKey === monthKey)),
+    }));
+  }, []);
+
+  const isOpportunityPromoted = useCallback((opportunityId: string, monthKey: string) => {
+    return state.forecastPromotions.some(p => p.opportunityId === opportunityId && p.monthKey === monthKey);
+  }, [state.forecastPromotions]);
+
+  const buildDealsForMonth = useCallback((monthKey: string): { deals: ForecastDealLine[]; commitTotal: number; promotedUpsideTotal: number } => {
+    const weeks = getWeeksInMonth(monthKey);
+    const activeRepNames = new Set(state.reps.filter(r => r.isActive !== false).map(r => r.name));
+    const promotedSet = new Set(state.forecastPromotions.filter(p => p.monthKey === monthKey).map(p => p.opportunityId));
+    const deals: ForecastDealLine[] = [];
+    let commitTotal = 0;
+    let promotedUpsideTotal = 0;
+    for (const o of state.opportunities) {
+      if (!o.closeDate) continue;
+      if (getMonthKey(o.closeDate) !== monthKey) continue;
+      const stageNorm = (o.stage || '').toLowerCase().trim();
+      if (o.classification === 'lost' || o.classification === 'rejected' || o.classification === 'omitted') continue;
+      if (stageNorm === 'closed lost' || stageNorm === 'rejected') continue;
+      if (!activeRepNames.has(o.repName)) continue;
+      const isCommit = o.classification === 'commit';
+      const isPromoted = promotedSet.has(o.id) && o.classification === 'upside';
+      if (!isCommit && !isPromoted) continue;
+      const d = getDateAtUtcStart(o.closeDate);
+      const w = weeks.find(w => d >= w.start && d <= w.end);
+      deals.push({
+        opportunityId: o.id,
+        opportunityName: o.name,
+        repName: o.repName,
+        amount: o.amount,
+        closeDate: o.closeDate,
+        stage: o.stage,
+        classification: isCommit ? 'commit' : 'promoted_upside',
+        weekLabel: w?.label ?? '—',
+      });
+      if (isCommit) commitTotal += o.amount;
+      else promotedUpsideTotal += o.amount;
+    }
+    return { deals, commitTotal, promotedUpsideTotal };
+  }, [state.opportunities, state.reps, state.forecastPromotions]);
+
+  const createForecastSnapshot = useCallback((monthKey: string): ForecastSnapshot => {
+    const { deals, commitTotal, promotedUpsideTotal } = buildDealsForMonth(monthKey);
+    const managerCommit = state.monthlyManagerCommits.find(m => m.monthKey === monthKey)?.commitAmount ?? 0;
+    const repRollup = state.monthlyRepCommits.filter(m => m.monthKey === monthKey).reduce((s, m) => s + m.commitAmount, 0);
+    const now = new Date();
+    const monthLabelDate = new Date(`${monthKey}-01T00:00:00Z`);
+    const monthLabel = monthLabelDate.toLocaleString('default', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const tsLabel = now.toLocaleString('default', { month: 'short', day: 'numeric' }) + ' at ' + now.toLocaleTimeString('default', { hour: 'numeric', minute: '2-digit' });
+    const snapshot: ForecastSnapshot = {
+      id: crypto.randomUUID(),
+      monthKey,
+      snapshotLabel: `${monthLabel} — ${tsLabel}`,
+      createdAt: now.toISOString(),
+      managerCommit,
+      repRollup,
+      commitTotal,
+      promotedUpsideTotal,
+      totalCall: commitTotal + promotedUpsideTotal,
+      deals,
+    };
+    setState(s => ({ ...s, forecastSnapshots: [...s.forecastSnapshots, snapshot] }));
+    return snapshot;
+  }, [buildDealsForMonth, state.monthlyManagerCommits, state.monthlyRepCommits]);
+
+  const reconcileForecastSnapshot = useCallback((snapshotId: string) => {
+    setState(s => {
+      const snap = s.forecastSnapshots.find(x => x.id === snapshotId);
+      if (!snap) return s;
+      const now = new Date();
+      let closedWonTotal = 0;
+      let closedWonCount = 0;
+      const outcomes: ForecastSnapshotOutcomeLine[] = snap.deals.map(d => {
+        const opp = s.opportunities.find(o => o.id === d.opportunityId);
+        if (!opp) return { opportunityId: d.opportunityId, status: 'removed', amount: d.amount };
+        const stageNorm = (opp.stage || '').toLowerCase().trim();
+        if (opp.classification === 'closed_won' || stageNorm === 'closed won') {
+          closedWonTotal += opp.amount;
+          closedWonCount += 1;
+          return { opportunityId: d.opportunityId, status: 'won', amount: opp.amount, closedDate: opp.closeDate };
+        }
+        if (opp.classification === 'lost' || opp.classification === 'rejected' || stageNorm === 'closed lost' || stageNorm === 'rejected') {
+          return { opportunityId: d.opportunityId, status: 'lost', amount: opp.amount, closedDate: opp.lostDate ?? opp.closeDate };
+        }
+        const cd = opp.closeDate ? getDateAtUtcStart(opp.closeDate) : null;
+        if (cd && cd < now) {
+          return { opportunityId: d.opportunityId, status: 'pushed', amount: opp.amount, closedDate: opp.closeDate };
+        }
+        return { opportunityId: d.opportunityId, status: 'pending', amount: opp.amount, closedDate: opp.closeDate };
+      });
+      const updated: ForecastSnapshot = {
+        ...snap,
+        closedWonTotal,
+        closedWonCount,
+        reconciledAt: now.toISOString(),
+        outcomes,
+      };
+      return { ...s, forecastSnapshots: s.forecastSnapshots.map(x => x.id === snapshotId ? updated : x) };
+    });
+  }, []);
+
+  const deleteForecastSnapshot = useCallback((snapshotId: string) => {
+    setState(s => ({ ...s, forecastSnapshots: s.forecastSnapshots.filter(x => x.id !== snapshotId) }));
+  }, []);
+
+
+
 
 
   const importDrBatch = useCallback((
@@ -629,6 +803,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
+    monthlyManagerCommits?: MonthlyManagerCommit[];
+    forecastPromotions?: ForecastPromotion[];
+    forecastSnapshots?: ForecastSnapshot[];
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
   }) => {
@@ -643,6 +820,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionReviews: data.commissionReviews || {},
       commissionPinHash: data.commissionPinHash ?? null,
       monthlyRepCommits: data.monthlyRepCommits || [],
+      monthlyManagerCommits: data.monthlyManagerCommits || [],
+      forecastPromotions: data.forecastPromotions || [],
+      forecastSnapshots: data.forecastSnapshots || [],
       dealRegistrations: data.dealRegistrations || [],
       drBatches: data.drBatches || [],
     }));
@@ -677,6 +857,14 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setMonthlyRepCommit,
     getMonthlyRepCommit,
     getMonthlyCommitsByMonth,
+    setMonthlyManagerCommit,
+    getMonthlyManagerCommit,
+    promoteOpportunityForecast,
+    demoteOpportunityForecast,
+    isOpportunityPromoted,
+    createForecastSnapshot,
+    reconcileForecastSnapshot,
+    deleteForecastSnapshot,
     importDrBatch,
     clearDrData,
     restoreFromBackup,

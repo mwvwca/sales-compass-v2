@@ -20,7 +20,7 @@ import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentation
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, changelog } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, changelog } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('quarterly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
@@ -67,25 +67,18 @@ export default function ForecastDashboard() {
     return getYearQuarters(anchor.getUTCFullYear()).map(q => ({ key: q, label: q.split('-')[1], matches: (cd: string) => getQuarter(cd) === q }));
   }, [scope, anchor, anchorMonthKey, anchorQuarter, weekRange]);
 
+  // Active rep names only — inactive reps hidden from dashboard rep list and dropdown.
+  // Historical data remains in pipeline totals via opportunities filter elsewhere.
+  const inactiveSet = useMemo(() => new Set(reps.filter(r => r.isActive === false).map(r => r.name)), [reps]);
   const repNames = useMemo(() => {
-    const names = new Set(opportunities.map(o => o.repName));
-    reps.forEach(r => names.add(r.name));
+    const names = new Set<string>();
+    for (const o of opportunities) if (!inactiveSet.has(o.repName)) names.add(o.repName);
+    for (const r of reps) if (r.isActive !== false) names.add(r.name);
     return Array.from(names).sort();
-  }, [opportunities, reps]);
+  }, [opportunities, reps, inactiveSet]);
 
-  // Partition rep names into active vs inactive for dropdown grouping.
-  // Inactive = exists in reps and isActive === false. Names that only appear
-  // on historical opportunities (no Rep record) are treated as active.
-  const { activeRepNames, inactiveRepNames } = useMemo(() => {
-    const inactiveSet = new Set(reps.filter(r => r.isActive === false).map(r => r.name));
-    const active: string[] = [];
-    const inactive: string[] = [];
-    for (const n of repNames) {
-      if (inactiveSet.has(n)) inactive.push(n);
-      else active.push(n);
-    }
-    return { activeRepNames: active, inactiveRepNames: inactive };
-  }, [repNames, reps]);
+  const activeRepNames = repNames;
+  const inactiveRepNames: string[] = [];
 
   const getRepGoal = (repName: string) => {
     const rep = reps.find(r => normalizeRepName(r.name) === normalizeRepName(repName));
@@ -132,25 +125,27 @@ export default function ForecastDashboard() {
 
   const variance = totalWon - totalGoal;
 
-  // Mgmt Commit aggregation for current scope (filtered by selected rep)
-  const mgmtCommitTotal = useMemo(() => {
+  // Mgmt Commit: prefer manager override; fall back to rep rollup (only used in monthly scope when selectedRep === all).
+  const mgmtCommit = useMemo(() => {
     const yr = anchor.getUTCFullYear();
     let monthKeys: string[] = [];
-    if (scope === 'monthly' || scope === 'weekly') {
-      monthKeys = [anchorMonthKey];
-    } else if (scope === 'quarterly') {
-      monthKeys = getQuarterMonths(anchorQuarter);
-    } else {
-      monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+    if (scope === 'monthly' || scope === 'weekly') monthKeys = [anchorMonthKey];
+    else if (scope === 'quarterly') monthKeys = getQuarterMonths(anchorQuarter);
+    else monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+
+    if (selectedRep === 'all') {
+      const managerTotal = monthlyManagerCommits.filter(m => monthKeys.includes(m.monthKey)).reduce((s, m) => s + m.commitAmount, 0);
+      if (managerTotal > 0) return { value: managerTotal, isFallback: false };
     }
-    const matched = monthlyRepCommits.filter(m => {
+    const repTotal = monthlyRepCommits.filter(m => {
       if (!monthKeys.includes(m.monthKey)) return false;
       if (selectedRep !== 'all' && m.repName !== selectedRep) return false;
       return true;
-    });
-    if (matched.length === 0) return null;
-    return matched.reduce((s, m) => s + m.commitAmount, 0);
-  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyRepCommits, selectedRep]);
+    }).reduce((s, m) => s + m.commitAmount, 0);
+    if (repTotal > 0) return { value: repTotal, isFallback: true };
+    return null;
+  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyRepCommits, monthlyManagerCommits, selectedRep]);
+  const mgmtCommitTotal = mgmtCommit?.value ?? null;
 
 
 
@@ -302,7 +297,12 @@ export default function ForecastDashboard() {
           <div className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Mgmt Commit</p>
             {mgmtCommitTotal !== null ? (
-              <p className="text-xl font-mono font-semibold text-commit">{fmt(mgmtCommitTotal)}</p>
+              <>
+                <p className="text-xl font-mono font-semibold text-commit">{fmt(mgmtCommitTotal)}</p>
+                {mgmtCommit?.isFallback && (
+                  <p className="text-[10px] mt-0.5 text-muted-foreground">Rep rollup — set your number in Goals.</p>
+                )}
+              </>
             ) : (
               <p className="text-xl font-mono font-semibold text-muted-foreground">
                 Not set <button onClick={goToGoals} className="ml-1 text-[11px] underline text-primary">Set now</button>

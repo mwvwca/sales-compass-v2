@@ -5,6 +5,9 @@ import type {
   ChangeLogEntry,
   OpportunitySnapshot,
   MonthlyRepCommit,
+  MonthlyManagerCommit,
+  ForecastPromotion,
+  ForecastSnapshot,
   CommissionSettingsMap,
   CommissionReviewsMap,
 } from '@/types/forecast';
@@ -15,6 +18,9 @@ export interface BackupPayload {
   imports: ImportRecord[];
   changelog: ChangeLogEntry[];
   monthlyRepCommits: MonthlyRepCommit[];
+  monthlyManagerCommits?: MonthlyManagerCommit[];
+  forecastPromotions?: ForecastPromotion[];
+  forecastSnapshots?: ForecastSnapshot[];
   commissionSettings: CommissionSettingsMap;
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;

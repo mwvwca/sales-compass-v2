@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, RotateCcw, Camera, Star, Eye } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import CommissionLock from '@/components/CommissionLock';
 import CommissionSettings from '@/components/CommissionSettings';
 import CommissionTracker from '@/components/CommissionTracker';
 import CommissionReconciliation from '@/components/CommissionReconciliation';
+import ForecastSnapshotView from '@/components/ForecastSnapshot';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { normalizeRepName } from '@/lib/repUtils';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBackupNow } from '@/lib/backupUtils';
-import { getMonthLabel, getQuarter } from '@/types/forecast';
+import { getMonthLabel, getMonthKey, getQuarter, getWeeksInMonth, getDateAtUtcStart, type ForecastSnapshot } from '@/types/forecast';
 
 export default function RepGoalSetup() {
   const {
@@ -34,8 +35,19 @@ export default function RepGoalSetup() {
     updateOpportunityCommissionDetails,
     setCommissionPinHash,
     monthlyRepCommits,
+    monthlyManagerCommits,
+    forecastPromotions,
+    forecastSnapshots,
     setMonthlyRepCommit,
     getMonthlyRepCommit,
+    setMonthlyManagerCommit,
+    getMonthlyManagerCommit,
+    promoteOpportunityForecast,
+    demoteOpportunityForecast,
+    isOpportunityPromoted,
+    createForecastSnapshot,
+    reconcileForecastSnapshot,
+    deleteForecastSnapshot,
   } = useForecast();
   const { toast } = useToast();
   const [name, setName] = useState('');
@@ -46,6 +58,11 @@ export default function RepGoalSetup() {
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [commissionOpen, setCommissionOpen] = useState(false);
   const [mgmtOpen, setMgmtOpen] = useState(false);
+  const [mgrCommitDraft, setMgrCommitDraft] = useState<string>('');
+  const [mgrCommitDraftKey, setMgrCommitDraftKey] = useState<string>('');
+  const [dealListOpen, setDealListOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [viewingSnapshot, setViewingSnapshot] = useState<ForecastSnapshot | null>(null);
 
   // Monthly commit selector — single month at a time
   const currentMonthKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
@@ -89,6 +106,9 @@ export default function RepGoalSetup() {
       commissionReviews,
       commissionPinHash,
       monthlyRepCommits,
+      monthlyManagerCommits,
+      forecastPromotions,
+      forecastSnapshots,
     });
   };
 
@@ -187,6 +207,111 @@ export default function RepGoalSetup() {
     setRepActiveStatus(rep.id, true);
     toast({ title: `${rep.name} reactivated` });
   };
+
+  // ----- Manager commit draft -----
+  const managerCommit = getMonthlyManagerCommit(selectedMonth);
+  const effectiveMgrDraft = mgrCommitDraftKey === selectedMonth
+    ? mgrCommitDraft
+    : (managerCommit ? String(managerCommit.commitAmount) : '');
+
+  const handleSaveManagerCommit = () => {
+    const amount = parseFloat(effectiveMgrDraft);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
+      return;
+    }
+    setMonthlyManagerCommit(selectedMonth, amount);
+    triggerBackup();
+    toast({ title: 'Commit saved and backup downloaded' });
+  };
+
+  // ----- Forecast deal list -----
+  const weeks = useMemo(() => getWeeksInMonth(selectedMonth), [selectedMonth]);
+  const activeRepSet = useMemo(() => new Set(activeReps.map(r => r.name)), [activeReps]);
+
+  const monthDeals = useMemo(() => {
+    const promotedSet = new Set(
+      forecastPromotions.filter(p => p.monthKey === selectedMonth).map(p => p.opportunityId),
+    );
+    const isExcluded = (o: typeof opportunities[0]) => {
+      const s = (o.stage || '').toLowerCase().trim();
+      return o.classification === 'lost' || o.classification === 'rejected' || o.classification === 'omitted'
+        || s === 'closed lost' || s === 'rejected';
+    };
+    const list = opportunities
+      .filter(o => o.closeDate && getMonthKey(o.closeDate) === selectedMonth && !isExcluded(o))
+      .filter(o => activeRepSet.has(o.repName));
+    return list.map(o => {
+      const d = getDateAtUtcStart(o.closeDate);
+      const w = weeks.find(x => d >= x.start && d <= x.end);
+      const promoted = promotedSet.has(o.id);
+      return {
+        opp: o,
+        weekLabel: w?.label ?? '—',
+        promoted,
+        isCommit: o.classification === 'commit',
+        isUpside: o.classification === 'upside',
+      };
+    });
+  }, [opportunities, selectedMonth, forecastPromotions, activeRepSet, weeks]);
+
+  const dealTotals = useMemo(() => {
+    let commit = 0;
+    let promoted = 0;
+    for (const d of monthDeals) {
+      if (d.isCommit) commit += d.opp.amount;
+      else if (d.promoted) promoted += d.opp.amount;
+    }
+    return { commit, promoted, total: commit + promoted };
+  }, [monthDeals]);
+
+  const mgrSaved = !!managerCommit;
+  const mgrAmount = managerCommit?.commitAmount ?? 0;
+  const mgrGap = mgrAmount - rollup.commitTotal;
+  const mgrGapColor = !mgrSaved ? 'text-muted-foreground'
+    : mgrGap > 0 ? 'text-positive'
+    : Math.abs(mgrGap) <= rollup.commitTotal * 0.1 ? 'text-amber-500'
+    : 'text-negative';
+
+  const callVsMgr = mgrSaved
+    ? (Math.abs(dealTotals.total - mgrAmount) <= mgrAmount * 0.05
+        ? { color: 'text-positive', icon: '✓' as const }
+        : { color: 'text-amber-500', icon: '⚠' as const })
+    : { color: 'text-negative', icon: '✗' as const };
+
+  // ----- Snapshots for selected month -----
+  const monthSnapshots = useMemo(
+    () => forecastSnapshots
+      .filter(s => s.monthKey === selectedMonth)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [forecastSnapshots, selectedMonth],
+  );
+
+  const dealsByRep = useMemo(() => {
+    const map = new Map<string, typeof monthDeals>();
+    for (const d of monthDeals) {
+      if (!d.isCommit && !d.promoted && !d.isUpside) continue;
+      const arr = map.get(d.opp.repName) ?? [];
+      arr.push(d);
+      map.set(d.opp.repName, arr);
+    }
+    return Array.from(map.entries());
+  }, [monthDeals]);
+  const dealsByRepEntries = (entries: typeof dealsByRep) => entries;
+
+  const handleSnapshot = () => {
+    const snap = createForecastSnapshot(selectedMonth);
+    triggerBackup();
+    setViewingSnapshot(snap);
+    toast({ title: 'Snapshot saved' });
+  };
+
+  const handleTogglePromote = (oppId: string, promoted: boolean) => {
+    if (promoted) demoteOpportunityForecast(oppId, selectedMonth);
+    else promoteOpportunityForecast(oppId, selectedMonth);
+  };
+
+
 
   // Reps to show in the monthly commit grid:
   // - current/future months: only active reps
@@ -422,6 +547,42 @@ export default function RepGoalSetup() {
             </select>
           </div>
 
+          {/* My Number — manager-level commit override */}
+          <div className="rounded-lg border-2 border-primary/60 bg-primary/5 p-4 space-y-2">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">My commit to leadership</p>
+                <p className="text-xs text-muted-foreground">{getMonthLabel(selectedMonth)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <input
+                  type="number"
+                  value={effectiveMgrDraft}
+                  onChange={e => { setMgrCommitDraftKey(selectedMonth); setMgrCommitDraft(e.target.value); }}
+                  placeholder="Enter your number"
+                  className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-base font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <Button onClick={handleSaveManagerCommit} size="sm" className="gap-1.5">
+                <Check size={14} /> Save
+              </Button>
+            </div>
+            <div className="flex items-center gap-4 text-xs flex-wrap">
+              <span className="text-muted-foreground">Rep rollup: <span className="font-mono text-foreground">{fmtMoney(rollup.commitTotal)}</span></span>
+              <span className={mgrGapColor}>
+                Gap: <span className="font-mono">{mgrSaved ? (mgrGap >= 0 ? '+' : '') + fmtMoney(mgrGap) : '—'}</span>
+              </span>
+              {managerCommit?.updatedAt && (
+                <span className="text-muted-foreground ml-auto">Last saved: {fmtTs(managerCommit.updatedAt)}</span>
+              )}
+            </div>
+          </div>
+
+
+
           {commitGridReps.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
               {reps.length === 0 ? 'Add reps above first.' : 'No active reps for this month.'}
@@ -474,6 +635,127 @@ export default function RepGoalSetup() {
               </div>
             </div>
           )}
+
+          {/* Forecast deal list */}
+          <Collapsible open={dealListOpen} onOpenChange={setDealListOpen} className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Forecast deal list</h3>
+                <p className="text-xs text-muted-foreground">Deals making up your commit. Promote upside deals you're willing to call.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={handleSnapshot}>
+                  <Camera size={14} /> Snapshot
+                </Button>
+                <CollapsibleTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    {dealListOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    {dealListOpen ? 'Hide' : 'Show'}
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </div>
+            <CollapsibleContent className="space-y-3">
+              {dealsByRepEntries(dealsByRep).length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No commit or upside deals for active reps in this month.</p>
+              ) : (
+                <div className="space-y-3">
+                  {dealsByRepEntries(dealsByRep).map(([repName, list]) => (
+                    <div key={repName} className="border border-border rounded-md overflow-hidden">
+                      <div className="bg-secondary/40 px-3 py-1.5 text-xs font-semibold">{repName}</div>
+                      {weeks.map(w => {
+                        const wkList = list.filter(d => d.weekLabel === w.label);
+                        if (wkList.length === 0) return null;
+                        return (
+                          <div key={w.label}>
+                            <div className="bg-muted/30 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">{w.label}</div>
+                            {wkList.map(d => (
+                              <div key={d.opp.id} className="flex items-center gap-2 px-3 py-1.5 text-xs border-t border-border/60">
+                                <span className={`h-2 w-2 rounded-full ${d.isCommit ? 'bg-positive' : d.promoted ? 'bg-amber-400' : 'bg-amber-500/60'}`} />
+                                {d.promoted && <Star size={12} className="text-amber-500 fill-amber-500" />}
+                                <span className="flex-1 truncate">{d.opp.name}</span>
+                                <span className="font-mono text-muted-foreground">{fmtMoney(d.opp.amount)}</span>
+                                <span className="text-muted-foreground w-20 text-right">{d.opp.closeDate?.slice(0, 10)}</span>
+                                <span className="text-muted-foreground w-24 truncate text-right">{d.opp.stage}</span>
+                                {d.isUpside && (
+                                  <button
+                                    onClick={() => handleTogglePromote(d.opp.id, d.promoted)}
+                                    className={`text-[10px] px-2 py-0.5 rounded border ${d.promoted ? 'border-amber-400 text-amber-500' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                                  >
+                                    {d.promoted ? '★ Demote' : 'Promote ★'}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="border border-border rounded-md p-3 bg-secondary/30 text-xs flex flex-wrap gap-4 items-center">
+                <span>Commit: <span className="font-mono text-commit">{fmtMoney(dealTotals.commit)}</span></span>
+                <span>·</span>
+                <span>Promoted Upside: <span className="font-mono text-amber-500">{fmtMoney(dealTotals.promoted)}</span></span>
+                <span>·</span>
+                <span>Total Call: <span className="font-mono font-semibold">{fmtMoney(dealTotals.total)}</span></span>
+                <span>·</span>
+                <span className={callVsMgr.color}>
+                  vs My Commit: <span className="font-mono">{mgrSaved ? fmtMoney(mgrAmount) : 'not set'}</span> {callVsMgr.icon}
+                </span>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Snapshot history */}
+          <Collapsible open={historyOpen} onOpenChange={setHistoryOpen} className="space-y-2 border-t border-border pt-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Snapshot history</h3>
+                <p className="text-xs text-muted-foreground">{monthSnapshots.length} snapshot{monthSnapshots.length === 1 ? '' : 's'} for {getMonthLabel(selectedMonth)}</p>
+              </div>
+              <CollapsibleTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  {historyOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  {historyOpen ? 'Hide' : 'Show'}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+              {monthSnapshots.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No snapshots yet. Click Snapshot above to capture one.</p>
+              ) : (
+                <div className="space-y-1">
+                  {monthSnapshots.map(s => (
+                    <div key={s.id} className="flex items-center gap-2 text-xs border border-border rounded-md px-3 py-2">
+                      <span className="flex-1">
+                        <span className="font-medium">{fmtTs(s.createdAt)}</span>
+                        <span className="text-muted-foreground"> · {fmtMoney(s.totalCall)} call · {s.deals.length} deals</span>
+                        {s.reconciledAt && <span className="text-positive"> · reconciled</span>}
+                      </span>
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => setViewingSnapshot(s)}>
+                        <Eye size={12} /> View
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { reconcileForecastSnapshot(s.id); toast({ title: 'Reconciled' }); }}>
+                        Reconcile
+                      </Button>
+                      <button
+                        onClick={() => { if (confirm('Delete this snapshot?')) deleteForecastSnapshot(s.id); }}
+                        className="text-muted-foreground hover:text-negative p-1"
+                        title="Delete snapshot"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
+
         </CollapsibleContent>
       </Collapsible>
 
@@ -515,6 +797,9 @@ export default function RepGoalSetup() {
       </Collapsible>
 
       <CommissionReconciliation />
+      {viewingSnapshot && (
+        <ForecastSnapshotView snapshot={forecastSnapshots.find(s => s.id === viewingSnapshot.id) ?? viewingSnapshot} onClose={() => setViewingSnapshot(null)} />
+      )}
     </div>
   );
 }
