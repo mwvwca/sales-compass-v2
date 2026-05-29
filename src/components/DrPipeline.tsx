@@ -883,13 +883,13 @@ export default function DrPipeline() {
             )}
           </section>
 
-          {/* Section C: CAM Lead Quality (collapsible) */}
+          {/* Section C: CAM Cohort & Cycle (collapsible) */}
           <section className="border border-border rounded-md">
             <button onClick={() => setShowCam(s => !s)} className="w-full px-3 py-2 flex items-center justify-between hover:bg-muted/30">
               <h3 className="text-xs font-semibold flex items-center gap-1.5">
-                {showCam ? <ChevronDown size={12} /> : <ChevronRight size={12} />} CAM Lead Quality
+                {showCam ? <ChevronDown size={12} /> : <ChevronRight size={12} />} CAM Cohort & Cycle
               </h3>
-              <span className="text-xs text-muted-foreground">{camRows.length} CAMs</span>
+              <span className="text-xs text-muted-foreground">{camRows.length} CAMs · excludes Rejected</span>
             </button>
             {showCam && (
               <>
@@ -897,29 +897,108 @@ export default function DrPipeline() {
                   <table className="w-full text-xs">
                     <thead className="bg-secondary/40 text-muted-foreground">
                       <tr>
-                        <th className="text-left px-2 py-1.5 font-medium">CAM</th>
-                        <th className="text-right px-2 py-1.5 font-medium">DRs Registered</th>
-                        <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
-                        <th className="text-right px-2 py-1.5 font-medium">Padded Accts</th>
-                        <th className="text-right px-2 py-1.5 font-medium" title="DRs that disappeared without explicit AE rejection or pipeline conversion">Withdrawn</th>
-                        <th className="text-right px-2 py-1.5 font-medium">Avg Age at SQL</th>
-                        <th className="text-right px-2 py-1.5 font-medium">Closed Won</th>
-                        <th className="text-right px-2 py-1.5 font-medium">Win Rate</th>
+                        {([
+                          ['cam','CAM','left'],
+                          ['totalDrs','Total DRs','right'],
+                          ['sqlRate','SQL Rate','right'],
+                          ['closedWon','Closed Won','right'],
+                          ['cohortRate','Cohort Rate','right'],
+                          ['avgCycle','Avg Cycle','right'],
+                          ['fastest','Fastest','right'],
+                          ['slowest','Slowest','right'],
+                          ['inPeriodWon','In-Period Won','right'],
+                          ['withdrawnRate','Withdrawn %','right'],
+                        ] as [keyof CamRow, string, 'left'|'right'][]).map(([k, label, align]) => {
+                          const tooltip =
+                            k === 'cohortRate' ? '% of all DRs this CAM registered that closed won, regardless of timeframe' :
+                            k === 'inPeriodWon' ? 'DRs created and closed won within the same quarter' :
+                            k === 'withdrawnRate' ? 'DRs that disappeared from the report without converting or being explicitly rejected — possible CAM disengagement' :
+                            undefined;
+                          return (
+                            <th key={k} title={tooltip}
+                              className={`px-2 py-1.5 font-medium cursor-pointer select-none hover:text-foreground ${align === 'right' ? 'text-right' : 'text-left'} ${k === 'cohortRate' ? 'font-semibold' : ''}`}
+                              onClick={() => {
+                                if (camSortKey === k) setCamSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                                else { setCamSortKey(k); setCamSortDir('desc'); }
+                              }}>
+                              {label}{camSortKey === k ? (camSortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
-                      {camRows.map(r => (
-                        <tr key={r.cam} className="border-t border-border">
-                          <td className="px-2 py-1.5 font-medium">{r.cam}</td>
-                          <td className="text-right px-2 py-1.5">{r.registered}</td>
-                          <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
-                          <td className={`text-right px-2 py-1.5 ${r.paddedAccts > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.paddedAccts}</td>
-                          <td className={`text-right px-2 py-1.5 ${r.withdrawnRate > 0.2 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`} title={r.withdrawn > 0 ? `${fmtPct(r.withdrawnRate, 0)} of ${r.cam}'s DRs` : undefined}>{r.withdrawn}</td>
-                          <td className="text-right px-2 py-1.5">{r.avgAgeAtSql ? `${r.avgAgeAtSql.toFixed(0)}d` : '—'}</td>
-                          <td className="text-right px-2 py-1.5">{r.closedWon}</td>
-                          <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.winRate)}`}>{fmtPct(r.winRate, 1)}</td>
-                        </tr>
-                      ))}
+                      {camRows.map(r => {
+                        const isOpen = expandedCam === r.cam;
+                        return (
+                          <Fragment key={r.cam}>
+                            <tr
+                              onClick={() => setExpandedCam(isOpen ? null : r.cam)}
+                              className={`border-t border-border cursor-pointer hover:bg-muted/40 ${isOpen ? 'bg-muted/60' : ''}`}>
+                              <td className="px-2 py-1.5 font-medium">{r.cam}</td>
+                              <td className="text-right px-2 py-1.5">{r.totalDrs}</td>
+                              <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
+                              <td className="text-right px-2 py-1.5">{r.closedWon}</td>
+                              <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 1)}</td>
+                              <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
+                                {r.avgCycle !== null ? `${r.avgCycle.toFixed(0)} days` : '—'}
+                              </td>
+                              <td className="text-right px-2 py-1.5">{r.fastest !== null ? `${r.fastest} days` : '—'}</td>
+                              <td className="text-right px-2 py-1.5">{r.slowest !== null ? `${r.slowest} days` : '—'}</td>
+                              <td className="text-right px-2 py-1.5">{r.inPeriodWon}</td>
+                              <td className={`text-right px-2 py-1.5 ${r.withdrawnRate > 0.4 ? 'text-red-600 dark:text-red-400 font-medium' : r.withdrawnRate > 0.2 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{fmtPct(r.withdrawnRate, 0)}</td>
+                            </tr>
+                            {isOpen && (
+                              <tr className="bg-muted/20 border-t border-border">
+                                <td colSpan={10} className="px-3 py-2">
+                                  <p className="text-[11px] font-semibold text-muted-foreground mb-1">Vintage breakdown by created quarter</p>
+                                  {r.cohort.length === 0 ? (
+                                    <p className="text-[11px] text-muted-foreground">No data.</p>
+                                  ) : (
+                                    <table className="text-[11px]">
+                                      <thead className="text-muted-foreground">
+                                        <tr>
+                                          <th className="text-left pr-4 py-0.5 font-medium">Quarter Created</th>
+                                          <th className="text-right pr-4 py-0.5 font-medium">DRs</th>
+                                          <th className="text-right pr-4 py-0.5 font-medium">SQL'd</th>
+                                          <th className="text-right pr-4 py-0.5 font-medium">Closed Won</th>
+                                          <th className="text-right pr-4 py-0.5 font-medium">Cohort Rate</th>
+                                          <th className="text-right py-0.5 font-medium">Avg Cycle</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {r.cohort.map(c => (
+                                          <tr key={c.quarter}>
+                                            <td className="pr-4 py-0.5">{c.quarter}</td>
+                                            <td className="text-right pr-4 py-0.5">{c.total}</td>
+                                            <td className="text-right pr-4 py-0.5">{c.sql}</td>
+                                            <td className="text-right pr-4 py-0.5">{c.closedWon}</td>
+                                            <td className={`text-right pr-4 py-0.5 ${colorConvRate(c.cohortRate)}`}>{fmtPct(c.cohortRate, 0)}</td>
+                                            <td className="text-right py-0.5">{c.avgCycle !== null ? `${c.avgCycle.toFixed(0)} days` : '—'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                  <p className="text-[10px] text-muted-foreground mt-1">Recent quarters will show lower rates as deals are still in progress.</p>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                      <tr className="border-t-2 border-border font-medium bg-secondary/30">
+                        <td className="px-2 py-1.5">Total</td>
+                        <td className="text-right px-2 py-1.5">{camTotals.totalDrs}</td>
+                        <td className={`text-right px-2 py-1.5 ${colorRate(camTotals.sqlRate)}`}>{fmtPct(camTotals.sqlRate, 1)}</td>
+                        <td className="text-right px-2 py-1.5">{camTotals.closedWon}</td>
+                        <td className={`text-right px-2 py-1.5 ${colorConvRate(camTotals.cohortRate)}`}>{fmtPct(camTotals.cohortRate, 1)}</td>
+                        <td className="text-right px-2 py-1.5">{camTotals.avgCycle !== null ? `${camTotals.avgCycle.toFixed(0)} days` : '—'}</td>
+                        <td className="text-right px-2 py-1.5">—</td>
+                        <td className="text-right px-2 py-1.5">—</td>
+                        <td className="text-right px-2 py-1.5">{camTotals.inPeriodWon}</td>
+                        <td className="text-right px-2 py-1.5">{fmtPct(camTotals.withdrawnRate, 0)}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -931,6 +1010,7 @@ export default function DrPipeline() {
               </>
             )}
           </section>
+
 
           {/* Section D: Funnel + Conversion timeline + Cohort */}
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
