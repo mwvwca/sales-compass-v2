@@ -535,6 +535,42 @@ export default function RepGoalSetup() {
             </select>
           </div>
 
+          {/* My Number — manager-level commit override */}
+          <div className="rounded-lg border-2 border-primary/60 bg-primary/5 p-4 space-y-2">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">My commit to leadership</p>
+                <p className="text-xs text-muted-foreground">{getMonthLabel(selectedMonth)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <input
+                  type="number"
+                  value={effectiveMgrDraft}
+                  onChange={e => { setMgrCommitDraftKey(selectedMonth); setMgrCommitDraft(e.target.value); }}
+                  placeholder="Enter your number"
+                  className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-base font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <Button onClick={handleSaveManagerCommit} size="sm" className="gap-1.5">
+                <Check size={14} /> Save
+              </Button>
+            </div>
+            <div className="flex items-center gap-4 text-xs flex-wrap">
+              <span className="text-muted-foreground">Rep rollup: <span className="font-mono text-foreground">{fmtMoney(rollup.commitTotal)}</span></span>
+              <span className={mgrGapColor}>
+                Gap: <span className="font-mono">{mgrSaved ? (mgrGap >= 0 ? '+' : '') + fmtMoney(mgrGap) : '—'}</span>
+              </span>
+              {managerCommit?.updatedAt && (
+                <span className="text-muted-foreground ml-auto">Last saved: {fmtTs(managerCommit.updatedAt)}</span>
+              )}
+            </div>
+          </div>
+
+
+
           {commitGridReps.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
               {reps.length === 0 ? 'Add reps above first.' : 'No active reps for this month.'}
