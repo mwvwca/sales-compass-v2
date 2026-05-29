@@ -41,6 +41,21 @@ function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus } 
   return { status: 'converted' };
 }
 
+/** Compute closedWonDate / cycleDays / inPeriodWon for a DR matched to a closed won opp. */
+function computeCycleFields(dr: { createdDate: string }, opp: Opportunity | undefined):
+  Pick<DealRegistration, 'closedWonDate' | 'cycleDays' | 'inPeriodWon'> {
+  if (!opp?.closeDate || !dr.createdDate) return {};
+  const closedWonDate = opp.closeDate;
+  const created = new Date(dr.createdDate).getTime();
+  const closed = new Date(closedWonDate).getTime();
+  if (!isFinite(created) || !isFinite(closed)) return { closedWonDate };
+  const raw = Math.floor((closed - created) / 86_400_000);
+  const cycleDays = raw < 0 ? 0 : raw;
+  let inPeriodWon = false;
+  try { inPeriodWon = getQuarter(dr.createdDate) === getQuarter(closedWonDate); } catch { /* noop */ }
+  return { closedWonDate, cycleDays, inPeriodWon };
+}
+
 /** Returns whether mutable fields differ between an existing record and incoming raw record. */
 function hasFieldChanges(existing: DealRegistration, incoming: RawDrRecord): boolean {
   const fields: Array<keyof RawDrRecord> = [
