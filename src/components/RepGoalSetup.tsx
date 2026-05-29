@@ -422,57 +422,30 @@ export default function RepGoalSetup() {
             </select>
           </div>
 
-          {reps.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">Add reps above first.</p>
+          {commitGridReps.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">
+              {reps.length === 0 ? 'Add reps above first.' : 'No active reps for this month.'}
+            </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {reps.map(rep => {
+              {commitGridReps.map(rep => {
                 const existing = getMonthlyRepCommit(rep.id, selectedMonth);
                 const draft = getDraft(rep.id, selectedMonth);
+                const inactive = !isRepActive(rep);
                 return (
-                  <div key={rep.id} className="rounded-md border border-border p-3 space-y-2 bg-card">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-foreground">{rep.name}</span>
-                      {existing && (
-                        <span className="text-xs text-positive font-mono flex items-center gap-1">
-                          <Check size={12} /> {fmtMoney(existing.commitAmount)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Your commit ($)</label>
-                      <input
-                        type="number"
-                        value={draft.amount}
-                        onChange={e => setDraft(rep.id, selectedMonth, { amount: e.target.value })}
-                        placeholder="0"
-                        className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">1:1 notes</label>
-                      <input
-                        type="text"
-                        value={draft.notes}
-                        onChange={e => setDraft(rep.id, selectedMonth, { notes: e.target.value })}
-                        placeholder="Optional context"
-                        className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      {existing ? (
-                        <span className="text-[10px] text-muted-foreground">Saved {fmtTs(existing.updatedAt)}</span>
-                      ) : <span />}
-                      <Button
-                        onClick={() => handleSaveRepCommit(rep.id, rep.name, selectedMonth)}
-                        size="sm"
-                        variant="outline"
-                        className="h-7 gap-1 text-xs"
-                      >
-                        <Check size={12} /> Save
-                      </Button>
-                    </div>
-                  </div>
+                  <RepCommitCard
+                    key={rep.id}
+                    repName={rep.name}
+                    inactive={inactive}
+                    existingAmount={existing?.commitAmount}
+                    existingUpdatedAt={existing?.updatedAt}
+                    draft={draft}
+                    onChangeAmount={(v) => setDraft(rep.id, selectedMonth, { amount: v })}
+                    onChangeNotes={(v) => setDraft(rep.id, selectedMonth, { notes: v })}
+                    onSave={() => handleSaveRepCommit(rep.id, rep.name, selectedMonth)}
+                    fmtMoney={fmtMoney}
+                    fmtTs={fmtTs}
+                  />
                 );
               })}
             </div>
