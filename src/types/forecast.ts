@@ -68,6 +68,56 @@ export interface MonthlyRepCommit {
   updatedAt: string;
 }
 
+export interface MonthlyManagerCommit {
+  id: string;
+  monthKey: string;
+  commitAmount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ForecastPromotion {
+  opportunityId: string;
+  monthKey: string;
+  promotedAt: string;
+}
+
+export interface ForecastDealLine {
+  opportunityId: string;
+  opportunityName: string;
+  repName: string;
+  amount: number;
+  closeDate: string;
+  stage: string;
+  classification: 'commit' | 'promoted_upside';
+  weekLabel: string;
+}
+
+export interface ForecastSnapshotOutcomeLine {
+  opportunityId: string;
+  status: 'won' | 'lost' | 'pushed' | 'pending' | 'removed';
+  closedDate?: string;
+  amount: number;
+  note?: string;
+}
+
+export interface ForecastSnapshot {
+  id: string;
+  monthKey: string;
+  snapshotLabel: string;
+  createdAt: string;
+  managerCommit: number;
+  repRollup: number;
+  commitTotal: number;
+  promotedUpsideTotal: number;
+  totalCall: number;
+  deals: ForecastDealLine[];
+  closedWonTotal?: number;
+  closedWonCount?: number;
+  reconciledAt?: string;
+  outcomes?: ForecastSnapshotOutcomeLine[];
+}
+
 
 export interface ImportRecord {
   id: string;
