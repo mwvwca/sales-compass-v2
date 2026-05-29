@@ -1,6 +1,7 @@
-import type { DealRegistration } from '@/types/forecast';
+import type { RawDrRecord } from '@/types/forecast';
 
-type RawDr = Omit<DealRegistration, 'importedAt' | 'batchId'>;
+type RawDr = RawDrRecord;
+
 
 const FIELD_MAP: Record<string, keyof RawDr> = {
   'opportunity id': 'opportunityId',
