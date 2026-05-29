@@ -623,6 +623,127 @@ export default function RepGoalSetup() {
               </div>
             </div>
           )}
+
+          {/* Forecast deal list */}
+          <Collapsible open={dealListOpen} onOpenChange={setDealListOpen} className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Forecast deal list</h3>
+                <p className="text-xs text-muted-foreground">Deals making up your commit. Promote upside deals you're willing to call.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={handleSnapshot}>
+                  <Camera size={14} /> Snapshot
+                </Button>
+                <CollapsibleTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    {dealListOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    {dealListOpen ? 'Hide' : 'Show'}
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </div>
+            <CollapsibleContent className="space-y-3">
+              {dealsByRepEntries(dealsByRep).length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No commit or upside deals for active reps in this month.</p>
+              ) : (
+                <div className="space-y-3">
+                  {dealsByRepEntries(dealsByRep).map(([repName, list]) => (
+                    <div key={repName} className="border border-border rounded-md overflow-hidden">
+                      <div className="bg-secondary/40 px-3 py-1.5 text-xs font-semibold">{repName}</div>
+                      {weeks.map(w => {
+                        const wkList = list.filter(d => d.weekLabel === w.label);
+                        if (wkList.length === 0) return null;
+                        return (
+                          <div key={w.label}>
+                            <div className="bg-muted/30 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">{w.label}</div>
+                            {wkList.map(d => (
+                              <div key={d.opp.id} className="flex items-center gap-2 px-3 py-1.5 text-xs border-t border-border/60">
+                                <span className={`h-2 w-2 rounded-full ${d.isCommit ? 'bg-positive' : d.promoted ? 'bg-amber-400' : 'bg-amber-500/60'}`} />
+                                {d.promoted && <Star size={12} className="text-amber-500 fill-amber-500" />}
+                                <span className="flex-1 truncate">{d.opp.name}</span>
+                                <span className="font-mono text-muted-foreground">{fmtMoney(d.opp.amount)}</span>
+                                <span className="text-muted-foreground w-20 text-right">{d.opp.closeDate?.slice(0, 10)}</span>
+                                <span className="text-muted-foreground w-24 truncate text-right">{d.opp.stage}</span>
+                                {d.isUpside && (
+                                  <button
+                                    onClick={() => handleTogglePromote(d.opp.id, d.promoted)}
+                                    className={`text-[10px] px-2 py-0.5 rounded border ${d.promoted ? 'border-amber-400 text-amber-500' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                                  >
+                                    {d.promoted ? '★ Demote' : 'Promote ★'}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="border border-border rounded-md p-3 bg-secondary/30 text-xs flex flex-wrap gap-4 items-center">
+                <span>Commit: <span className="font-mono text-commit">{fmtMoney(dealTotals.commit)}</span></span>
+                <span>·</span>
+                <span>Promoted Upside: <span className="font-mono text-amber-500">{fmtMoney(dealTotals.promoted)}</span></span>
+                <span>·</span>
+                <span>Total Call: <span className="font-mono font-semibold">{fmtMoney(dealTotals.total)}</span></span>
+                <span>·</span>
+                <span className={callVsMgr.color}>
+                  vs My Commit: <span className="font-mono">{mgrSaved ? fmtMoney(mgrAmount) : 'not set'}</span> {callVsMgr.icon}
+                </span>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Snapshot history */}
+          <Collapsible open={historyOpen} onOpenChange={setHistoryOpen} className="space-y-2 border-t border-border pt-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Snapshot history</h3>
+                <p className="text-xs text-muted-foreground">{monthSnapshots.length} snapshot{monthSnapshots.length === 1 ? '' : 's'} for {getMonthLabel(selectedMonth)}</p>
+              </div>
+              <CollapsibleTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  {historyOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  {historyOpen ? 'Hide' : 'Show'}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+              {monthSnapshots.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No snapshots yet. Click Snapshot above to capture one.</p>
+              ) : (
+                <div className="space-y-1">
+                  {monthSnapshots.map(s => (
+                    <div key={s.id} className="flex items-center gap-2 text-xs border border-border rounded-md px-3 py-2">
+                      <span className="flex-1">
+                        <span className="font-medium">{fmtTs(s.createdAt)}</span>
+                        <span className="text-muted-foreground"> · {fmtMoney(s.totalCall)} call · {s.deals.length} deals</span>
+                        {s.reconciledAt && <span className="text-positive"> · reconciled</span>}
+                      </span>
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => setViewingSnapshot(s)}>
+                        <Eye size={12} /> View
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { reconcileForecastSnapshot(s.id); toast({ title: 'Reconciled' }); }}>
+                        Reconcile
+                      </Button>
+                      <button
+                        onClick={() => { if (confirm('Delete this snapshot?')) deleteForecastSnapshot(s.id); }}
+                        className="text-muted-foreground hover:text-negative p-1"
+                        title="Delete snapshot"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
+
         </CollapsibleContent>
       </Collapsible>
 
