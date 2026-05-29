@@ -4,6 +4,7 @@ import type {
   Opportunity,
   DrStatus,
 } from '@/types/forecast';
+import { getQuarter } from '@/types/forecast';
 
 export interface DrBatchStats {
   newCount: number;
