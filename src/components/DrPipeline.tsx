@@ -196,6 +196,13 @@ export default function DrPipeline() {
   // Section F
   const [showPaddedOnly, setShowPaddedOnly] = useState(false);
 
+  // AE accountability: hide inactive reps by default
+  const [showInactiveReps, setShowInactiveReps] = useState(false);
+  const inactiveRepNameSet = useMemo(
+    () => new Set(reps.filter(r => r.isActive === false).map(r => r.name)),
+    [reps]
+  );
+
   const allCams = useMemo(() => {
     const set = new Set<string>();
     for (const d of dealRegistrations) set.add(d.channelAccountManager || '(none)');
