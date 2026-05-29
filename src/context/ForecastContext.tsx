@@ -147,7 +147,10 @@ interface ForecastContextValue extends ForecastState {
   setMonthlyRepCommit: (repId: string, repName: string, monthKey: string, amount: number, notes?: string) => void;
   getMonthlyRepCommit: (repId: string, monthKey: string) => MonthlyRepCommit | undefined;
   getMonthlyCommitsByMonth: (monthKey: string) => MonthlyRepCommit[];
-  importDrBatch: (records: DealRegistration[], batch: DrBatch) => void;
+  importDrBatch: (
+    incoming: RawDrRecord[],
+    batchMeta: { fileName: string; asOfDate: string; importedAt: string },
+  ) => void;
   clearDrData: () => void;
   restoreFromBackup: (data: {
     reps: Rep[];
