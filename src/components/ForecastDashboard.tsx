@@ -268,7 +268,12 @@ export default function ForecastDashboard() {
         <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
           className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
           <option value="all">All Reps</option>
-          {repNames.map(n => <option key={n} value={n}>{n}</option>)}
+          {activeRepNames.map(n => <option key={n} value={n}>{n}</option>)}
+          {inactiveRepNames.length > 0 && (
+            <optgroup label="Inactive">
+              {inactiveRepNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </optgroup>
+          )}
         </select>
         <div className="flex items-center gap-3 ml-auto">
           <ExecutiveReport quarter={anchorQuarter} selectedRep={selectedRep} />
