@@ -92,6 +92,56 @@ const monthlyRepCommitSchema = z.object({
   updatedAt: z.string(),
 });
 
+const monthlyManagerCommitSchema = z.object({
+  id: z.string(),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  commitAmount: z.number().finite().min(0),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const forecastPromotionSchema = z.object({
+  opportunityId: z.string(),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  promotedAt: z.string(),
+});
+
+const forecastDealLineSchema = z.object({
+  opportunityId: z.string(),
+  opportunityName: z.string().max(500),
+  repName: z.string().max(200),
+  amount: z.number().finite().min(0),
+  closeDate: z.string(),
+  stage: z.string().max(200),
+  classification: z.enum(['commit', 'promoted_upside']),
+  weekLabel: z.string().max(40),
+});
+
+const forecastSnapshotOutcomeSchema = z.object({
+  opportunityId: z.string(),
+  status: z.enum(['won', 'lost', 'pushed', 'pending', 'removed']),
+  closedDate: z.string().optional(),
+  amount: z.number().finite().min(0),
+  note: z.string().max(500).optional(),
+});
+
+const forecastSnapshotSchema = z.object({
+  id: z.string(),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  snapshotLabel: z.string().max(200),
+  createdAt: z.string(),
+  managerCommit: z.number().finite().min(0),
+  repRollup: z.number().finite().min(0),
+  commitTotal: z.number().finite().min(0),
+  promotedUpsideTotal: z.number().finite().min(0),
+  totalCall: z.number().finite().min(0),
+  deals: z.array(forecastDealLineSchema).max(5000),
+  closedWonTotal: z.number().finite().min(0).optional(),
+  closedWonCount: z.number().finite().min(0).optional(),
+  reconciledAt: z.string().optional(),
+  outcomes: z.array(forecastSnapshotOutcomeSchema).optional(),
+});
+
 const drStageHistorySchema = z.object({
   stage: z.string().max(200),
   probability: z.number().finite().min(0).max(1),
