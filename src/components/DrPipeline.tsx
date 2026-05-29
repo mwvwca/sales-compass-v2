@@ -1119,8 +1119,11 @@ export default function DrPipeline() {
                       <th className="text-right py-1 font-medium">SQL'd</th>
                       <th className="text-right py-1 font-medium">In Pipe</th>
                       <th className="text-right py-1 font-medium">Won</th>
+                      <th className="text-right py-1 font-medium">Cohort Rate</th>
+                      <th className="text-right py-1 font-medium">Avg Cycle</th>
                       <th className="text-right py-1 font-medium">Active</th>
                       <th className="text-right py-1 font-medium">Rejected</th>
+                      <th className="text-right py-1 font-medium">Withdrawn</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1131,12 +1134,16 @@ export default function DrPipeline() {
                         <td className="text-right py-1">{r.sql}</td>
                         <td className="text-right py-1">{r.inPipe}</td>
                         <td className="text-right py-1 text-emerald-700 dark:text-emerald-400 font-medium">{r.won}</td>
+                        <td className={`text-right py-1 font-medium ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 0)}</td>
+                        <td className="text-right py-1">{r.avgCycle !== null ? `${r.avgCycle.toFixed(0)}d` : '—'}</td>
                         <td className="text-right py-1">{r.active}</td>
                         <td className="text-right py-1 text-muted-foreground">{r.rejected}</td>
+                        <td className="text-right py-1 text-muted-foreground">{r.withdrawn}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                <p className="text-[10px] text-muted-foreground mt-1">Cohort rate for recent months will increase as deals in progress close. Avg Cycle reflects closed deals only.</p>
               </div>
             </div>
           </section>
