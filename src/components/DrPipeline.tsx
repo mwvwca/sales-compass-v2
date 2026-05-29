@@ -531,7 +531,7 @@ export default function DrPipeline() {
   const exportReport = () => {
     const wb = XLSX.utils.book_new();
     const aeSheet = XLSX.utils.json_to_sheet(aeRows.map(r => ({
-      Rep: r.rep, 'Assigned DRs': r.assigned, "SQL'd": r.sqls, 'SQL Rate': fmtPct(r.sqlRate, 1),
+      Rep: r.rep, 'Assigned DRs': r.assigned, Rejected: r.rejected, "SQL'd": r.sqls, 'SQL Rate': fmtPct(r.sqlRate, 1),
       Stale: r.stale, 'No Activity': r.noActivity, 'Avg Age': r.avgAge.toFixed(1),
       Converted: r.converted, 'Closed Won': r.closedWon, 'Conv. Rate': fmtPct(r.convRate, 1),
     })));
@@ -539,7 +539,7 @@ export default function DrPipeline() {
 
     const camSheet = XLSX.utils.json_to_sheet(camRows.map(r => ({
       CAM: r.cam, 'DRs Registered': r.registered, 'SQL Rate': fmtPct(r.sqlRate, 1),
-      'Padded Accts': r.paddedAccts, Rejected: r.rejected,
+      'Padded Accts': r.paddedAccts, Withdrawn: r.withdrawn, 'Withdrawn Rate': fmtPct(r.withdrawnRate, 1),
       'Avg Age at SQL': r.avgAgeAtSql.toFixed(1), 'Closed Won': r.closedWon, 'Win Rate': fmtPct(r.winRate, 1),
     })));
     XLSX.utils.book_append_sheet(wb, camSheet, 'CAM Summary');
