@@ -346,8 +346,24 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
           const resolvedClassification = resolveImportedClassification(existing.classification, o.classification);
 
+          // Full field replacement: every field from incoming Salesforce export overwrites
+          // the stored record. Only app-generated fields not present in the export are preserved.
           return {
             ...o,
+            // Always-overwrite Salesforce fields (explicit for clarity and safety)
+            closeDate: o.closeDate,
+            stage: o.stage,
+            amount: o.amount,
+            accountName: o.accountName,
+            productName: o.productName,
+            channelAccountManager: o.channelAccountManager,
+            probability: o.probability,
+            name: o.name,
+            repName: o.repName,
+            lostDate: o.lostDate ?? existing.lostDate,
+            lostReason: o.lostReason ?? existing.lostReason,
+            // Preserved app-generated fields not present in Salesforce export
+            importDate: existing.importDate,
             notes: existing.notes,
             commissionMrr: existing.commissionMrr,
             commissionTermYears: existing.commissionTermYears,
