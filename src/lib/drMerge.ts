@@ -170,10 +170,12 @@ export function mergeDrBatch(
     if (pipelineClass) {
       const isFirstConversion = !prev.convertedAt;
       if (isFirstConversion) convertedCount++;
+      const cycle = pipelineClass.status === 'closed_won' ? computeCycleFields(prev, opp) : {};
       merged.push({
         ...prev,
         status: pipelineClass.status,
         convertedAt: prev.convertedAt || importedAt,
+        ...cycle,
       });
     } else {
       const isNewlyWithdrawn = prev.status !== 'withdrawn';
