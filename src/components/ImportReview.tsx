@@ -76,7 +76,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
   });
 
   const buildRemovedItems = (allUnmatched: boolean): ReviewItem[] => opportunities
-    .filter(o => o.classification !== 'lost' && o.classification !== 'omitted' && !incomingIds.has(o.id) && (allUnmatched || incomingRepNames.has(normalizeRepName(o.repName))))
+    .filter(o => o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'rejected' && !incomingIds.has(o.id) && (allUnmatched || incomingRepNames.has(normalizeRepName(o.repName))))
     .map(o => ({
       opportunity: o,
       existing: o,
