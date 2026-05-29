@@ -246,9 +246,10 @@ export default function DrPipeline() {
 
   // ---------- Section B: AE Accountability ----------
   type AeRow = {
-    rep: string; assigned: number; sqls: number; sqlRate: number;
+    rep: string; assigned: number; rejected: number; sqls: number; sqlRate: number;
     stale: number; noActivity: number; avgAge: number;
     converted: number; closedWon: number; convRate: number;
+    rejectedByCam: Map<string, { count: number; products: string[] }>;
   };
 
   const aeRows: AeRow[] = useMemo(() => {
@@ -261,15 +262,27 @@ export default function DrPipeline() {
     }
     const rows: AeRow[] = Array.from(byRep.entries()).map(([rep, deals]) => {
       const assigned = deals.length;
-      const sqls = deals.filter(d => d.isSql).length;
-      const sqlRate = assigned ? sqls / assigned : 0;
-      const stale = deals.filter(d => d.status === 'stale').length;
-      const noActivity = deals.filter(d => !d.lastActivity && (d.status === 'active' || d.status === 'stale')).length;
-      const avgAge = assigned ? deals.reduce((s, d) => s + d.ageDays, 0) / assigned : 0;
-      const converted = deals.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
-      const closedWon = deals.filter(d => d.status === 'closed_won').length;
-      const convRate = assigned ? closedWon / assigned : 0;
-      return { rep, assigned, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate };
+      const rejected = deals.filter(d => d.status === 'rejected').length;
+      const nonRejected = deals.filter(d => d.status !== 'rejected');
+      const denom = nonRejected.length;
+      const sqls = nonRejected.filter(d => d.isSql).length;
+      const sqlRate = denom ? sqls / denom : 0;
+      const stale = nonRejected.filter(d => d.status === 'stale').length;
+      const noActivity = nonRejected.filter(d => !d.lastActivity && (d.status === 'active' || d.status === 'stale')).length;
+      const avgAge = denom ? nonRejected.reduce((s, d) => s + d.ageDays, 0) / denom : 0;
+      const converted = nonRejected.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
+      const closedWon = nonRejected.filter(d => d.status === 'closed_won').length;
+      const convRate = denom ? closedWon / denom : 0;
+      const rejectedByCam = new Map<string, { count: number; products: string[] }>();
+      for (const d of deals) {
+        if (d.status !== 'rejected') continue;
+        const cam = d.channelAccountManager || '(none)';
+        const e = rejectedByCam.get(cam) || { count: 0, products: [] };
+        e.count++;
+        if (d.product && !e.products.includes(d.product)) e.products.push(d.product);
+        rejectedByCam.set(cam, e);
+      }
+      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, rejectedByCam };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
     if (!showInactiveReps) {
