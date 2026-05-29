@@ -93,6 +93,7 @@ export type DrStatus =
   | 'stale'
   | 'sql'
   | 'rejected'
+  | 'withdrawn'
   | 'converted'
   | 'closed_won'
   | 'closed_lost'
