@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, RotateCcw } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
