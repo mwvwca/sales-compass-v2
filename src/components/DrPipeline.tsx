@@ -810,7 +810,7 @@ export default function DrPipeline() {
                           <td className="text-right px-2 py-1.5">{r.registered}</td>
                           <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
                           <td className={`text-right px-2 py-1.5 ${r.paddedAccts > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.paddedAccts}</td>
-                          <td className={`text-right px-2 py-1.5 ${r.rejected > 2 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.rejected}</td>
+                          <td className={`text-right px-2 py-1.5 ${r.withdrawnRate > 0.2 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`} title={r.withdrawn > 0 ? `${fmtPct(r.withdrawnRate, 0)} of ${r.cam}'s DRs` : undefined}>{r.withdrawn}</td>
                           <td className="text-right px-2 py-1.5">{r.avgAgeAtSql ? `${r.avgAgeAtSql.toFixed(0)}d` : '—'}</td>
                           <td className="text-right px-2 py-1.5">{r.closedWon}</td>
                           <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.winRate)}`}>{fmtPct(r.winRate, 1)}</td>
