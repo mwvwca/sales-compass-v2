@@ -797,6 +797,9 @@ export default function RepGoalSetup() {
       </Collapsible>
 
       <CommissionReconciliation />
+      {viewingSnapshot && (
+        <ForecastSnapshotView snapshot={forecastSnapshots.find(s => s.id === viewingSnapshot.id) ?? viewingSnapshot} onClose={() => setViewingSnapshot(null)} />
+      )}
     </div>
   );
 }
