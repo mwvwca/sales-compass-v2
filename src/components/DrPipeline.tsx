@@ -730,7 +730,8 @@ export default function DrPipeline() {
                 <thead className="bg-secondary/40 text-muted-foreground">
                   <tr>
                     <th className="text-left px-2 py-1.5 font-medium">Rep</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Assigned DRs</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Total DRs including rejected">Assigned DRs</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="DRs this rep explicitly rejected in Salesforce">Rejected</th>
                     <th className="text-right px-2 py-1.5 font-medium">SQL'd</th>
                     <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
                     <th className="text-right px-2 py-1.5 font-medium">Stale</th>
@@ -743,24 +744,45 @@ export default function DrPipeline() {
                 </thead>
                 <tbody>
                   {aeRows.map(r => (
-                    <tr key={r.rep}
-                      onClick={() => setExpandedRep(expandedRep === r.rep ? null : r.rep)}
-                      className={`border-t border-border cursor-pointer hover:bg-muted/40 ${expandedRep === r.rep ? 'bg-muted/60' : ''}`}>
-                      <td className="px-2 py-1.5 font-medium">{r.rep}</td>
-                      <td className="text-right px-2 py-1.5">{r.assigned}</td>
-                      <td className="text-right px-2 py-1.5">{r.sqls}</td>
-                      <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
-                      <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
-                      <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
-                      <td className={`text-right px-2 py-1.5 ${colorAge(r.avgAge)}`}>{r.avgAge.toFixed(0)}d</td>
-                      <td className="text-right px-2 py-1.5">{r.converted}</td>
-                      <td className="text-right px-2 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{r.closedWon}</td>
-                      <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.convRate)}`}>{fmtPct(r.convRate, 1)}</td>
-                    </tr>
+                    <Fragment key={r.rep}>
+                      <tr
+                        onClick={() => setExpandedRep(expandedRep === r.rep ? null : r.rep)}
+                        className={`border-t border-border cursor-pointer hover:bg-muted/40 ${expandedRep === r.rep ? 'bg-muted/60' : ''}`}>
+                        <td className="px-2 py-1.5 font-medium">{r.rep}</td>
+                        <td className="text-right px-2 py-1.5" title={r.rejected > 0 ? `${r.rejected} of ${r.assigned} rejected` : undefined}>{r.assigned}{r.rejected > 0 && <span className="text-muted-foreground text-[10px]"> ({r.rejected} rej)</span>}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.rejected > 15 ? 'text-red-600 dark:text-red-400 font-medium' : r.rejected > 5 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.rejected}</td>
+                        <td className="text-right px-2 py-1.5">{r.sqls}</td>
+                        <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
+                        <td className={`text-right px-2 py-1.5 ${colorAge(r.avgAge)}`}>{r.avgAge.toFixed(0)}d</td>
+                        <td className="text-right px-2 py-1.5">{r.converted}</td>
+                        <td className="text-right px-2 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{r.closedWon}</td>
+                        <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.convRate)}`}>{fmtPct(r.convRate, 1)}</td>
+                      </tr>
+                      {expandedRep === r.rep && r.rejected > 0 && (
+                        <tr className="bg-muted/20 border-t border-border">
+                          <td colSpan={11} className="px-3 py-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rejected DRs by CAM (coaching context)</p>
+                            <table className="text-[11px]">
+                              <thead className="text-muted-foreground">
+                                <tr><th className="text-left pr-4 py-0.5 font-medium">CAM</th><th className="text-right pr-4 py-0.5 font-medium">Rejected DRs</th><th className="text-left py-0.5 font-medium">Products</th></tr>
+                              </thead>
+                              <tbody>
+                                {Array.from(r.rejectedByCam.entries()).sort((a,b) => b[1].count - a[1].count).map(([cam, info]) => (
+                                  <tr key={cam}><td className="pr-4 py-0.5">{cam}</td><td className="text-right pr-4 py-0.5">{info.count}</td><td className="py-0.5 text-muted-foreground">{info.products.join(', ') || '—'}</td></tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                   <tr className="border-t-2 border-border font-medium bg-secondary/30">
                     <td className="px-2 py-1.5">Team</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.assigned}</td>
+                    <td className="text-right px-2 py-1.5">{aeTotals.rejected}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.sqls}</td>
                     <td className={`text-right px-2 py-1.5 ${colorRate(aeTotals.sqlRate)}`}>{fmtPct(aeTotals.sqlRate, 1)}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
