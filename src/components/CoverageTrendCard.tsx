@@ -23,7 +23,7 @@ export default function CoverageTrendCard({
   selectedRep: string | 'all';
 }) {
   const history = useMemo(() => {
-    const closedOrInactive = new Set(['closed_won', 'lost', 'omitted']);
+    const closedOrInactive = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
     const inQuarter = snapshots.filter(s => {
       if (selectedRep !== 'all' && s.repName !== selectedRep) return false;
       if (!s.closeDate) return false;

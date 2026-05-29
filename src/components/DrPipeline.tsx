@@ -19,6 +19,7 @@ const STATUS_CHIPS: { key: DrStatus; label: string }[] = [
   { key: 'closed_won', label: 'Closed Won' },
   { key: 'closed_lost', label: 'Closed Lost' },
   { key: 'rejected', label: 'Rejected' },
+  { key: 'withdrawn', label: 'Withdrawn' },
 ];
 const DEFAULT_STATUSES: DrStatus[] = ['active', 'sql', 'stale', 'padded', 'converted', 'closed_won', 'closed_lost'];
 
@@ -90,7 +91,8 @@ function statusBadgeCls(s: DrStatus): string {
     case 'converted': return 'bg-teal-500/15 text-teal-700 dark:text-teal-400';
     case 'closed_won': return 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold';
     case 'closed_lost': return 'bg-red-500/10 text-red-700/70 dark:text-red-400/70';
-    case 'rejected': return 'bg-muted text-muted-foreground';
+    case 'rejected': return 'bg-foreground/15 text-foreground/80';
+    case 'withdrawn': return 'bg-muted text-muted-foreground';
   }
 }
 function statusLabel(s: DrStatus): string {
@@ -99,7 +101,7 @@ function statusLabel(s: DrStatus): string {
 
 // Sort priority for default sort
 const STATUS_SORT_PRIORITY: Record<DrStatus, number> = {
-  stale: 0, padded: 1, active: 2, sql: 3, converted: 4, closed_won: 5, closed_lost: 6, rejected: 7,
+  stale: 0, padded: 1, active: 2, sql: 3, converted: 4, closed_won: 5, closed_lost: 6, rejected: 7, withdrawn: 8,
 };
 
 // ---------- Upload zone ----------
@@ -170,7 +172,7 @@ export default function DrPipeline() {
   const [showUploader, setShowUploader] = useState(false);
   const [pending, setPending] = useState<{
     records: RawDrRecord[]; asOfDate: string; fileName: string; errors: string[];
-    preview: { newCount: number; updatedCount: number; rejectedCount: number; convertedCount: number };
+    preview: { newCount: number; updatedCount: number; rejectedCount: number; withdrawnCount: number; convertedCount: number };
   } | null>(null);
 
   // Global filters
@@ -244,9 +246,10 @@ export default function DrPipeline() {
 
   // ---------- Section B: AE Accountability ----------
   type AeRow = {
-    rep: string; assigned: number; sqls: number; sqlRate: number;
+    rep: string; assigned: number; rejected: number; sqls: number; sqlRate: number;
     stale: number; noActivity: number; avgAge: number;
     converted: number; closedWon: number; convRate: number;
+    rejectedByCam: Map<string, { count: number; products: string[] }>;
   };
 
   const aeRows: AeRow[] = useMemo(() => {
@@ -259,15 +262,27 @@ export default function DrPipeline() {
     }
     const rows: AeRow[] = Array.from(byRep.entries()).map(([rep, deals]) => {
       const assigned = deals.length;
-      const sqls = deals.filter(d => d.isSql).length;
-      const sqlRate = assigned ? sqls / assigned : 0;
-      const stale = deals.filter(d => d.status === 'stale').length;
-      const noActivity = deals.filter(d => !d.lastActivity && (d.status === 'active' || d.status === 'stale')).length;
-      const avgAge = assigned ? deals.reduce((s, d) => s + d.ageDays, 0) / assigned : 0;
-      const converted = deals.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
-      const closedWon = deals.filter(d => d.status === 'closed_won').length;
-      const convRate = assigned ? closedWon / assigned : 0;
-      return { rep, assigned, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate };
+      const rejected = deals.filter(d => d.status === 'rejected').length;
+      const nonRejected = deals.filter(d => d.status !== 'rejected');
+      const denom = nonRejected.length;
+      const sqls = nonRejected.filter(d => d.isSql).length;
+      const sqlRate = denom ? sqls / denom : 0;
+      const stale = nonRejected.filter(d => d.status === 'stale').length;
+      const noActivity = nonRejected.filter(d => !d.lastActivity && (d.status === 'active' || d.status === 'stale')).length;
+      const avgAge = denom ? nonRejected.reduce((s, d) => s + d.ageDays, 0) / denom : 0;
+      const converted = nonRejected.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
+      const closedWon = nonRejected.filter(d => d.status === 'closed_won').length;
+      const convRate = denom ? closedWon / denom : 0;
+      const rejectedByCam = new Map<string, { count: number; products: string[] }>();
+      for (const d of deals) {
+        if (d.status !== 'rejected') continue;
+        const cam = d.channelAccountManager || '(none)';
+        const e = rejectedByCam.get(cam) || { count: 0, products: [] };
+        e.count++;
+        if (d.product && !e.products.includes(d.product)) e.products.push(d.product);
+        rejectedByCam.set(cam, e);
+      }
+      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, rejectedByCam };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
     if (!showInactiveReps) {
@@ -287,16 +302,20 @@ export default function DrPipeline() {
 
   const aeTotals = useMemo(() => {
     const t = aeRows.reduce((acc, r) => {
-      acc.assigned += r.assigned; acc.sqls += r.sqls; acc.stale += r.stale;
+      const nonRej = r.assigned - r.rejected;
+      acc.assigned += r.assigned;
+      acc.rejected += r.rejected;
+      acc.nonRejected += nonRej;
+      acc.sqls += r.sqls; acc.stale += r.stale;
       acc.noActivity += r.noActivity; acc.converted += r.converted; acc.closedWon += r.closedWon;
-      acc.ageSum += r.avgAge * r.assigned;
+      acc.ageSum += r.avgAge * nonRej;
       return acc;
-    }, { assigned: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0 });
+    }, { assigned: 0, rejected: 0, nonRejected: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0 });
     return {
       ...t,
-      sqlRate: t.assigned ? t.sqls / t.assigned : 0,
-      avgAge: t.assigned ? t.ageSum / t.assigned : 0,
-      convRate: t.assigned ? t.closedWon / t.assigned : 0,
+      sqlRate: t.nonRejected ? t.sqls / t.nonRejected : 0,
+      avgAge: t.nonRejected ? t.ageSum / t.nonRejected : 0,
+      convRate: t.nonRejected ? t.closedWon / t.nonRejected : 0,
     };
   }, [aeRows]);
 
@@ -318,7 +337,8 @@ export default function DrPipeline() {
   // ---------- Section C: CAM Lead Quality ----------
   type CamRow = {
     cam: string; registered: number; sqls: number; sqlRate: number;
-    paddedAccts: number; rejected: number; avgAgeAtSql: number; closedWon: number; winRate: number;
+    paddedAccts: number; withdrawn: number; withdrawnRate: number;
+    avgAgeAtSql: number; closedWon: number; winRate: number;
   };
   const camRows: CamRow[] = useMemo(() => {
     const byCam = new Map<string, DealRegistration[]>();
@@ -332,9 +352,10 @@ export default function DrPipeline() {
       const registered = deals.length;
       const sqls = deals.filter(d => d.isSql).length;
       const sqlRate = registered ? sqls / registered : 0;
-      // padded accts: account with 2+ DRs all pre-SQL with no lastActivity
+      // padded accts: account with 2+ DRs all pre-SQL with no lastActivity (exclude rejected)
       const byAcct = new Map<string, DealRegistration[]>();
       for (const d of deals) {
+        if (d.status === 'rejected') continue;
         const a = (d.accountName || '(none)').toLowerCase();
         const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
       }
@@ -342,20 +363,21 @@ export default function DrPipeline() {
       for (const arr of byAcct.values()) {
         if (arr.length >= 2 && arr.every(d => !d.isSql && !d.lastActivity)) paddedAccts++;
       }
-      const rejected = deals.filter(d => d.status === 'rejected').length;
+      const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
+      const withdrawnRate = registered ? withdrawn / registered : 0;
       const sqlDeals = deals.filter(d => d.sqlDate);
       const avgAgeAtSql = sqlDeals.length
         ? sqlDeals.reduce((s, d) => s + daysBetween(d.createdDate, d.sqlDate!), 0) / sqlDeals.length
         : 0;
       const closedWon = deals.filter(d => d.status === 'closed_won').length;
       const winRate = registered ? closedWon / registered : 0;
-      return { cam, registered, sqls, sqlRate, paddedAccts, rejected, avgAgeAtSql, closedWon, winRate };
+      return { cam, registered, sqls, sqlRate, paddedAccts, withdrawn, withdrawnRate, avgAgeAtSql, closedWon, winRate };
     }).sort((a, b) => b.registered - a.registered);
   }, [scopeNoStatus]);
 
   const camInsights = useMemo(() => {
     const out: string[] = [];
-    for (const r of camRows) if (r.rejected > 2) out.push(`⚠ ${r.cam} has ${r.rejected} rejected DRs — these registrations were withdrawn or disqualified.`);
+    for (const r of camRows) if (r.withdrawnRate > 0.2 && r.withdrawn > 2) out.push(`⚠ ${r.cam} has ${r.withdrawn} withdrawn DRs (${fmtPct(r.withdrawnRate, 0)}) — registrations disappearing without conversion.`);
     return out;
   }, [camRows]);
 
@@ -465,10 +487,11 @@ export default function DrPipeline() {
     return rows;
   }, [filtered, sortKey, sortDir, expandedRep]);
 
-  // ---------- Section F: Account Padding ----------
+  // ---------- Section F: Account Padding (excludes rejected DRs) ----------
   const accountRows = useMemo(() => {
     const byAcct = new Map<string, DealRegistration[]>();
     for (const d of filtered) {
+      if (d.status === 'rejected') continue;
       const a = d.accountName || '(none)';
       const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
     }
@@ -509,7 +532,7 @@ export default function DrPipeline() {
   const exportReport = () => {
     const wb = XLSX.utils.book_new();
     const aeSheet = XLSX.utils.json_to_sheet(aeRows.map(r => ({
-      Rep: r.rep, 'Assigned DRs': r.assigned, "SQL'd": r.sqls, 'SQL Rate': fmtPct(r.sqlRate, 1),
+      Rep: r.rep, 'Assigned DRs': r.assigned, Rejected: r.rejected, "SQL'd": r.sqls, 'SQL Rate': fmtPct(r.sqlRate, 1),
       Stale: r.stale, 'No Activity': r.noActivity, 'Avg Age': r.avgAge.toFixed(1),
       Converted: r.converted, 'Closed Won': r.closedWon, 'Conv. Rate': fmtPct(r.convRate, 1),
     })));
@@ -517,7 +540,7 @@ export default function DrPipeline() {
 
     const camSheet = XLSX.utils.json_to_sheet(camRows.map(r => ({
       CAM: r.cam, 'DRs Registered': r.registered, 'SQL Rate': fmtPct(r.sqlRate, 1),
-      'Padded Accts': r.paddedAccts, Rejected: r.rejected,
+      'Padded Accts': r.paddedAccts, Withdrawn: r.withdrawn, 'Withdrawn Rate': fmtPct(r.withdrawnRate, 1),
       'Avg Age at SQL': r.avgAgeAtSql.toFixed(1), 'Closed Won': r.closedWon, 'Win Rate': fmtPct(r.winRate, 1),
     })));
     XLSX.utils.book_append_sheet(wb, camSheet, 'CAM Summary');
@@ -707,7 +730,8 @@ export default function DrPipeline() {
                 <thead className="bg-secondary/40 text-muted-foreground">
                   <tr>
                     <th className="text-left px-2 py-1.5 font-medium">Rep</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Assigned DRs</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Total DRs including rejected">Assigned DRs</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="DRs this rep explicitly rejected in Salesforce">Rejected</th>
                     <th className="text-right px-2 py-1.5 font-medium">SQL'd</th>
                     <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
                     <th className="text-right px-2 py-1.5 font-medium">Stale</th>
@@ -720,24 +744,45 @@ export default function DrPipeline() {
                 </thead>
                 <tbody>
                   {aeRows.map(r => (
-                    <tr key={r.rep}
-                      onClick={() => setExpandedRep(expandedRep === r.rep ? null : r.rep)}
-                      className={`border-t border-border cursor-pointer hover:bg-muted/40 ${expandedRep === r.rep ? 'bg-muted/60' : ''}`}>
-                      <td className="px-2 py-1.5 font-medium">{r.rep}</td>
-                      <td className="text-right px-2 py-1.5">{r.assigned}</td>
-                      <td className="text-right px-2 py-1.5">{r.sqls}</td>
-                      <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
-                      <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
-                      <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
-                      <td className={`text-right px-2 py-1.5 ${colorAge(r.avgAge)}`}>{r.avgAge.toFixed(0)}d</td>
-                      <td className="text-right px-2 py-1.5">{r.converted}</td>
-                      <td className="text-right px-2 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{r.closedWon}</td>
-                      <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.convRate)}`}>{fmtPct(r.convRate, 1)}</td>
-                    </tr>
+                    <Fragment key={r.rep}>
+                      <tr
+                        onClick={() => setExpandedRep(expandedRep === r.rep ? null : r.rep)}
+                        className={`border-t border-border cursor-pointer hover:bg-muted/40 ${expandedRep === r.rep ? 'bg-muted/60' : ''}`}>
+                        <td className="px-2 py-1.5 font-medium">{r.rep}</td>
+                        <td className="text-right px-2 py-1.5" title={r.rejected > 0 ? `${r.rejected} of ${r.assigned} rejected` : undefined}>{r.assigned}{r.rejected > 0 && <span className="text-muted-foreground text-[10px]"> ({r.rejected} rej)</span>}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.rejected > 15 ? 'text-red-600 dark:text-red-400 font-medium' : r.rejected > 5 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.rejected}</td>
+                        <td className="text-right px-2 py-1.5">{r.sqls}</td>
+                        <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
+                        <td className={`text-right px-2 py-1.5 ${colorAge(r.avgAge)}`}>{r.avgAge.toFixed(0)}d</td>
+                        <td className="text-right px-2 py-1.5">{r.converted}</td>
+                        <td className="text-right px-2 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{r.closedWon}</td>
+                        <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.convRate)}`}>{fmtPct(r.convRate, 1)}</td>
+                      </tr>
+                      {expandedRep === r.rep && r.rejected > 0 && (
+                        <tr className="bg-muted/20 border-t border-border">
+                          <td colSpan={11} className="px-3 py-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rejected DRs by CAM (coaching context)</p>
+                            <table className="text-[11px]">
+                              <thead className="text-muted-foreground">
+                                <tr><th className="text-left pr-4 py-0.5 font-medium">CAM</th><th className="text-right pr-4 py-0.5 font-medium">Rejected DRs</th><th className="text-left py-0.5 font-medium">Products</th></tr>
+                              </thead>
+                              <tbody>
+                                {Array.from(r.rejectedByCam.entries()).sort((a,b) => b[1].count - a[1].count).map(([cam, info]) => (
+                                  <tr key={cam}><td className="pr-4 py-0.5">{cam}</td><td className="text-right pr-4 py-0.5">{info.count}</td><td className="py-0.5 text-muted-foreground">{info.products.join(', ') || '—'}</td></tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                   <tr className="border-t-2 border-border font-medium bg-secondary/30">
                     <td className="px-2 py-1.5">Team</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.assigned}</td>
+                    <td className="text-right px-2 py-1.5">{aeTotals.rejected}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.sqls}</td>
                     <td className={`text-right px-2 py-1.5 ${colorRate(aeTotals.sqlRate)}`}>{fmtPct(aeTotals.sqlRate, 1)}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
@@ -775,7 +820,7 @@ export default function DrPipeline() {
                         <th className="text-right px-2 py-1.5 font-medium">DRs Registered</th>
                         <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
                         <th className="text-right px-2 py-1.5 font-medium">Padded Accts</th>
-                        <th className="text-right px-2 py-1.5 font-medium">Rejected</th>
+                        <th className="text-right px-2 py-1.5 font-medium" title="DRs that disappeared without explicit AE rejection or pipeline conversion">Withdrawn</th>
                         <th className="text-right px-2 py-1.5 font-medium">Avg Age at SQL</th>
                         <th className="text-right px-2 py-1.5 font-medium">Closed Won</th>
                         <th className="text-right px-2 py-1.5 font-medium">Win Rate</th>
@@ -788,7 +833,7 @@ export default function DrPipeline() {
                           <td className="text-right px-2 py-1.5">{r.registered}</td>
                           <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
                           <td className={`text-right px-2 py-1.5 ${r.paddedAccts > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.paddedAccts}</td>
-                          <td className={`text-right px-2 py-1.5 ${r.rejected > 2 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.rejected}</td>
+                          <td className={`text-right px-2 py-1.5 ${r.withdrawnRate > 0.2 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`} title={r.withdrawn > 0 ? `${fmtPct(r.withdrawnRate, 0)} of ${r.cam}'s DRs` : undefined}>{r.withdrawn}</td>
                           <td className="text-right px-2 py-1.5">{r.avgAgeAtSql ? `${r.avgAgeAtSql.toFixed(0)}d` : '—'}</td>
                           <td className="text-right px-2 py-1.5">{r.closedWon}</td>
                           <td className={`text-right px-2 py-1.5 font-medium ${colorConvRate(r.winRate)}`}>{fmtPct(r.winRate, 1)}</td>

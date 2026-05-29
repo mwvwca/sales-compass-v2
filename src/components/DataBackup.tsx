@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { downloadBackupNow } from '@/lib/backupUtils';
 
-const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted']);
+const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted', 'rejected']);
 
 const repSchema = z.object({
   id: z.string(),
@@ -99,7 +99,7 @@ const drStageHistorySchema = z.object({
   batchId: z.string(),
 });
 
-const drStatusEnum = z.enum(['active', 'stale', 'sql', 'rejected', 'converted', 'closed_won', 'closed_lost', 'padded']);
+const drStatusEnum = z.enum(['active', 'stale', 'sql', 'rejected', 'withdrawn', 'converted', 'closed_won', 'closed_lost', 'padded']);
 
 const dealRegistrationSchema = z.object({
   opportunityId: z.string(),

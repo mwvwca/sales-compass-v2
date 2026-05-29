@@ -3,33 +3,41 @@ import type {
   RawDrRecord,
   Opportunity,
   DrStatus,
-  DrStageHistoryEntry,
 } from '@/types/forecast';
 
 export interface DrBatchStats {
   newCount: number;
   updatedCount: number;
   rejectedCount: number;
+  withdrawnCount: number;
   convertedCount: number;
 }
 
 const PRE_SQL_PROB = 0.25;
 
-function isStaleFor(d: { stage: string; probability: number; ageDays: number; lastActivity?: string }): boolean {
-  const stage = (d.stage || '').toLowerCase();
-  const age = d.ageDays;
-  if (stage.includes('unqualified') && age > 21) return true;
-  if (d.probability < 0.1 && age > 30) return true;
-  if (d.probability >= PRE_SQL_PROB && age > 45 && !d.lastActivity) return true;
-  return false;
+function stalenessThreshold(stage: string): number {
+  const s = (stage || '').toLowerCase().trim();
+  if (s === 'unqualified') return 21;
+  if (s === 'qualified 5%' || s === 'qualified' || s.startsWith('qualified')) return 30;
+  return 45;
 }
 
-function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus; isConverted: boolean } | null {
+function isRejectedStage(stage: string): boolean {
+  return (stage || '').toLowerCase().trim() === 'rejected';
+}
+
+function isStaleFor(d: { stage: string; isSql: boolean; ageDays: number }): boolean {
+  if (isRejectedStage(d.stage)) return false;
+  if (d.isSql) return false;
+  return d.ageDays > stalenessThreshold(d.stage);
+}
+
+function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus } | null {
   if (!opp) return null;
   const stageNorm = (opp.stage || '').toLowerCase().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (stageNorm === 'closed won') return { status: 'closed_won', isConverted: true };
-  if (stageNorm === 'closed lost') return { status: 'closed_lost', isConverted: true };
-  return { status: 'converted', isConverted: true };
+  if (stageNorm === 'closed won') return { status: 'closed_won' };
+  if (stageNorm === 'closed lost') return { status: 'closed_lost' };
+  return { status: 'converted' };
 }
 
 /** Returns whether mutable fields differ between an existing record and incoming raw record. */
@@ -62,6 +70,7 @@ export function mergeDrBatch(
   let newCount = 0;
   let updatedCount = 0;
   let rejectedCount = 0;
+  let withdrawnCount = 0;
   let convertedCount = 0;
 
   const merged: DealRegistration[] = [];
@@ -97,14 +106,13 @@ export function mergeDrBatch(
       const stageChanged = prev.stage !== inc.stage || prev.probability !== inc.probability;
       const stageHistory = stageChanged
         ? [...(prev.stageHistory ?? []), { stage: inc.stage, probability: inc.probability, date: importedAt.slice(0, 10), batchId }]
-        : prev.stageHistory;
+        : (prev.stageHistory ?? []);
 
       const wasSql = prev.isSql;
       const sqlDate = wasSql ? prev.sqlDate : (isSql ? importedAt : undefined);
 
       const rec: DealRegistration = {
         ...prev,
-        // mutable updates
         opportunityName: inc.opportunityName,
         accountName: inc.accountName,
         repName: inc.repName,
@@ -124,13 +132,11 @@ export function mergeDrBatch(
         registeredDeal: inc.registeredDeal,
         lastActivity: inc.lastActivity,
         ageDays: inc.ageDays,
-        // lifecycle
         lastSeenAt: importedAt,
         lastUpdatedAt: changed ? importedAt : prev.lastUpdatedAt,
         stageHistory,
         isSql,
         sqlDate,
-        // status recomputed below in Step 3
         status: prev.status,
         convertedAt: prev.convertedAt,
         rejectedAt: prev.rejectedAt,
@@ -139,7 +145,7 @@ export function mergeDrBatch(
     }
   }
 
-  // Step 2: existing records NOT in incoming → rejected or converted
+  // Step 2: existing records NOT in incoming → withdrawn or converted (pipeline match)
   for (const prev of existing) {
     if (incomingMap.has(prev.opportunityId)) continue;
     const opp = oppMap.get(prev.opportunityId);
@@ -154,21 +160,23 @@ export function mergeDrBatch(
         convertedAt: prev.convertedAt || importedAt,
       });
     } else {
-      const isNewlyRejected = prev.status !== 'rejected';
-      if (isNewlyRejected) rejectedCount++;
+      const isNewlyWithdrawn = prev.status !== 'withdrawn';
+      if (isNewlyWithdrawn) withdrawnCount++;
       merged.push({
         ...prev,
-        status: 'rejected',
+        status: 'withdrawn',
         rejectedAt: prev.rejectedAt || importedAt,
       });
     }
   }
 
   // Step 3: recompute status for records still present in incoming
-  // Need account/CAM grouping for padded detection
   const presentRecs = merged.filter(r => incomingMap.has(r.opportunityId));
+
+  // Padded grouping (excludes rejected)
   const byAcctCam = new Map<string, DealRegistration[]>();
   for (const r of presentRecs) {
+    if (isRejectedStage(r.stage)) continue;
     const k = `${(r.accountName || '(none)').toLowerCase()}||${(r.channelAccountManager || '(none)').toLowerCase()}`;
     const arr = byAcctCam.get(k) || [];
     arr.push(r);
@@ -179,7 +187,15 @@ export function mergeDrBatch(
     const r = merged[i];
     if (!incomingMap.has(r.opportunityId)) continue;
 
-    // 1) Pipeline match wins
+    // 1) AE-rejected wins above everything
+    if (isRejectedStage(r.stage)) {
+      const isFirstReject = r.status !== 'rejected';
+      if (isFirstReject) rejectedCount++;
+      merged[i] = { ...r, status: 'rejected', rejectedAt: r.rejectedAt || importedAt };
+      continue;
+    }
+
+    // 2) Pipeline match
     const opp = oppMap.get(r.opportunityId);
     const pipelineClass = classifyByPipeline(opp);
     if (pipelineClass) {
@@ -193,13 +209,13 @@ export function mergeDrBatch(
       continue;
     }
 
-    // 2) SQL
+    // 3) SQL
     if (r.isSql) {
       merged[i] = { ...r, status: 'sql' };
       continue;
     }
 
-    // 3) Padded: pre-SQL, on account+CAM with 2+ pre-SQL DRs, no lastActivity
+    // 4) Padded
     const k = `${(r.accountName || '(none)').toLowerCase()}||${(r.channelAccountManager || '(none)').toLowerCase()}`;
     const group = byAcctCam.get(k) || [];
     const preSqlInGroup = group.filter(x => !x.isSql);
@@ -208,15 +224,15 @@ export function mergeDrBatch(
       continue;
     }
 
-    // 4) Stale
+    // 5) Stale
     if (isStaleFor(r)) {
       merged[i] = { ...r, status: 'stale' };
       continue;
     }
 
-    // 5) Active
+    // 6) Active
     merged[i] = { ...r, status: 'active' };
   }
 
-  return { merged, stats: { newCount, updatedCount, rejectedCount, convertedCount } };
+  return { merged, stats: { newCount, updatedCount, rejectedCount, withdrawnCount, convertedCount } };
 }

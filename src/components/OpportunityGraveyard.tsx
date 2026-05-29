@@ -21,12 +21,17 @@ export default function OpportunityGraveyard() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'lost' | 'rejected'>('all');
 
   const lostOpps = useMemo(() => {
     return opportunities
-      .filter(o => o.classification === 'lost')
+      .filter(o => o.classification === 'lost' || o.classification === 'rejected')
+      .filter(o => typeFilter === 'all' || o.classification === typeFilter)
       .sort((a, b) => new Date(b.lostDate || b.importDate).getTime() - new Date(a.lostDate || a.importDate).getTime());
-  }, [opportunities]);
+  }, [opportunities, typeFilter]);
+
+  const lostCount = useMemo(() => opportunities.filter(o => o.classification === 'lost').length, [opportunities]);
+  const rejectedCount = useMemo(() => opportunities.filter(o => o.classification === 'rejected').length, [opportunities]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return lostOpps;
@@ -98,11 +103,24 @@ export default function OpportunityGraveyard() {
 
   return (
     <div className="space-y-4">
+      {/* Filter toggle */}
+      <div className="flex gap-1 text-xs">
+        {(['all','lost','rejected'] as const).map(t => (
+          <button key={t} onClick={() => setTypeFilter(t)} className={`px-2 py-1 rounded border ${typeFilter===t ? 'bg-secondary border-border text-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}>
+            {t === 'all' ? 'All' : t === 'lost' ? 'Closed Lost' : 'Rejected'}
+          </button>
+        ))}
+      </div>
+
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Lost Opportunities</p>
-          <p className="text-xl font-mono font-semibold text-destructive">{lostOpps.length}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Closed Lost</p>
+          <p className="text-xl font-mono font-semibold text-destructive">{lostCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Rejected</p>
+          <p className="text-xl font-mono font-semibold text-muted-foreground">{rejectedCount}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Lost Pipeline Value</p>
@@ -164,7 +182,7 @@ export default function OpportunityGraveyard() {
           <tbody>
             {sorted.map(opp => (
               <tr key={opp.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                <td className="px-4 py-2.5 font-medium">{opp.name}</td>
+                <td className="px-4 py-2.5 font-medium">{opp.name} {opp.classification === 'rejected' && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground align-middle">Rejected</span>}</td>
                 <td className="px-3 py-2.5 text-muted-foreground">
                   <button onClick={() => setSearchQuery(opp.repName)} className="hover:underline hover:text-foreground transition-colors">{opp.repName}</button>
                 </td>

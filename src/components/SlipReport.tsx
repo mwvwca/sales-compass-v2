@@ -51,6 +51,7 @@ function computeSlips(
 
   const records: SlipRecord[] = [];
   for (const opp of opps) {
+    if (opp.classification === 'rejected') continue;
     const entries = byOpp.get(opp.id) || [];
     const dateChanges = entries.filter(e => e.field === 'closeDate' && e.oldValue && e.newValue);
     const classChanges = entries.filter(e => e.field === 'classification');
@@ -113,7 +114,7 @@ function computeSlips(
       closeDateHistory: dateChanges.map(e => ({ from: e.oldValue, to: e.newValue, date: e.importDate })),
       isNowClosed: opp.classification === 'closed_won',
       isNowLost: opp.classification === 'lost',
-      isStillOpen: !['closed_won', 'lost', 'omitted'].includes(opp.classification),
+      isStillOpen: !['closed_won', 'lost', 'omitted', 'rejected'].includes(opp.classification),
     });
   }
   return records;

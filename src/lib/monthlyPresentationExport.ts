@@ -152,7 +152,7 @@ export function exportMonthlyPresentation(monthKey: string, ctx: MonthlyPresenta
 
   const activeOpps = ctx.opportunities.filter(o => {
     if (!inMonth(o.closeDate)) return false;
-    if (o.classification === 'lost' || o.classification === 'omitted') return false;
+    if (o.classification === 'lost' || o.classification === 'omitted' || o.classification === 'rejected') return false;
     const s = o.stage.toLowerCase().trim();
     if (s === 'closed lost') return false;
     if (s.includes('reject')) return false;
