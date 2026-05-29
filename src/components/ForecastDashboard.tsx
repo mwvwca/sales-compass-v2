@@ -297,7 +297,12 @@ export default function ForecastDashboard() {
           <div className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Mgmt Commit</p>
             {mgmtCommitTotal !== null ? (
-              <p className="text-xl font-mono font-semibold text-commit">{fmt(mgmtCommitTotal)}</p>
+              <>
+                <p className="text-xl font-mono font-semibold text-commit">{fmt(mgmtCommitTotal)}</p>
+                {mgmtCommit?.isFallback && (
+                  <p className="text-[10px] mt-0.5 text-muted-foreground">Rep rollup — set your number in Goals.</p>
+                )}
+              </>
             ) : (
               <p className="text-xl font-mono font-semibold text-muted-foreground">
                 Not set <button onClick={goToGoals} className="ml-1 text-[11px] underline text-primary">Set now</button>
