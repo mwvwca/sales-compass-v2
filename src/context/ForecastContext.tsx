@@ -183,6 +183,9 @@ interface ForecastContextValue extends ForecastState {
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
+    monthlyManagerCommits?: MonthlyManagerCommit[];
+    forecastPromotions?: ForecastPromotion[];
+    forecastSnapshots?: ForecastSnapshot[];
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
   }) => void;
