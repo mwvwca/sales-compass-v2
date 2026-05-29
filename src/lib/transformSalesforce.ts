@@ -53,12 +53,46 @@ function parseStage(rawStage: string): { stage: string; probability: string } {
 }
 
 function excelDateToString(value: unknown): string {
-  if (!value) return "";
-  if (typeof value === "number") {
-    const date = new Date((value - 25569) * 86400 * 1000);
-    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+  return parseExcelDate(value) ?? "";
+}
+
+export function parseExcelDate(val: unknown): string | undefined {
+  if (val === null || val === undefined || val === "") return undefined;
+
+  if (typeof val === "string") {
+    const s = val.trim();
+    if (!s) return undefined;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (iso) return `${iso[1]}-${String(+iso[2]).padStart(2, "0")}-${String(+iso[3]).padStart(2, "0")}`;
+    const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (us) {
+      const m = +us[1], d = +us[2];
+      let y = +us[3];
+      if (y < 100) y += 2000;
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+    }
+    const fallback = new Date(s);
+    if (!isNaN(fallback.getTime())) {
+      return `${fallback.getUTCFullYear()}-${String(fallback.getUTCMonth() + 1).padStart(2, "0")}-${String(fallback.getUTCDate()).padStart(2, "0")}`;
+    }
+    return undefined;
   }
-  return String(value);
+
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return undefined;
+    return `${val.getUTCFullYear()}-${String(val.getUTCMonth() + 1).padStart(2, "0")}-${String(val.getUTCDate()).padStart(2, "0")}`;
+  }
+
+  if (typeof val === "number" && isFinite(val)) {
+    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+    if (isNaN(date.getTime())) return undefined;
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+  }
+
+  return undefined;
 }
 
 function normalizeHeader(header: string): string {
