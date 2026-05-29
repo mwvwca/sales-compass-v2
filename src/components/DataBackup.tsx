@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { downloadBackupNow } from '@/lib/backupUtils';
 
-const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted']);
+const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted', 'rejected']);
 
 const repSchema = z.object({
   id: z.string(),
