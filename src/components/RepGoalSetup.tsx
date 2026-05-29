@@ -287,6 +287,18 @@ export default function RepGoalSetup() {
     [forecastSnapshots, selectedMonth],
   );
 
+  const dealsByRep = useMemo(() => {
+    const map = new Map<string, typeof monthDeals>();
+    for (const d of monthDeals) {
+      if (!d.isCommit && !d.promoted && !d.isUpside) continue;
+      const arr = map.get(d.opp.repName) ?? [];
+      arr.push(d);
+      map.set(d.opp.repName, arr);
+    }
+    return Array.from(map.entries());
+  }, [monthDeals]);
+  const dealsByRepEntries = (entries: typeof dealsByRep) => entries;
+
   const handleSnapshot = () => {
     const snap = createForecastSnapshot(selectedMonth);
     triggerBackup();
