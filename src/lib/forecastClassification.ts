@@ -27,11 +27,13 @@ export function getImportedClassification(params: {
   const stageNorm = normalizeImportFlag(params.stage).replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
   if (stageNorm === 'closed won') return 'closed_won';
   if (stageNorm === 'closed lost') return 'lost';
+  if (stageNorm === 'rejected') return 'rejected';
 
   const categoryNorm = normalizeImportFlag(params.forecastCategory).replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
   if (categoryNorm === 'commit') return 'commit';
   if (categoryNorm === 'upside') return 'upside';
   if (categoryNorm === 'omitted') return 'omitted';
+  if (categoryNorm === 'rejected') return 'rejected';
 
   if (isTruthyForecastFlag(params.forecastFlag)) return 'commit';
   if (isTruthyUpsideFlag(params.upsideFlag)) return 'upside';
@@ -47,7 +49,8 @@ export function resolveImportedClassification(
   if (incomingClassification === 'omitted') return 'omitted';
   if (existingClassification === 'closed_won') return 'closed_won';
   if (existingClassification === 'lost') return 'lost';
-  if (incomingClassification === 'closed_won' || incomingClassification === 'lost') return incomingClassification;
+  if (existingClassification === 'rejected') return 'rejected';
+  if (incomingClassification === 'closed_won' || incomingClassification === 'lost' || incomingClassification === 'rejected') return incomingClassification;
   if (incomingClassification === 'commit' || incomingClassification === 'upside') return incomingClassification;
   return existingClassification;
 }
