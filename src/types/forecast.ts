@@ -148,6 +148,11 @@ export interface DealRegistration {
   status: DrStatus;
   rejectedAt?: string;
   convertedAt?: string;
+
+  // Cohort/cycle analytics (populated when matched to a closed won opp)
+  closedWonDate?: string;
+  cycleDays?: number;
+  inPeriodWon?: boolean;
 }
 
 /** Parser output / merge input — identity + mutable fields, no lifecycle. */
@@ -163,6 +168,9 @@ export type RawDrRecord = Omit<
   | 'status'
   | 'rejectedAt'
   | 'convertedAt'
+  | 'closedWonDate'
+  | 'cycleDays'
+  | 'inPeriodWon'
 >;
 
 export interface DrBatch {

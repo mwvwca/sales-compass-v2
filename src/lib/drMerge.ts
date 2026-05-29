@@ -4,6 +4,7 @@ import type {
   Opportunity,
   DrStatus,
 } from '@/types/forecast';
+import { getQuarter } from '@/types/forecast';
 
 export interface DrBatchStats {
   newCount: number;
@@ -38,6 +39,21 @@ function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus } 
   if (stageNorm === 'closed won') return { status: 'closed_won' };
   if (stageNorm === 'closed lost') return { status: 'closed_lost' };
   return { status: 'converted' };
+}
+
+/** Compute closedWonDate / cycleDays / inPeriodWon for a DR matched to a closed won opp. */
+function computeCycleFields(dr: { createdDate: string }, opp: Opportunity | undefined):
+  Pick<DealRegistration, 'closedWonDate' | 'cycleDays' | 'inPeriodWon'> {
+  if (!opp?.closeDate || !dr.createdDate) return {};
+  const closedWonDate = opp.closeDate;
+  const created = new Date(dr.createdDate).getTime();
+  const closed = new Date(closedWonDate).getTime();
+  if (!isFinite(created) || !isFinite(closed)) return { closedWonDate };
+  const raw = Math.floor((closed - created) / 86_400_000);
+  const cycleDays = raw < 0 ? 0 : raw;
+  let inPeriodWon = false;
+  try { inPeriodWon = getQuarter(dr.createdDate) === getQuarter(closedWonDate); } catch { /* noop */ }
+  return { closedWonDate, cycleDays, inPeriodWon };
 }
 
 /** Returns whether mutable fields differ between an existing record and incoming raw record. */
@@ -154,10 +170,12 @@ export function mergeDrBatch(
     if (pipelineClass) {
       const isFirstConversion = !prev.convertedAt;
       if (isFirstConversion) convertedCount++;
+      const cycle = pipelineClass.status === 'closed_won' ? computeCycleFields(prev, opp) : {};
       merged.push({
         ...prev,
         status: pipelineClass.status,
         convertedAt: prev.convertedAt || importedAt,
+        ...cycle,
       });
     } else {
       const isNewlyWithdrawn = prev.status !== 'withdrawn';
@@ -201,10 +219,12 @@ export function mergeDrBatch(
     if (pipelineClass) {
       const isFirstConversion = !r.convertedAt;
       if (isFirstConversion) convertedCount++;
+      const cycle = pipelineClass.status === 'closed_won' ? computeCycleFields(r, opp) : {};
       merged[i] = {
         ...r,
         status: pipelineClass.status,
         convertedAt: r.convertedAt || importedAt,
+        ...cycle,
       };
       continue;
     }

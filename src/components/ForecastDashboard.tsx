@@ -12,7 +12,7 @@ import ExecutiveReportVisual from './ExecutiveReportVisual';
 import PipelineCoverage from './PipelineCoverage';
 import SalesIntelligence from './SalesIntelligence';
 import CommitAccuracySection from './CommitAccuracySection';
-import CoverageTrendCard from './CoverageTrendCard';
+
 import { Switch } from '@/components/ui/switch';
 import { ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentationButtonLabel } from '@/lib/monthlyPresentationExport';
@@ -20,7 +20,7 @@ import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentation
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, changelog, snapshots } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, changelog } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('quarterly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
@@ -309,14 +309,6 @@ export default function ForecastDashboard() {
               </p>
             )}
           </div>
-          {scope === 'quarterly' && (
-            <CoverageTrendCard
-              snapshots={snapshots}
-              quarter={anchorQuarter}
-              goal={totalGoal}
-              selectedRep={selectedRep}
-            />
-          )}
           {/* Closed Won placed in row 1 to keep 4-col grid clean */}
 
           <div className="bg-card border border-border rounded-lg p-4">
