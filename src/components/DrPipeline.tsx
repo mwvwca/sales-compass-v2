@@ -371,13 +371,13 @@ export default function DrPipeline() {
         : 0;
       const closedWon = deals.filter(d => d.status === 'closed_won').length;
       const winRate = registered ? closedWon / registered : 0;
-      return { cam, registered, sqls, sqlRate, paddedAccts, rejected, avgAgeAtSql, closedWon, winRate };
+      return { cam, registered, sqls, sqlRate, paddedAccts, withdrawn, withdrawnRate, avgAgeAtSql, closedWon, winRate };
     }).sort((a, b) => b.registered - a.registered);
   }, [scopeNoStatus]);
 
   const camInsights = useMemo(() => {
     const out: string[] = [];
-    for (const r of camRows) if (r.rejected > 2) out.push(`⚠ ${r.cam} has ${r.rejected} rejected DRs — these registrations were withdrawn or disqualified.`);
+    for (const r of camRows) if (r.withdrawnRate > 0.2 && r.withdrawn > 2) out.push(`⚠ ${r.cam} has ${r.withdrawn} withdrawn DRs (${fmtPct(r.withdrawnRate, 0)}) — registrations disappearing without conversion.`);
     return out;
   }, [camRows]);
 
