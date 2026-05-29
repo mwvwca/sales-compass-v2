@@ -89,10 +89,21 @@ const monthlyRepCommitSchema = z.object({
   updatedAt: z.string(),
 });
 
+const drStageHistorySchema = z.object({
+  stage: z.string().max(200),
+  probability: z.number().finite().min(0).max(1),
+  date: z.string(),
+  batchId: z.string(),
+});
+
+const drStatusEnum = z.enum(['active', 'stale', 'sql', 'rejected', 'converted', 'closed_won', 'closed_lost', 'padded']);
+
 const dealRegistrationSchema = z.object({
   opportunityId: z.string(),
   opportunityName: z.string().max(500),
   accountName: z.string().max(500),
+  createdDate: z.string(),
+  batchIdFirstSeen: z.string().optional().default(''),
   repName: z.string().max(200),
   secondOwner: z.string().max(200).optional(),
   channelAccountManager: z.string().max(200).optional(),
@@ -104,16 +115,24 @@ const dealRegistrationSchema = z.object({
   amount: z.number().finite().min(0).optional(),
   expectedRevenue: z.number().finite().min(0).optional(),
   closeDate: z.string().optional(),
-  createdDate: z.string(),
-  lastActivity: z.string().optional(),
-  ageDays: z.number().finite().min(0),
   billingState: z.string().max(200).optional(),
   leadSource: z.string().max(200).optional(),
   type: z.string().max(200).optional(),
   registeredDeal: z.boolean(),
-  importedAt: z.string(),
-  batchId: z.string(),
+  lastActivity: z.string().optional(),
+  ageDays: z.number().finite().min(0),
+  firstSeenAt: z.string().optional().default(''),
+  lastSeenAt: z.string().optional().default(''),
+  lastUpdatedAt: z.string().optional().default(''),
+  stageHistory: z.array(drStageHistorySchema).optional().default([]),
   isSql: z.boolean(),
+  sqlDate: z.string().optional(),
+  status: drStatusEnum.optional().default('active'),
+  rejectedAt: z.string().optional(),
+  convertedAt: z.string().optional(),
+  // Legacy fields tolerated (ignored)
+  importedAt: z.string().optional(),
+  batchId: z.string().optional(),
 });
 
 const drBatchSchema = z.object({
@@ -121,6 +140,10 @@ const drBatchSchema = z.object({
   importedAt: z.string(),
   fileName: z.string().max(500),
   recordCount: z.number().finite().min(0),
+  newCount: z.number().finite().min(0).optional().default(0),
+  updatedCount: z.number().finite().min(0).optional().default(0),
+  rejectedCount: z.number().finite().min(0).optional().default(0),
+  convertedCount: z.number().finite().min(0).optional().default(0),
   asOfDate: z.string(),
 });
 
