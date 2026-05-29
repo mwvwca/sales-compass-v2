@@ -229,6 +229,9 @@ export default function DataBackup() {
     commissionReviews,
     commissionPinHash,
     monthlyRepCommits,
+    monthlyManagerCommits,
+    forecastPromotions,
+    forecastSnapshots,
     restoreFromBackup,
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -245,6 +248,9 @@ export default function DataBackup() {
       commissionReviews,
       commissionPinHash,
       monthlyRepCommits,
+      monthlyManagerCommits,
+      forecastPromotions,
+      forecastSnapshots,
     });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };
