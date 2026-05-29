@@ -164,7 +164,7 @@ function StageTimeline({ d }: { d: DealRegistration }) {
 
 // ---------- Main ----------
 export default function DrPipeline() {
-  const { dealRegistrations, drBatches, opportunities, importDrBatch, clearDrData } = useForecast();
+  const { dealRegistrations, drBatches, opportunities, reps, importDrBatch, clearDrData } = useForecast();
   const { toast } = useToast();
 
   const [showUploader, setShowUploader] = useState(false);
