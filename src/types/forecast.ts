@@ -85,38 +85,91 @@ export interface ChangeLogEntry {
   newValue: string;
 }
 
+export type DrStatus =
+  | 'active'
+  | 'stale'
+  | 'sql'
+  | 'rejected'
+  | 'converted'
+  | 'closed_won'
+  | 'closed_lost'
+  | 'padded';
+
+export interface DrStageHistoryEntry {
+  stage: string;
+  probability: number;
+  date: string;
+  batchId: string;
+}
+
 export interface DealRegistration {
+  // Identity (immutable after first import)
   opportunityId: string;
   opportunityName: string;
   accountName: string;
+  createdDate: string;
+  batchIdFirstSeen: string;
+
+  // People (Salesforce source of truth; updated each import)
   repName: string;
   secondOwner?: string;
   channelAccountManager?: string;
   resellerName?: string;
   distributorReseller?: string;
+
+  // Deal details
   product?: string;
   stage: string;
   probability: number;
   amount?: number;
   expectedRevenue?: number;
   closeDate?: string;
-  createdDate: string;
-  lastActivity?: string;
-  ageDays: number;
   billingState?: string;
   leadSource?: string;
   type?: string;
   registeredDeal: boolean;
-  importedAt: string;
-  batchId: string;
+
+  // AE activity
+  lastActivity?: string;
+  ageDays: number;
+
+  // Lifecycle tracking
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastUpdatedAt: string;
+  stageHistory: DrStageHistoryEntry[];
   isSql: boolean;
+  sqlDate?: string;
+
+  status: DrStatus;
+  rejectedAt?: string;
+  convertedAt?: string;
 }
+
+/** Parser output / merge input — identity + mutable fields, no lifecycle. */
+export type RawDrRecord = Omit<
+  DealRegistration,
+  | 'batchIdFirstSeen'
+  | 'firstSeenAt'
+  | 'lastSeenAt'
+  | 'lastUpdatedAt'
+  | 'stageHistory'
+  | 'isSql'
+  | 'sqlDate'
+  | 'status'
+  | 'rejectedAt'
+  | 'convertedAt'
+>;
 
 export interface DrBatch {
   id: string;
   importedAt: string;
   fileName: string;
   recordCount: number;
+  newCount: number;
+  updatedCount: number;
+  rejectedCount: number;
+  convertedCount: number;
   asOfDate: string;
 }
 

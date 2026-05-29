@@ -1,6 +1,7 @@
-import type { DealRegistration } from '@/types/forecast';
+import type { RawDrRecord } from '@/types/forecast';
 
-type RawDr = Omit<DealRegistration, 'importedAt' | 'batchId'>;
+type RawDr = RawDrRecord;
+
 
 const FIELD_MAP: Record<string, keyof RawDr> = {
   'opportunity id': 'opportunityId',
@@ -174,7 +175,7 @@ export function parseDrExport(rawRows: any[][]): {
         leadSource: raw.leadSource ? String(raw.leadSource).trim() || undefined : undefined,
         type: raw.type ? String(raw.type).trim() || undefined : undefined,
         registeredDeal: parseBool(raw.registeredDeal),
-        isSql: prob >= 0.25,
+
       };
       records.push(rec);
     } catch (err: any) {
