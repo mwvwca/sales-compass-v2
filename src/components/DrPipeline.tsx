@@ -487,10 +487,11 @@ export default function DrPipeline() {
     return rows;
   }, [filtered, sortKey, sortDir, expandedRep]);
 
-  // ---------- Section F: Account Padding ----------
+  // ---------- Section F: Account Padding (excludes rejected DRs) ----------
   const accountRows = useMemo(() => {
     const byAcct = new Map<string, DealRegistration[]>();
     for (const d of filtered) {
+      if (d.status === 'rejected') continue;
       const a = d.accountName || '(none)';
       const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
     }
