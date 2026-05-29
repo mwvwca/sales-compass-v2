@@ -518,3 +518,83 @@ export default function RepGoalSetup() {
     </div>
   );
 }
+
+interface RepCommitCardProps {
+  repName: string;
+  inactive: boolean;
+  existingAmount?: number;
+  existingUpdatedAt?: string;
+  draft: { amount: string; notes: string };
+  onChangeAmount: (v: string) => void;
+  onChangeNotes: (v: string) => void;
+  onSave: () => void;
+  fmtMoney: (n: number) => string;
+  fmtTs: (iso?: string) => string;
+}
+
+function RepCommitCard({
+  repName, inactive, existingAmount, existingUpdatedAt, draft,
+  onChangeAmount, onChangeNotes, onSave, fmtMoney, fmtTs,
+}: RepCommitCardProps) {
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (notesRef.current) {
+      notesRef.current.style.height = 'auto';
+      notesRef.current.style.height = `${notesRef.current.scrollHeight}px`;
+    }
+  }, [draft.notes]);
+
+  return (
+    <div className={`rounded-md border border-border p-3 space-y-2 bg-card ${inactive ? 'opacity-70' : ''}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+          {repName}
+          {inactive && (
+            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted/40">
+              Inactive
+            </span>
+          )}
+        </span>
+        {existingAmount !== undefined && (
+          <span className="text-xs text-positive font-mono flex items-center gap-1">
+            <Check size={12} /> {fmtMoney(existingAmount)}
+          </span>
+        )}
+      </div>
+      <div className="space-y-1">
+        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Your commit ($)</label>
+        <input
+          type="number"
+          value={draft.amount}
+          onChange={(e) => onChangeAmount(e.target.value)}
+          placeholder="0"
+          className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">1:1 notes</label>
+        <Textarea
+          ref={notesRef}
+          placeholder="1:1 notes — context, commitments, concerns..."
+          value={draft.notes}
+          onChange={(e) => onChangeNotes(e.target.value)}
+          className="min-h-[80px] resize-none overflow-hidden text-xs"
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = 'auto';
+            target.style.height = `${target.scrollHeight}px`;
+          }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        {existingUpdatedAt ? (
+          <span className="text-[10px] text-muted-foreground">Saved {fmtTs(existingUpdatedAt)}</span>
+        ) : <span />}
+        <Button onClick={onSave} size="sm" variant="outline" className="h-7 gap-1 text-xs">
+          <Check size={12} /> Save
+        </Button>
+      </div>
+    </div>
+  );
+}
