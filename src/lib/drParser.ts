@@ -72,6 +72,15 @@ function parseNumber(raw: unknown): number | undefined {
   return isFinite(n) ? n : undefined;
 }
 
+function parseAmount(val: unknown): number | undefined {
+  if (val === null || val === undefined || val === '') return undefined;
+  if (typeof val === 'number') return isFinite(val) ? val : undefined;
+  const cleaned = String(val).replace(/USD\s*/i, '').replace(/,/g, '').trim();
+  if (!cleaned) return undefined;
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? undefined : n;
+}
+
 function parseBool(raw: unknown): boolean {
   if (typeof raw === 'boolean') return raw;
   const s = String(raw ?? '').trim().toLowerCase();
