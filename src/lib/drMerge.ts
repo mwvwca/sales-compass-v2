@@ -73,19 +73,18 @@ export function mergeDrBatch(
 
     if (!prev) {
       newCount++;
-      const initialHistory: DrStageHistoryEntry = {
-        stage: inc.stage,
-        probability: inc.probability,
-        date: importedAt,
-        batchId,
-      };
       const rec: DealRegistration = {
         ...inc,
         batchIdFirstSeen: batchId,
         firstSeenAt: importedAt,
         lastSeenAt: importedAt,
         lastUpdatedAt: importedAt,
-        stageHistory: [initialHistory],
+        stageHistory: [{
+          stage: inc.stage,
+          probability: inc.probability,
+          date: importedAt.slice(0, 10),
+          batchId,
+        }],
         isSql,
         sqlDate: isSql ? importedAt : undefined,
         status: 'active',
@@ -97,7 +96,7 @@ export function mergeDrBatch(
 
       const stageChanged = prev.stage !== inc.stage || prev.probability !== inc.probability;
       const stageHistory = stageChanged
-        ? [...prev.stageHistory, { stage: inc.stage, probability: inc.probability, date: importedAt, batchId }]
+        ? [...(prev.stageHistory ?? []), { stage: inc.stage, probability: inc.probability, date: importedAt.slice(0, 10), batchId }]
         : prev.stageHistory;
 
       const wasSql = prev.isSql;
