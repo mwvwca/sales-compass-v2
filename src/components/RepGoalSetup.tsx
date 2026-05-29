@@ -201,8 +201,8 @@ export default function RepGoalSetup() {
     const inactive = !isRepActive(rep);
     const isConfirming = deactivatingId === rep.id;
     return (
-      <>
-        <tr key={rep.id} className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${inactive ? 'opacity-60' : ''}`}>
+      <React.Fragment key={rep.id}>
+        <tr className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${inactive ? 'opacity-60' : ''}`}>
           <td className="px-4 py-2.5 font-medium">
             <div className="flex items-center gap-2">
               <span>{rep.name}</span>
