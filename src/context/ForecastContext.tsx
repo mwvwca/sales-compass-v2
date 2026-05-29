@@ -275,6 +275,24 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, reps: s.reps.filter(r => r.id !== id) }));
   }, []);
 
+  const setRepActiveStatus = useCallback((repId: string, isActive: boolean, note?: string) => {
+    setState(s => ({
+      ...s,
+      reps: s.reps.map(r => {
+        if (r.id !== repId) return r;
+        if (isActive) {
+          return { ...r, isActive: true, inactivatedAt: undefined, inactivatedNote: undefined };
+        }
+        return {
+          ...r,
+          isActive: false,
+          inactivatedAt: new Date().toISOString(),
+          inactivatedNote: note?.trim() ? note.trim() : undefined,
+        };
+      }),
+    }));
+  }, []);
+
   const importOpportunities = useCallback((opps: Opportunity[], fileName: string) => {
     const importId = crypto.randomUUID();
     const importDate = new Date().toISOString();
