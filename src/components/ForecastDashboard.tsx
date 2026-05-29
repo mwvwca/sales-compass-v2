@@ -120,9 +120,9 @@ export default function ForecastDashboard() {
   const totalUpside = hudOpps.filter(o => o.classification === 'upside').reduce((s, o) => s + o.amount, 0);
 
   const totalGoal = useMemo(() => {
-    const activeReps = selectedRep === 'all' ? repNames : [selectedRep];
+    const activeReps = selectedRep === 'all' ? allRepNames : [selectedRep];
     return activeReps.reduce((sum, name) => sum + getRepGoal(name), 0);
-  }, [selectedRep, repNames, reps, scopeQuarters, goalDivisor]);
+  }, [selectedRep, allRepNames, reps, scopeQuarters, goalDivisor]);
 
   const variance = totalWon - totalGoal;
 
