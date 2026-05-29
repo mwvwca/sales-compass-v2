@@ -172,7 +172,7 @@ export default function DrPipeline() {
   const [showUploader, setShowUploader] = useState(false);
   const [pending, setPending] = useState<{
     records: RawDrRecord[]; asOfDate: string; fileName: string; errors: string[];
-    preview: { newCount: number; updatedCount: number; rejectedCount: number; convertedCount: number };
+    preview: { newCount: number; updatedCount: number; rejectedCount: number; withdrawnCount: number; convertedCount: number };
   } | null>(null);
 
   // Global filters
