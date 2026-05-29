@@ -250,6 +250,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
       commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
       monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
+      monthlyManagerCommits: loadFromStorage<MonthlyManagerCommit[]>(STORAGE_KEYS.monthlyManagerCommits, []),
+      forecastPromotions: loadFromStorage<ForecastPromotion[]>(STORAGE_KEYS.forecastPromotions, []),
+      forecastSnapshots: loadFromStorage<ForecastSnapshot[]>(STORAGE_KEYS.forecastSnapshots, []),
       dealRegistrations: loadFromStorage<DealRegistration[]>(STORAGE_KEYS.dealRegistrations, []).map((dr: any) => ({
         ...dr,
         stageHistory: dr.stageHistory ?? [],
