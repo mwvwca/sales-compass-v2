@@ -208,6 +208,99 @@ export default function RepGoalSetup() {
     toast({ title: `${rep.name} reactivated` });
   };
 
+  // ----- Manager commit draft -----
+  const managerCommit = getMonthlyManagerCommit(selectedMonth);
+  const effectiveMgrDraft = mgrCommitDraftKey === selectedMonth
+    ? mgrCommitDraft
+    : (managerCommit ? String(managerCommit.commitAmount) : '');
+
+  const handleSaveManagerCommit = () => {
+    const amount = parseFloat(effectiveMgrDraft);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
+      return;
+    }
+    setMonthlyManagerCommit(selectedMonth, amount);
+    triggerBackup();
+    toast({ title: 'Commit saved and backup downloaded' });
+  };
+
+  // ----- Forecast deal list -----
+  const weeks = useMemo(() => getWeeksInMonth(selectedMonth), [selectedMonth]);
+  const activeRepSet = useMemo(() => new Set(activeReps.map(r => r.name)), [activeReps]);
+
+  const monthDeals = useMemo(() => {
+    const promotedSet = new Set(
+      forecastPromotions.filter(p => p.monthKey === selectedMonth).map(p => p.opportunityId),
+    );
+    const isExcluded = (o: typeof opportunities[0]) => {
+      const s = (o.stage || '').toLowerCase().trim();
+      return o.classification === 'lost' || o.classification === 'rejected' || o.classification === 'omitted'
+        || s === 'closed lost' || s === 'rejected';
+    };
+    const list = opportunities
+      .filter(o => o.closeDate && getMonthKey(o.closeDate) === selectedMonth && !isExcluded(o))
+      .filter(o => activeRepSet.has(o.repName));
+    return list.map(o => {
+      const d = getDateAtUtcStart(o.closeDate);
+      const w = weeks.find(x => d >= x.start && d <= x.end);
+      const promoted = promotedSet.has(o.id);
+      return {
+        opp: o,
+        weekLabel: w?.label ?? '—',
+        promoted,
+        isCommit: o.classification === 'commit',
+        isUpside: o.classification === 'upside',
+      };
+    });
+  }, [opportunities, selectedMonth, forecastPromotions, activeRepSet, weeks]);
+
+  const dealTotals = useMemo(() => {
+    let commit = 0;
+    let promoted = 0;
+    for (const d of monthDeals) {
+      if (d.isCommit) commit += d.opp.amount;
+      else if (d.promoted) promoted += d.opp.amount;
+    }
+    return { commit, promoted, total: commit + promoted };
+  }, [monthDeals]);
+
+  const mgrSaved = !!managerCommit;
+  const mgrAmount = managerCommit?.commitAmount ?? 0;
+  const mgrGap = mgrAmount - rollup.commitTotal;
+  const mgrGapColor = !mgrSaved ? 'text-muted-foreground'
+    : mgrGap > 0 ? 'text-positive'
+    : Math.abs(mgrGap) <= rollup.commitTotal * 0.1 ? 'text-amber-500'
+    : 'text-negative';
+
+  const callVsMgr = mgrSaved
+    ? (Math.abs(dealTotals.total - mgrAmount) <= mgrAmount * 0.05
+        ? { color: 'text-positive', icon: '✓' as const }
+        : { color: 'text-amber-500', icon: '⚠' as const })
+    : { color: 'text-negative', icon: '✗' as const };
+
+  // ----- Snapshots for selected month -----
+  const monthSnapshots = useMemo(
+    () => forecastSnapshots
+      .filter(s => s.monthKey === selectedMonth)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [forecastSnapshots, selectedMonth],
+  );
+
+  const handleSnapshot = () => {
+    const snap = createForecastSnapshot(selectedMonth);
+    triggerBackup();
+    setViewingSnapshot(snap);
+    toast({ title: 'Snapshot saved' });
+  };
+
+  const handleTogglePromote = (oppId: string, promoted: boolean) => {
+    if (promoted) demoteOpportunityForecast(oppId, selectedMonth);
+    else promoteOpportunityForecast(oppId, selectedMonth);
+  };
+
+
+
   // Reps to show in the monthly commit grid:
   // - current/future months: only active reps
   // - past months: active reps + inactive reps that have a saved commit for that month
