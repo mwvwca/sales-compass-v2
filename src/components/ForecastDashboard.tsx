@@ -67,25 +67,18 @@ export default function ForecastDashboard() {
     return getYearQuarters(anchor.getUTCFullYear()).map(q => ({ key: q, label: q.split('-')[1], matches: (cd: string) => getQuarter(cd) === q }));
   }, [scope, anchor, anchorMonthKey, anchorQuarter, weekRange]);
 
+  // Active rep names only — inactive reps hidden from dashboard rep list and dropdown.
+  // Historical data remains in pipeline totals via opportunities filter elsewhere.
+  const inactiveSet = useMemo(() => new Set(reps.filter(r => r.isActive === false).map(r => r.name)), [reps]);
   const repNames = useMemo(() => {
-    const names = new Set(opportunities.map(o => o.repName));
-    reps.forEach(r => names.add(r.name));
+    const names = new Set<string>();
+    for (const o of opportunities) if (!inactiveSet.has(o.repName)) names.add(o.repName);
+    for (const r of reps) if (r.isActive !== false) names.add(r.name);
     return Array.from(names).sort();
-  }, [opportunities, reps]);
+  }, [opportunities, reps, inactiveSet]);
 
-  // Partition rep names into active vs inactive for dropdown grouping.
-  // Inactive = exists in reps and isActive === false. Names that only appear
-  // on historical opportunities (no Rep record) are treated as active.
-  const { activeRepNames, inactiveRepNames } = useMemo(() => {
-    const inactiveSet = new Set(reps.filter(r => r.isActive === false).map(r => r.name));
-    const active: string[] = [];
-    const inactive: string[] = [];
-    for (const n of repNames) {
-      if (inactiveSet.has(n)) inactive.push(n);
-      else active.push(n);
-    }
-    return { activeRepNames: active, inactiveRepNames: inactive };
-  }, [repNames, reps]);
+  const activeRepNames = repNames;
+  const inactiveRepNames: string[] = [];
 
   const getRepGoal = (repName: string) => {
     const rep = reps.find(r => normalizeRepName(r.name) === normalizeRepName(repName));
