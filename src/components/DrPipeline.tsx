@@ -1169,6 +1169,8 @@ export default function DrPipeline() {
                     {sortHeader('amount', 'Amount', 'right')}
                     {sortHeader('status', 'Status')}
                     {sortHeader('reseller', 'Reseller')}
+                    <th className="text-right px-2 py-1.5 font-medium">Cycle</th>
+                    <th className="text-center px-2 py-1.5 font-medium" title="Created and closed in the same quarter">In-Period</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1189,13 +1191,25 @@ export default function DrPipeline() {
                           <td className="text-right px-2 py-1.5">{d.amount ? fmtMoney(d.amount) : '—'}</td>
                           <td className="px-2 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${statusBadgeCls(d.status)}`}>{statusLabel(d.status)}</span></td>
                           <td className="px-2 py-1.5">{d.resellerName || '—'}</td>
+                          <td className="text-right px-2 py-1.5">{d.status === 'closed_won' && typeof d.cycleDays === 'number' ? `${d.cycleDays} days` : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="text-center px-2 py-1.5">{d.inPeriodWon ? <span className="text-green-600 dark:text-green-400">✓</span> : <span className="text-muted-foreground">—</span>}</td>
                         </tr>
                         {isOpen && (
                           <tr className="bg-muted/20 border-t border-border">
                             <td></td>
-                            <td colSpan={10} className="px-3 py-3 space-y-2">
+                            <td colSpan={12} className="px-3 py-3 space-y-2">
                               <StageTimeline d={d} />
-                              {matchOpp && (
+                              {d.status === 'closed_won' && d.closedWonDate && (
+                                <div className="text-xs">
+                                  <span className="inline-block px-1.5 py-0.5 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 rounded text-[10px] font-medium mr-2">Closed Won ✓</span>
+                                  <span className="text-muted-foreground">
+                                    Closed: <span className="text-foreground">{d.closedWonDate}</span>
+                                    {typeof d.cycleDays === 'number' && (<>{' · '}Cycle: <span className="text-foreground">{d.cycleDays} days</span></>)}
+                                    {d.inPeriodWon && (<>{' · '}<span className="text-green-600 dark:text-green-400">In-period ✓</span></>)}
+                                  </span>
+                                </div>
+                              )}
+                              {matchOpp && d.status !== 'closed_won' && (
                                 <div className="text-xs">
                                   <span className="inline-block px-1.5 py-0.5 bg-teal-500/15 text-teal-700 dark:text-teal-400 rounded text-[10px] font-medium mr-2">In Pipeline ✓</span>
                                   <span className="text-muted-foreground">
