@@ -160,6 +160,14 @@ interface ForecastContextValue extends ForecastState {
   setMonthlyRepCommit: (repId: string, repName: string, monthKey: string, amount: number, notes?: string) => void;
   getMonthlyRepCommit: (repId: string, monthKey: string) => MonthlyRepCommit | undefined;
   getMonthlyCommitsByMonth: (monthKey: string) => MonthlyRepCommit[];
+  setMonthlyManagerCommit: (monthKey: string, amount: number) => void;
+  getMonthlyManagerCommit: (monthKey: string) => MonthlyManagerCommit | undefined;
+  promoteOpportunityForecast: (opportunityId: string, monthKey: string) => void;
+  demoteOpportunityForecast: (opportunityId: string, monthKey: string) => void;
+  isOpportunityPromoted: (opportunityId: string, monthKey: string) => boolean;
+  createForecastSnapshot: (monthKey: string) => ForecastSnapshot;
+  reconcileForecastSnapshot: (snapshotId: string) => void;
+  deleteForecastSnapshot: (snapshotId: string) => void;
   importDrBatch: (
     incoming: RawDrRecord[],
     batchMeta: { fileName: string; asOfDate: string; importedAt: string },
