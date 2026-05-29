@@ -125,25 +125,27 @@ export default function ForecastDashboard() {
 
   const variance = totalWon - totalGoal;
 
-  // Mgmt Commit aggregation for current scope (filtered by selected rep)
-  const mgmtCommitTotal = useMemo(() => {
+  // Mgmt Commit: prefer manager override; fall back to rep rollup (only used in monthly scope when selectedRep === all).
+  const mgmtCommit = useMemo(() => {
     const yr = anchor.getUTCFullYear();
     let monthKeys: string[] = [];
-    if (scope === 'monthly' || scope === 'weekly') {
-      monthKeys = [anchorMonthKey];
-    } else if (scope === 'quarterly') {
-      monthKeys = getQuarterMonths(anchorQuarter);
-    } else {
-      monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+    if (scope === 'monthly' || scope === 'weekly') monthKeys = [anchorMonthKey];
+    else if (scope === 'quarterly') monthKeys = getQuarterMonths(anchorQuarter);
+    else monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+
+    if (selectedRep === 'all') {
+      const managerTotal = monthlyManagerCommits.filter(m => monthKeys.includes(m.monthKey)).reduce((s, m) => s + m.commitAmount, 0);
+      if (managerTotal > 0) return { value: managerTotal, isFallback: false };
     }
-    const matched = monthlyRepCommits.filter(m => {
+    const repTotal = monthlyRepCommits.filter(m => {
       if (!monthKeys.includes(m.monthKey)) return false;
       if (selectedRep !== 'all' && m.repName !== selectedRep) return false;
       return true;
-    });
-    if (matched.length === 0) return null;
-    return matched.reduce((s, m) => s + m.commitAmount, 0);
-  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyRepCommits, selectedRep]);
+    }).reduce((s, m) => s + m.commitAmount, 0);
+    if (repTotal > 0) return { value: repTotal, isFallback: true };
+    return null;
+  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyRepCommits, monthlyManagerCommits, selectedRep]);
+  const mgmtCommitTotal = mgmtCommit?.value ?? null;
 
 
 
