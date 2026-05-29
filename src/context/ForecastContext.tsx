@@ -537,12 +537,30 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
 
 
-  const importDrBatch = useCallback((records: DealRegistration[], batch: DrBatch) => {
-    setState(s => ({
-      ...s,
-      dealRegistrations: records,
-      drBatches: [...s.drBatches, batch],
-    }));
+  const importDrBatch = useCallback((
+    incoming: RawDrRecord[],
+    batchMeta: { fileName: string; asOfDate: string; importedAt: string },
+  ) => {
+    setState(s => {
+      const batchId = crypto.randomUUID();
+      const { merged, stats } = mergeDrBatch(s.dealRegistrations, incoming, s.opportunities, batchId, batchMeta.importedAt);
+      const batch: DrBatch = {
+        id: batchId,
+        importedAt: batchMeta.importedAt,
+        fileName: batchMeta.fileName,
+        recordCount: incoming.length,
+        newCount: stats.newCount,
+        updatedCount: stats.updatedCount,
+        rejectedCount: stats.rejectedCount,
+        convertedCount: stats.convertedCount,
+        asOfDate: batchMeta.asOfDate,
+      };
+      return {
+        ...s,
+        dealRegistrations: merged,
+        drBatches: [...s.drBatches, batch],
+      };
+    });
   }, []);
 
   const clearDrData = useCallback(() => {
