@@ -33,6 +33,10 @@ function normHeader(h: string): string {
   return String(h ?? '').trim().toLowerCase();
 }
 
+export function parseExcelDate(raw: unknown): string | undefined {
+  return parseDate(raw);
+}
+
 function parseDate(raw: unknown): string | undefined {
   if (raw === null || raw === undefined || raw === '') return undefined;
   if (typeof raw === 'number' && isFinite(raw)) {
