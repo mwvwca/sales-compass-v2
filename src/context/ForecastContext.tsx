@@ -632,6 +632,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     addRep,
     updateRep,
     deleteRep,
+    setRepActiveStatus,
     importOpportunities,
     classifyOpportunity,
     updateOpportunityAmount,
