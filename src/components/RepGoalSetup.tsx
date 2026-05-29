@@ -129,7 +129,7 @@ export default function RepGoalSetup() {
     if (existing) {
       updateRep({ ...existing, quarterlyGoals: { ...existing.quarterlyGoals, ...yearQuarters } });
     } else {
-      addRep({ id: crypto.randomUUID(), name: name.trim(), quarterlyGoals: yearQuarters });
+      addRep({ id: crypto.randomUUID(), name: name.trim(), quarterlyGoals: yearQuarters, isActive: true });
     }
     setName('');
     setGoal('');
