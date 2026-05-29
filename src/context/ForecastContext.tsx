@@ -11,7 +11,9 @@ import type {
   MonthlyRepCommit,
   DealRegistration,
   DrBatch,
+  RawDrRecord,
 } from '@/types/forecast';
+import { mergeDrBatch } from '@/lib/drMerge';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
 import { getCommissionReviewKey } from '@/lib/commissionUtils';
