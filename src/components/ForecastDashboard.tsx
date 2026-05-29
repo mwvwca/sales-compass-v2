@@ -73,6 +73,20 @@ export default function ForecastDashboard() {
     return Array.from(names).sort();
   }, [opportunities, reps]);
 
+  // Partition rep names into active vs inactive for dropdown grouping.
+  // Inactive = exists in reps and isActive === false. Names that only appear
+  // on historical opportunities (no Rep record) are treated as active.
+  const { activeRepNames, inactiveRepNames } = useMemo(() => {
+    const inactiveSet = new Set(reps.filter(r => r.isActive === false).map(r => r.name));
+    const active: string[] = [];
+    const inactive: string[] = [];
+    for (const n of repNames) {
+      if (inactiveSet.has(n)) inactive.push(n);
+      else active.push(n);
+    }
+    return { activeRepNames: active, inactiveRepNames: inactive };
+  }, [repNames, reps]);
+
   const getRepGoal = (repName: string) => {
     const rep = reps.find(r => normalizeRepName(r.name) === normalizeRepName(repName));
     if (!rep) return 0;
