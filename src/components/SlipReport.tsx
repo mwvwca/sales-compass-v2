@@ -69,7 +69,7 @@ function computeSlips(
     }
 
     // Condition B: classification drop in selectedQuarter
-    const drop = new Set(['unclassified', 'lost', 'omitted', 'rejected']);
+    const drop = new Set(['unclassified', 'lost', 'omitted']);
     const from = new Set(['commit', 'upside']);
     let classDropHit: ChangeLogEntry | null = null;
     for (const e of classChanges) {
