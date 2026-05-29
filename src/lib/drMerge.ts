@@ -114,7 +114,7 @@ export function mergeDrBatch(
           batchId,
         }],
         isSql,
-        sqlDate: isSql ? importedAt : undefined,
+        sqlDate: isSql ? importedAt.slice(0, 10) : undefined,
         status: 'active',
       };
       merged.push(rec);
