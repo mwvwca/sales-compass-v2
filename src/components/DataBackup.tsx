@@ -99,7 +99,7 @@ const drStageHistorySchema = z.object({
   batchId: z.string(),
 });
 
-const drStatusEnum = z.enum(['active', 'stale', 'sql', 'rejected', 'converted', 'closed_won', 'closed_lost', 'padded']);
+const drStatusEnum = z.enum(['active', 'stale', 'sql', 'rejected', 'withdrawn', 'converted', 'closed_won', 'closed_lost', 'padded']);
 
 const dealRegistrationSchema = z.object({
   opportunityId: z.string(),
