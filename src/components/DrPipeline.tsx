@@ -337,7 +337,8 @@ export default function DrPipeline() {
   // ---------- Section C: CAM Lead Quality ----------
   type CamRow = {
     cam: string; registered: number; sqls: number; sqlRate: number;
-    paddedAccts: number; rejected: number; avgAgeAtSql: number; closedWon: number; winRate: number;
+    paddedAccts: number; withdrawn: number; withdrawnRate: number;
+    avgAgeAtSql: number; closedWon: number; winRate: number;
   };
   const camRows: CamRow[] = useMemo(() => {
     const byCam = new Map<string, DealRegistration[]>();
@@ -351,9 +352,10 @@ export default function DrPipeline() {
       const registered = deals.length;
       const sqls = deals.filter(d => d.isSql).length;
       const sqlRate = registered ? sqls / registered : 0;
-      // padded accts: account with 2+ DRs all pre-SQL with no lastActivity
+      // padded accts: account with 2+ DRs all pre-SQL with no lastActivity (exclude rejected)
       const byAcct = new Map<string, DealRegistration[]>();
       for (const d of deals) {
+        if (d.status === 'rejected') continue;
         const a = (d.accountName || '(none)').toLowerCase();
         const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
       }
@@ -361,7 +363,8 @@ export default function DrPipeline() {
       for (const arr of byAcct.values()) {
         if (arr.length >= 2 && arr.every(d => !d.isSql && !d.lastActivity)) paddedAccts++;
       }
-      const rejected = deals.filter(d => d.status === 'rejected').length;
+      const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
+      const withdrawnRate = registered ? withdrawn / registered : 0;
       const sqlDeals = deals.filter(d => d.sqlDate);
       const avgAgeAtSql = sqlDeals.length
         ? sqlDeals.reduce((s, d) => s + daysBetween(d.createdDate, d.sqlDate!), 0) / sqlDeals.length
