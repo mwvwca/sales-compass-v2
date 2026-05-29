@@ -182,7 +182,7 @@ export default function OpportunityGraveyard() {
           <tbody>
             {sorted.map(opp => (
               <tr key={opp.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                <td className="px-4 py-2.5 font-medium">{opp.name}</td>
+                <td className="px-4 py-2.5 font-medium">{opp.name} {opp.classification === 'rejected' && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground align-middle">Rejected</span>}</td>
                 <td className="px-3 py-2.5 text-muted-foreground">
                   <button onClick={() => setSearchQuery(opp.repName)} className="hover:underline hover:text-foreground transition-colors">{opp.repName}</button>
                 </td>
