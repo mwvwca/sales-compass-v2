@@ -270,8 +270,20 @@ export default function DrPipeline() {
       return { rep, assigned, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
+    if (!showInactiveReps) {
+      return rows.filter(r => !inactiveRepNameSet.has(r.rep));
+    }
     return rows;
-  }, [scopeNoStatus]);
+  }, [scopeNoStatus, showInactiveReps, inactiveRepNameSet]);
+
+  const hiddenInactiveCount = useMemo(() => {
+    if (showInactiveReps) return 0;
+    const reps = new Set<string>();
+    for (const d of scopeNoStatus) {
+      if (d.repName && inactiveRepNameSet.has(d.repName)) reps.add(d.repName);
+    }
+    return reps.size;
+  }, [scopeNoStatus, showInactiveReps, inactiveRepNameSet]);
 
   const aeTotals = useMemo(() => {
     const t = aeRows.reduce((acc, r) => {
