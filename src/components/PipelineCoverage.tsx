@@ -34,8 +34,9 @@ export default function PipelineCoverage({ opportunities, allOpportunities, tota
     const earliestQuarter = fullYearQuarters[0];
     const priorOpenPipe = allOpportunities.filter(o => {
       if (!o.closeDate) return false;
-      if (o.classification === 'closed_won' || o.classification === 'lost') return false;
-      if (o.stage.toLowerCase().trim() === 'closed lost' || o.stage.toLowerCase().trim() === 'closed won') return false;
+      if (o.classification === 'closed_won' || o.classification === 'lost' || o.classification === 'rejected' || o.classification === 'omitted') return false;
+      const st = o.stage.toLowerCase().trim();
+      if (st === 'closed lost' || st === 'closed won' || st === 'rejected') return false;
       const q = getQuarter(o.closeDate);
       return q < earliestQuarter;
     }).reduce((s, o) => s + o.amount, 0);
