@@ -58,6 +58,11 @@ export default function RepGoalSetup() {
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [commissionOpen, setCommissionOpen] = useState(false);
   const [mgmtOpen, setMgmtOpen] = useState(false);
+  const [mgrCommitDraft, setMgrCommitDraft] = useState<string>('');
+  const [mgrCommitDraftKey, setMgrCommitDraftKey] = useState<string>('');
+  const [dealListOpen, setDealListOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [viewingSnapshot, setViewingSnapshot] = useState<ForecastSnapshot | null>(null);
 
   // Monthly commit selector — single month at a time
   const currentMonthKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
