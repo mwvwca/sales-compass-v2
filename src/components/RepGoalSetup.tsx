@@ -157,6 +157,152 @@ export default function RepGoalSetup() {
   const defaultQuarters = [1, 2, 3, 4].map(q => `${year}-Q${q}`);
   const quarters = Array.from(new Set([...defaultQuarters, ...reps.flatMap(r => Object.keys(r.quarterlyGoals))])).sort();
 
+  // ----- Active/Inactive partitioning -----
+  const isRepActive = (r: typeof reps[0]) => r.isActive !== false;
+  const activeReps = useMemo(() => reps.filter(isRepActive), [reps]);
+  const inactiveReps = useMemo(() => reps.filter(r => !isRepActive(r)), [reps]);
+
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [deactivateNote, setDeactivateNote] = useState('');
+  const deactivateNoteRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (deactivateNoteRef.current) {
+      deactivateNoteRef.current.style.height = 'auto';
+      deactivateNoteRef.current.style.height = `${deactivateNoteRef.current.scrollHeight}px`;
+    }
+  }, [deactivateNote, deactivatingId]);
+
+  const openDeactivate = (repId: string) => {
+    setDeactivatingId(repId);
+    setDeactivateNote('');
+  };
+  const confirmDeactivate = (rep: typeof reps[0]) => {
+    setRepActiveStatus(rep.id, false, deactivateNote);
+    setDeactivatingId(null);
+    setDeactivateNote('');
+    toast({ title: `${rep.name} marked inactive`, description: 'Historical data preserved.' });
+  };
+  const reactivate = (rep: typeof reps[0]) => {
+    setRepActiveStatus(rep.id, true);
+    toast({ title: `${rep.name} reactivated` });
+  };
+
+  // Reps to show in the monthly commit grid:
+  // - current/future months: only active reps
+  // - past months: active reps + inactive reps that have a saved commit for that month
+  const commitGridReps = useMemo(() => {
+    if (selectedMonth >= currentMonthKey) return activeReps;
+    const inactiveWithHistory = inactiveReps.filter(r => !!getMonthlyRepCommit(r.id, selectedMonth));
+    return [...activeReps, ...inactiveWithHistory];
+  }, [activeReps, inactiveReps, selectedMonth, currentMonthKey, monthlyRepCommits]);
+
+  const renderRepGoalRow = (rep: typeof reps[0]) => {
+    const inactive = !isRepActive(rep);
+    const isConfirming = deactivatingId === rep.id;
+    return (
+      <>
+        <tr key={rep.id} className={`border-b border-border last:border-0 hover:bg-secondary/30 transition-colors ${inactive ? 'opacity-60' : ''}`}>
+          <td className="px-4 py-2.5 font-medium">
+            <div className="flex items-center gap-2">
+              <span>{rep.name}</span>
+              {inactive ? (
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted/40">
+                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" /> Inactive
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-positive/40 text-positive bg-positive/10">
+                  <span className="h-1.5 w-1.5 rounded-full bg-positive" /> Active
+                </span>
+              )}
+            </div>
+            {inactive && rep.inactivatedNote && (
+              <p className="mt-1 text-[11px] text-muted-foreground italic max-w-md whitespace-pre-wrap">{rep.inactivatedNote}</p>
+            )}
+            {inactive && rep.inactivatedAt && (
+              <p className="text-[10px] text-muted-foreground">Marked inactive {new Date(rep.inactivatedAt).toLocaleDateString()}</p>
+            )}
+          </td>
+          {quarters.map(q => {
+            const isEditing = editingId === `${rep.id}-${q}`;
+            const val = rep.quarterlyGoals[q];
+            return (
+              <td key={q} className="text-right px-4 py-2.5 font-mono">
+                {isEditing ? (
+                  <span className="inline-flex items-center gap-1">
+                    <input type="number" value={editGoal} onChange={e => setEditGoal(e.target.value)} className="w-24 bg-secondary border border-border rounded px-2 py-1 text-right text-sm font-mono" autoFocus />
+                    <button onClick={() => saveEdit(rep, q)} title="Save this quarter" className="text-positive"><Check size={14} /></button>
+                    <button onClick={() => saveEdit(rep, q, true)} title="Apply to all quarters this year" className="text-muted-foreground hover:text-foreground"><Copy size={14} /></button>
+                    <button onClick={() => setEditingId(null)} className="text-negative"><X size={14} /></button>
+                  </span>
+                ) : val !== undefined ? (
+                  <span className="cursor-pointer hover:text-foreground text-secondary-foreground" onClick={() => startEdit(rep.id, q, val)}>
+                    {val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
+            );
+          })}
+          <td className="px-2">
+            <div className="flex items-center justify-end gap-1">
+              {inactive ? (
+                <button
+                  onClick={() => reactivate(rep)}
+                  title="Reactivate rep"
+                  className="text-muted-foreground hover:text-positive transition-colors p-1 inline-flex items-center gap-1 text-[11px]"
+                >
+                  <RotateCcw size={12} /> Reactivate
+                </button>
+              ) : (
+                <button
+                  onClick={() => openDeactivate(rep.id)}
+                  title="Mark inactive"
+                  className="text-muted-foreground hover:text-foreground transition-colors p-1 text-[11px]"
+                >
+                  Mark inactive
+                </button>
+              )}
+              <button onClick={() => deleteRep(rep.id)} title="Delete rep" className="text-muted-foreground hover:text-negative transition-colors p-1">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </td>
+        </tr>
+        {isConfirming && (
+          <tr className="bg-secondary/40 border-b border-border">
+            <td colSpan={quarters.length + 2} className="px-4 py-3">
+              <div className="space-y-2 max-w-2xl">
+                <p className="text-xs font-medium text-foreground">Mark {rep.name} as inactive?</p>
+                <Textarea
+                  ref={deactivateNoteRef}
+                  placeholder="Note (e.g. left team, territory reassigned)"
+                  value={deactivateNote}
+                  onChange={(e) => setDeactivateNote(e.target.value)}
+                  className="min-h-[60px] resize-none overflow-hidden text-xs"
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = `${target.scrollHeight}px`;
+                  }}
+                />
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => confirmDeactivate(rep)}>
+                    <Check size={12} className="mr-1" /> Confirm
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setDeactivatingId(null); setDeactivateNote(''); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="space-y-8">
       <Collapsible open={goalsOpen} onOpenChange={setGoalsOpen} className="space-y-4">
