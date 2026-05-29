@@ -23,6 +23,7 @@ export default function RepGoalSetup() {
     addRep,
     updateRep,
     deleteRep,
+    setRepActiveStatus,
     commissionSettings,
     commissionReviews,
     commissionPinHash,
