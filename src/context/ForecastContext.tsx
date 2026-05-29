@@ -187,16 +187,27 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
     const migrated = opportunities.map(o => {
       const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
-      if (stageNorm === 'closed won' && o.classification !== 'closed_won' && o.classification !== 'omitted' && o.classification !== 'lost') {
+      const terminal = o.classification === 'closed_won' || o.classification === 'omitted' || o.classification === 'lost' || o.classification === 'rejected';
+      if (stageNorm === 'closed won' && !terminal) {
         return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
       }
-      if (stageNorm === 'closed lost' && o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'closed_won') {
+      if (stageNorm === 'closed lost' && o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'rejected') {
         return {
           ...o,
           previousClassification: o.classification,
           classification: 'lost' as const,
           lostDate: o.lostDate || new Date().toISOString(),
           lostReason: o.lostReason || 'Closed Lost in Salesforce',
+          movedAt: new Date().toISOString(),
+        };
+      }
+      if (stageNorm === 'rejected' && o.classification !== 'rejected' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'lost') {
+        return {
+          ...o,
+          previousClassification: o.classification,
+          classification: 'rejected' as const,
+          lostDate: o.lostDate || new Date().toISOString(),
+          lostReason: o.lostReason || 'Rejected in Salesforce',
           movedAt: new Date().toISOString(),
         };
       }
