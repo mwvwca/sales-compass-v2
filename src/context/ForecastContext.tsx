@@ -459,7 +459,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({
       ...s,
       opportunities: s.opportunities.map(o =>
-        o.id === id ? { ...o, classification: (o.previousClassification && o.previousClassification !== 'lost' ? o.previousClassification : 'unclassified') as Opportunity['classification'], lostDate: undefined, lostReason: undefined } : o,
+        o.id === id ? { ...o, classification: (o.previousClassification && o.previousClassification !== 'lost' && o.previousClassification !== 'rejected' ? o.previousClassification : 'unclassified') as Opportunity['classification'], lostDate: undefined, lostReason: undefined } : o,
       ),
     }));
   }, []);
