@@ -803,6 +803,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     commissionReviews?: CommissionReviewsMap;
     commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
+    monthlyManagerCommits?: MonthlyManagerCommit[];
+    forecastPromotions?: ForecastPromotion[];
+    forecastSnapshots?: ForecastSnapshot[];
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
   }) => {
@@ -817,6 +820,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       commissionReviews: data.commissionReviews || {},
       commissionPinHash: data.commissionPinHash ?? null,
       monthlyRepCommits: data.monthlyRepCommits || [],
+      monthlyManagerCommits: data.monthlyManagerCommits || [],
+      forecastPromotions: data.forecastPromotions || [],
+      forecastSnapshots: data.forecastSnapshots || [],
       dealRegistrations: data.dealRegistrations || [],
       drBatches: data.drBatches || [],
     }));
