@@ -136,6 +136,8 @@ interface ForecastState {
   forecastSnapshots: ForecastSnapshot[];
   dealRegistrations: DealRegistration[];
   drBatches: DrBatch[];
+  managerQuotas: ManagerQuota[];
+
 
   loading: boolean;
 }
