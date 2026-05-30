@@ -601,13 +601,21 @@ export default function DrPipeline() {
 
   const confirmImport = () => {
     if (!pending) return;
+    const importedAt = new Date().toISOString();
+    const batchId = `batch_${Date.now()}`;
+    const { merged } = mergeDrBatch(dealRegistrations, pending.records, opportunities, batchId, importedAt);
     importDrBatch(pending.records, {
       fileName: pending.fileName,
       asOfDate: pending.asOfDate,
-      importedAt: new Date().toISOString(),
+      importedAt,
     });
     setPending(null); setShowUploader(false);
-    toast({ title: 'DR batch merged', description: `${pending.preview.newCount} new · ${pending.preview.updatedCount} updated · ${pending.preview.convertedCount} converted · ${pending.preview.rejectedCount} rejected` });
+    const oppsWithSfId = opportunities.filter(o => o.salesforceId).length;
+    const closedWonMatches = merged.filter(d => d.status === 'closed_won').length;
+    toast({
+      title: 'DR Import Complete',
+      description: `${pending.records.length} records parsed · ${closedWonMatches} closed won matched · ${oppsWithSfId}/${opportunities.length} pipeline opps have Salesforce ID`,
+    });
   };
 
   // ---------- Export ----------
