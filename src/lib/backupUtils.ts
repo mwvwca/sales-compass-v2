@@ -8,6 +8,7 @@ import type {
   MonthlyManagerCommit,
   ForecastPromotion,
   ForecastSnapshot,
+  ManagerQuota,
   CommissionSettingsMap,
   CommissionReviewsMap,
 } from '@/types/forecast';
