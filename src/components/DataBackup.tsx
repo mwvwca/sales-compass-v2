@@ -240,6 +240,7 @@ export default function DataBackup() {
     monthlyManagerCommits,
     forecastPromotions,
     forecastSnapshots,
+    managerQuotas,
     restoreFromBackup,
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -259,6 +260,7 @@ export default function DataBackup() {
       monthlyManagerCommits,
       forecastPromotions,
       forecastSnapshots,
+      managerQuotas,
     });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };
