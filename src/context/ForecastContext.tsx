@@ -177,6 +177,8 @@ interface ForecastContextValue extends ForecastState {
     batchMeta: { fileName: string; asOfDate: string; importedAt: string },
   ) => void;
   clearDrData: () => void;
+  setManagerQuota: (year: number, amount: number, notes?: string) => void;
+  getManagerQuota: (year: number) => ManagerQuota | undefined;
   restoreFromBackup: (data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -192,7 +194,9 @@ interface ForecastContextValue extends ForecastState {
     forecastSnapshots?: ForecastSnapshot[];
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
+    managerQuotas?: ManagerQuota[];
   }) => void;
+
 
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
 }
