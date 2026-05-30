@@ -119,10 +119,23 @@ export default function ForecastDashboard() {
   const totalCommit = hudOpps.filter(o => o.classification === 'commit').reduce((s, o) => s + o.amount, 0);
   const totalUpside = hudOpps.filter(o => o.classification === 'upside').reduce((s, o) => s + o.amount, 0);
 
+  const activeYear = anchor.getUTCFullYear();
+  const managerQuotaRecord = getManagerQuota(activeYear);
+  const managerQuotaProrated = useMemo(() => {
+    if (!managerQuotaRecord || selectedRep !== 'all') return 0;
+    const annual = managerQuotaRecord.annualAmount;
+    if (scope === 'annual') return annual;
+    if (scope === 'quarterly') return annual / 4;
+    if (scope === 'monthly') return annual / 12;
+    if (scope === 'weekly') return annual / 52;
+    return 0;
+  }, [managerQuotaRecord, selectedRep, scope]);
+
   const totalGoal = useMemo(() => {
     const activeReps = selectedRep === 'all' ? allRepNames : [selectedRep];
-    return activeReps.reduce((sum, name) => sum + getRepGoal(name), 0);
-  }, [selectedRep, allRepNames, reps, scopeQuarters, goalDivisor]);
+    const repTotal = activeReps.reduce((sum, name) => sum + getRepGoal(name), 0);
+    return repTotal + managerQuotaProrated;
+  }, [selectedRep, allRepNames, reps, scopeQuarters, goalDivisor, managerQuotaProrated]);
 
   const variance = totalWon - totalGoal;
 
