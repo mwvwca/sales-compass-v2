@@ -928,6 +928,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     deleteForecastSnapshot,
     importDrBatch,
     clearDrData,
+    setManagerQuota,
+    getManagerQuota,
     restoreFromBackup,
     getOpportunityHistory,
   };
