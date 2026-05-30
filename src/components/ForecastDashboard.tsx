@@ -306,7 +306,7 @@ export default function ForecastDashboard() {
           <div className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">AE Quota</p>
             <p className="text-xl font-mono font-semibold">{fmt(totalGoal)}</p>
-            <p className="text-xs font-mono mt-0.5 text-muted-foreground">Sum of rep quotas</p>
+            <p className="text-xs font-mono mt-0.5 text-muted-foreground">{managerQuotaProrated > 0 ? 'Rep quotas + manager quota' : 'Sum of rep quotas'}</p>
           </div>
           <div className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Mgmt Commit</p>
