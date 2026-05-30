@@ -20,7 +20,7 @@ import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentation
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, changelog } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('quarterly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
@@ -119,10 +119,23 @@ export default function ForecastDashboard() {
   const totalCommit = hudOpps.filter(o => o.classification === 'commit').reduce((s, o) => s + o.amount, 0);
   const totalUpside = hudOpps.filter(o => o.classification === 'upside').reduce((s, o) => s + o.amount, 0);
 
+  const activeYear = anchor.getUTCFullYear();
+  const managerQuotaRecord = getManagerQuota(activeYear);
+  const managerQuotaProrated = useMemo(() => {
+    if (!managerQuotaRecord || selectedRep !== 'all') return 0;
+    const annual = managerQuotaRecord.annualAmount;
+    if (scope === 'annual') return annual;
+    if (scope === 'quarterly') return annual / 4;
+    if (scope === 'monthly') return annual / 12;
+    if (scope === 'weekly') return annual / 52;
+    return 0;
+  }, [managerQuotaRecord, selectedRep, scope]);
+
   const totalGoal = useMemo(() => {
     const activeReps = selectedRep === 'all' ? allRepNames : [selectedRep];
-    return activeReps.reduce((sum, name) => sum + getRepGoal(name), 0);
-  }, [selectedRep, allRepNames, reps, scopeQuarters, goalDivisor]);
+    const repTotal = activeReps.reduce((sum, name) => sum + getRepGoal(name), 0);
+    return repTotal + managerQuotaProrated;
+  }, [selectedRep, allRepNames, reps, scopeQuarters, goalDivisor, managerQuotaProrated]);
 
   const variance = totalWon - totalGoal;
 
@@ -293,7 +306,7 @@ export default function ForecastDashboard() {
           <div className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">AE Quota</p>
             <p className="text-xl font-mono font-semibold">{fmt(totalGoal)}</p>
-            <p className="text-xs font-mono mt-0.5 text-muted-foreground">Sum of rep quotas</p>
+            <p className="text-xs font-mono mt-0.5 text-muted-foreground">{managerQuotaProrated > 0 ? 'Rep quotas + manager quota' : 'Sum of rep quotas'}</p>
           </div>
           <div className="bg-card border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Mgmt Commit</p>

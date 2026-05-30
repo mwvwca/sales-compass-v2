@@ -78,6 +78,15 @@ export interface MonthlyManagerCommit {
   updatedAt: string;
 }
 
+export interface ManagerQuota {
+  id: string;
+  annualAmount: number;
+  year: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ForecastPromotion {
   opportunityId: string;
   monthKey: string;

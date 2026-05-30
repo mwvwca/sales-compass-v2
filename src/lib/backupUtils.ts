@@ -8,6 +8,7 @@ import type {
   MonthlyManagerCommit,
   ForecastPromotion,
   ForecastSnapshot,
+  ManagerQuota,
   CommissionSettingsMap,
   CommissionReviewsMap,
 } from '@/types/forecast';
@@ -25,6 +26,7 @@ export interface BackupPayload {
   commissionReviews: CommissionReviewsMap;
   commissionPinHash: string | null;
   snapshots?: OpportunitySnapshot[];
+  managerQuotas?: ManagerQuota[];
 }
 
 export function downloadBackupNow(data: BackupPayload, fileNamePrefix = 'forecast-backup'): void {

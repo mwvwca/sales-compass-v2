@@ -38,6 +38,9 @@ export default function RepGoalSetup() {
     monthlyManagerCommits,
     forecastPromotions,
     forecastSnapshots,
+    managerQuotas,
+    setManagerQuota,
+    getManagerQuota,
     setMonthlyRepCommit,
     getMonthlyRepCommit,
     setMonthlyManagerCommit,
@@ -63,6 +66,34 @@ export default function RepGoalSetup() {
   const [dealListOpen, setDealListOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [viewingSnapshot, setViewingSnapshot] = useState<ForecastSnapshot | null>(null);
+
+  // Manager quota state
+  const currentYear = new Date().getFullYear();
+  const [mqYear, setMqYear] = useState<number>(currentYear);
+  const mqRecord = getManagerQuota(mqYear);
+  const [mqAmountDraft, setMqAmountDraft] = useState<string>('');
+  const [mqNotesDraft, setMqNotesDraft] = useState<string>('');
+  const [mqYearKey, setMqYearKey] = useState<number>(mqYear);
+  const effectiveMqAmount = mqYearKey === mqYear ? mqAmountDraft : (mqRecord ? String(mqRecord.annualAmount) : '');
+  const effectiveMqNotes = mqYearKey === mqYear ? mqNotesDraft : (mqRecord?.notes ?? '');
+
+  const yearOptions = useMemo(() => {
+    const list: number[] = [];
+    for (let y = currentYear - 2; y <= currentYear + 3; y++) list.push(y);
+    return list;
+  }, [currentYear]);
+
+  const handleSaveManagerQuota = () => {
+    const amount = parseFloat(effectiveMqAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
+      return;
+    }
+    setManagerQuota(mqYear, amount, effectiveMqNotes);
+    triggerBackup();
+    toast({ title: 'Manager quota saved and backup downloaded' });
+  };
+
 
   // Monthly commit selector — single month at a time
   const currentMonthKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
@@ -109,6 +140,7 @@ export default function RepGoalSetup() {
       monthlyManagerCommits,
       forecastPromotions,
       forecastSnapshots,
+      managerQuotas,
     });
   };
 
@@ -428,9 +460,73 @@ export default function RepGoalSetup() {
     );
   };
 
+  // Warning: active reps missing a quota for the current quarter
+  const currentQuarter = getQuarter(new Date().toISOString());
+  const repsMissingQuota = activeReps.filter(r => !r.quarterlyGoals[currentQuarter] || r.quarterlyGoals[currentQuarter] <= 0);
+
+  const mqAnnual = mqRecord?.annualAmount ?? (parseFloat(effectiveMqAmount) || 0);
+  const mqQuarterly = mqAnnual / 4;
+  const mqMonthly = mqAnnual / 12;
+
   return (
     <div className="space-y-8">
+      {/* My Quota — manager's annual territory quota */}
+      <div className="rounded-lg border-2 border-primary/60 bg-primary/5 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">My quota</p>
+            <p className="text-xs text-muted-foreground max-w-xl">
+              Your annual quota assigned by the business. No opportunities are tied to this number — it represents territory expectation.
+            </p>
+          </div>
+          <select
+            value={mqYear}
+            onChange={e => { const y = parseInt(e.target.value); setMqYear(y); setMqYearKey(y); setMqAmountDraft(''); setMqNotesDraft(''); }}
+            className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_auto] gap-3 items-end">
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Annual amount</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+              <input
+                type="number"
+                value={effectiveMqAmount}
+                onChange={e => { setMqYearKey(mqYear); setMqAmountDraft(e.target.value); }}
+                placeholder="0"
+                className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-base font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Notes</label>
+            <input
+              type="text"
+              value={effectiveMqNotes}
+              onChange={e => { setMqYearKey(mqYear); setMqNotesDraft(e.target.value); }}
+              placeholder="Optional context"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <Button onClick={handleSaveManagerQuota} size="sm" className="gap-1.5">
+            <Check size={14} /> Save
+          </Button>
+        </div>
+        <div className="flex items-center gap-4 text-xs flex-wrap text-muted-foreground">
+          <span>Quarterly: <span className="font-mono text-foreground">{fmtMoney(mqQuarterly)}</span></span>
+          <span>·</span>
+          <span>Monthly: <span className="font-mono text-foreground">{fmtMoney(mqMonthly)}</span></span>
+          {mqRecord?.updatedAt && (
+            <span className="ml-auto">Last saved: {fmtTs(mqRecord.updatedAt)}</span>
+          )}
+        </div>
+      </div>
+
       <Collapsible open={goalsOpen} onOpenChange={setGoalsOpen} className="space-y-4">
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Rep quarterly goals</h2>
@@ -479,6 +575,13 @@ export default function RepGoalSetup() {
             </button>
           </div>
 
+          {repsMissingQuota.length > 0 && (
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <span className="font-semibold">⚠ {repsMissingQuota.length} active rep{repsMissingQuota.length === 1 ? '' : 's'}</span>{' '}
+              {repsMissingQuota.length === 1 ? 'has' : 'have'} no quota set for {currentQuarter}: {repsMissingQuota.map(r => r.name).join(', ')}.
+              <span className="block text-[11px] opacity-90 mt-0.5">Set their quotas to ensure accurate team totals.</span>
+            </div>
+          )}
           {reps.length > 0 && (
             <div className="border border-border rounded-md overflow-hidden">
               <table className="w-full text-sm">
@@ -613,28 +716,44 @@ export default function RepGoalSetup() {
           )}
 
           {/* Rollup */}
-          {reps.length > 0 && (
-            <div className="border border-border rounded-md p-3 bg-secondary/30 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total commit</p>
-                <p className="text-sm font-mono font-semibold text-commit">{fmtMoney(rollup.commitTotal)}</p>
+          {reps.length > 0 && (() => {
+            const selectedYear = parseInt(selectedMonth.split('-')[0]);
+            const mqForMonth = getManagerQuota(selectedYear);
+            const managerMonthlyQuota = mqForMonth ? mqForMonth.annualAmount / 12 : 0;
+            const teamQuotaTotal = rollup.quotaTotal + managerMonthlyQuota;
+            const teamGap = teamQuotaTotal - rollup.commitTotal;
+            return (
+              <div className="border border-border rounded-md p-3 bg-secondary/30 space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total commit</p>
+                    <p className="text-sm font-mono font-semibold text-commit">{fmtMoney(rollup.commitTotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AE quota total</p>
+                    <p className="text-sm font-mono font-semibold">{fmtMoney(teamQuotaTotal)}</p>
+                    <p className="text-[10px] text-muted-foreground">Reps (Q÷3) + Manager (Annual÷12)</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gap</p>
+                    <p className={`text-sm font-mono font-semibold ${teamGap > 0 ? 'text-negative' : 'text-positive'}`}>
+                      {fmtMoney(teamGap)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {teamGap > 0 ? 'Commits below quota' : 'Commits meet/exceed quota'}
+                    </p>
+                  </div>
+                </div>
+                <div className="border-t border-border/60 pt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                  <span className="text-muted-foreground">Rep quota total: <span className="font-mono text-foreground">{fmtMoney(rollup.quotaTotal)}</span></span>
+                  <span className="text-muted-foreground">Manager quota: <span className="font-mono text-foreground">{fmtMoney(managerMonthlyQuota)}</span></span>
+                  <span className="text-muted-foreground">Team total: <span className="font-mono text-foreground">{fmtMoney(teamQuotaTotal)}</span></span>
+                  <span className="text-muted-foreground">Your commit: <span className="font-mono text-foreground">{fmtMoney(rollup.commitTotal)}</span></span>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AE quota total</p>
-                <p className="text-sm font-mono font-semibold">{fmtMoney(rollup.quotaTotal)}</p>
-                <p className="text-[10px] text-muted-foreground">Q goal ÷ 3</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gap</p>
-                <p className={`text-sm font-mono font-semibold ${rollup.gap > 0 ? 'text-negative' : 'text-positive'}`}>
-                  {fmtMoney(rollup.gap)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {rollup.gap > 0 ? 'Commits below quota' : 'Commits meet/exceed quota'}
-                </p>
-              </div>
-            </div>
-          )}
+            );
+          })()}
+
 
           {/* Forecast deal list */}
           <Collapsible open={dealListOpen} onOpenChange={setDealListOpen} className="space-y-3 border-t border-border pt-4">

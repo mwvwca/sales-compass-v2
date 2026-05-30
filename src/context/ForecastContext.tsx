@@ -10,6 +10,7 @@ import type {
   RepCommissionSettings,
   MonthlyRepCommit,
   MonthlyManagerCommit,
+  ManagerQuota,
   ForecastPromotion,
   ForecastSnapshot,
   ForecastDealLine,
@@ -39,6 +40,7 @@ const STORAGE_KEYS = {
   forecastSnapshots: 'forecast_forecast_snapshots',
   dealRegistrations: 'forecast_deal_registrations',
   drBatches: 'forecast_dr_batches',
+  managerQuotas: 'forecast_manager_quotas',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -134,6 +136,8 @@ interface ForecastState {
   forecastSnapshots: ForecastSnapshot[];
   dealRegistrations: DealRegistration[];
   drBatches: DrBatch[];
+  managerQuotas: ManagerQuota[];
+
 
   loading: boolean;
 }
@@ -173,6 +177,8 @@ interface ForecastContextValue extends ForecastState {
     batchMeta: { fileName: string; asOfDate: string; importedAt: string },
   ) => void;
   clearDrData: () => void;
+  setManagerQuota: (year: number, amount: number, notes?: string) => void;
+  getManagerQuota: (year: number) => ManagerQuota | undefined;
   restoreFromBackup: (data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -188,7 +194,9 @@ interface ForecastContextValue extends ForecastState {
     forecastSnapshots?: ForecastSnapshot[];
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
+    managerQuotas?: ManagerQuota[];
   }) => void;
+
 
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
 }
@@ -265,6 +273,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         stageHistory: dr.stageHistory ?? [],
       })),
       drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
+      managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
+
 
       loading: false,
     };
@@ -291,6 +301,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.forecastSnapshots, state.forecastSnapshots);
     saveToStorage(STORAGE_KEYS.dealRegistrations, state.dealRegistrations);
     saveToStorage(STORAGE_KEYS.drBatches, state.drBatches);
+    saveToStorage(STORAGE_KEYS.managerQuotas, state.managerQuotas);
 
 
     const sizeKB = getStorageSizeKB();
@@ -312,6 +323,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.forecastSnapshots,
     state.dealRegistrations,
     state.drBatches,
+    state.managerQuotas,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
@@ -816,6 +828,29 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, dealRegistrations: [], drBatches: [] }));
   }, []);
 
+  const setManagerQuota = useCallback((year: number, amount: number, notes?: string) => {
+    setState(s => {
+      const now = new Date().toISOString();
+      const existing = s.managerQuotas.find(q => q.year === year);
+      const next: ManagerQuota = existing
+        ? { ...existing, annualAmount: amount, notes: notes?.trim() || undefined, updatedAt: now }
+        : {
+            id: crypto.randomUUID(),
+            year,
+            annualAmount: amount,
+            notes: notes?.trim() || undefined,
+            createdAt: now,
+            updatedAt: now,
+          };
+      const others = s.managerQuotas.filter(q => q.year !== year);
+      return { ...s, managerQuotas: [...others, next] };
+    });
+  }, []);
+
+  const getManagerQuota = useCallback((year: number): ManagerQuota | undefined => {
+    return state.managerQuotas.find(q => q.year === year);
+  }, [state.managerQuotas]);
+
   const restoreFromBackup = useCallback((data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -831,6 +866,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     forecastSnapshots?: ForecastSnapshot[];
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
+    managerQuotas?: ManagerQuota[];
   }) => {
     setState(s => ({
       ...s,
@@ -848,8 +884,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       forecastSnapshots: data.forecastSnapshots || [],
       dealRegistrations: data.dealRegistrations || [],
       drBatches: data.drBatches || [],
+      managerQuotas: data.managerQuotas || [],
     }));
   }, []);
+
 
   const getOpportunityHistory = useCallback((opportunityId: string): OpportunitySnapshot[] => {
     return state.snapshots
@@ -890,6 +928,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     deleteForecastSnapshot,
     importDrBatch,
     clearDrData,
+    setManagerQuota,
+    getManagerQuota,
     restoreFromBackup,
     getOpportunityHistory,
   };
