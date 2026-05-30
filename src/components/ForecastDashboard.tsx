@@ -112,8 +112,8 @@ export default function ForecastDashboard() {
     });
   }, [opportunities, inScope, selectedRep]);
 
-  // HUD totals (exclude omitted from totals)
-  const hudOpps = useMemo(() => listOpps.filter(o => o.classification !== 'omitted'), [listOpps]);
+  // HUD totals (exclude omitted and rejected from totals)
+  const hudOpps = useMemo(() => listOpps.filter(o => o.classification !== 'omitted' && o.classification !== 'rejected'), [listOpps]);
   const totalPipe = hudOpps.reduce((s, o) => s + o.amount, 0);
   const totalWon = hudOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
   const totalCommit = hudOpps.filter(o => o.classification === 'commit').reduce((s, o) => s + o.amount, 0);
