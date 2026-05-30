@@ -269,6 +269,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         stageHistory: dr.stageHistory ?? [],
       })),
       drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
+      managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
+
 
       loading: false,
     };
