@@ -19,8 +19,10 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
     const isClosedLost = stageLower === 'closed lost' || stageLower === 'omitted';
     const isForecast = isTruthyForecastFlag(row.Forecast);
     const isUpside = isTruthyUpsideFlag(row.Upside);
+    const sfid = row["Opportunity ID"] || undefined;
     return {
-      id: row["Opportunity ID"] || `import-${Date.now()}-${i}`,
+      id: sfid || `import-${Date.now()}-${i}`,
+      salesforceId: sfid,
       name: row["Opportunity Name"] || 'Unknown',
       repId: '',
       repName: row["Opportunity Owner"] || 'Unassigned',

@@ -33,6 +33,8 @@ export type CommissionReviewsMap = Record<string, CommissionMonthlyReview>;
 
 export interface Opportunity {
   id: string;
+  /** Salesforce Opportunity ID (e.g. '006Vy000017OsIs') — stable join key across imports/DR. */
+  salesforceId?: string;
   name: string;
   repId: string;
   repName: string;

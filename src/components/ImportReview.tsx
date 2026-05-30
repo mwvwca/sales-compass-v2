@@ -43,16 +43,28 @@ interface ReviewItem {
 export default function ImportReview({ incoming, fileName, onDone, onCancel, detectedHeaders = [], columnMapping = {} }: Props) {
   const { opportunities, importOpportunities, archiveToGraveyard } = useForecast();
 
-  const existingMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
+  const existingById = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
+  const existingBySfId = useMemo(
+    () => new Map(opportunities.filter(o => o.salesforceId).map(o => [o.salesforceId!, o])),
+    [opportunities],
+  );
+  const findExisting = (opp: Opportunity): Opportunity | undefined =>
+    (opp.salesforceId && existingBySfId.get(opp.salesforceId)) ||
+    existingById.get(opp.id) ||
+    (opp.salesforceId && existingById.get(opp.salesforceId)) ||
+    undefined;
 
   // Reps present in the incoming file — only flag removals for these reps
   const incomingRepNames = useMemo(() => new Set(incoming.map(o => normalizeRepName(o.repName))), [incoming]);
-  const incomingIds = useMemo(() => new Set(incoming.map(o => o.id)), [incoming]);
+  const incomingMatchedExistingIds = useMemo(
+    () => new Set(incoming.map(o => findExisting(o)?.id).filter(Boolean) as string[]),
+    [incoming, existingById, existingBySfId],
+  );
 
   const [showAllUnmatched, setShowAllUnmatched] = useState(false);
 
   const buildIncomingItems = (): ReviewItem[] => incoming.map(opp => {
-    const existing = existingMap.get(opp.id);
+    const existing = findExisting(opp);
     if (!existing) {
       return { opportunity: opp, changeType: 'new' as ChangeType, changes: [], selected: true };
     }
@@ -76,7 +88,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
   });
 
   const buildRemovedItems = (allUnmatched: boolean): ReviewItem[] => opportunities
-    .filter(o => o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'rejected' && !incomingIds.has(o.id) && (allUnmatched || incomingRepNames.has(normalizeRepName(o.repName))))
+    .filter(o => o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'rejected' && !incomingMatchedExistingIds.has(o.id) && (allUnmatched || incomingRepNames.has(normalizeRepName(o.repName))))
     .map(o => ({
       opportunity: o,
       existing: o,

@@ -211,9 +211,11 @@ export default function ImportSheet() {
         const importDate = new Date().toISOString();
         const opps: Opportunity[] = rows.map((row, i) => {
           const closeDate = parseImportDate(row[mapping.closeDate || '']);
+          const sfid = String(row[mapping.id || ''] || '').trim() || undefined;
 
           return {
-            id: String(row[mapping.id || ''] || `import-${Date.now()}-${i}`).trim(),
+            id: sfid || `import-${Date.now()}-${i}`,
+            salesforceId: sfid,
             name: String(row[mapping.name || ''] || 'Unknown'),
             repId: '',
             repName: String(row[mapping.repName || ''] || 'Unassigned'),

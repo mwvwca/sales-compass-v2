@@ -84,7 +84,11 @@ export function mergeDrBatch(
 ): { merged: DealRegistration[]; stats: DrBatchStats } {
   const existingMap = new Map(existing.map(d => [d.opportunityId, d]));
   const incomingMap = new Map(incoming.map(d => [d.opportunityId, d]));
-  const oppMap = new Map(opportunities.map(o => [o.id, o]));
+  const oppMap = new Map(
+    opportunities
+      .filter(o => o.salesforceId)
+      .map(o => [o.salesforceId!, o])
+  );
 
   let newCount = 0;
   let updatedCount = 0;
