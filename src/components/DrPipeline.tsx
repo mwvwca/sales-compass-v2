@@ -221,6 +221,7 @@ export default function DrPipeline() {
 
   // ---------- Apply filters ----------
   const periodRange = useMemo(() => getPeriodRange(period), [period]);
+  const timelineRange = useMemo(() => getPeriodRange(timelinePeriod), [timelinePeriod]);
 
   const filtered = useMemo(() => {
     return dealRegistrations.filter(d => {
@@ -231,6 +232,16 @@ export default function DrPipeline() {
       return true;
     });
   }, [dealRegistrations, camFilter, repFilter, periodRange, statuses]);
+
+  const timelineFiltered = useMemo(() => {
+    return dealRegistrations.filter(d => {
+      if (camFilter !== 'all' && (d.channelAccountManager || '(none)') !== camFilter) return false;
+      if (repFilter !== 'all' && d.repName !== repFilter) return false;
+      if (!inRange(d.createdDate, timelineRange)) return false;
+      if (statuses.size > 0 && !statuses.has(d.status)) return false;
+      return true;
+    });
+  }, [dealRegistrations, camFilter, repFilter, timelineRange, statuses]);
 
   // Section-B "scope" ignores statuses (so all rows show) but applies cam/rep/period
   const scopeNoStatus = useMemo(() => {
