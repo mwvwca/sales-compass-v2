@@ -112,6 +112,7 @@ export default function RepGoalSetup() {
       monthlyManagerCommits,
       forecastPromotions,
       forecastSnapshots,
+      managerQuotas,
     });
   };
 
