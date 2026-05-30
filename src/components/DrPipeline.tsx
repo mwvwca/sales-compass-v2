@@ -502,9 +502,9 @@ export default function DrPipeline() {
   // Conversion timeline
   const timeline = useMemo(() => {
     const oppMap = new Map(opportunities.map(o => [o.id, o]));
-    const toSql = filtered.filter(d => d.sqlDate && d.createdDate).map(d => daysBetween(d.createdDate, d.sqlDate!));
-    const toConv = filtered.filter(d => d.convertedAt && d.createdDate).map(d => daysBetween(d.createdDate, d.convertedAt!));
-    const toWon = filtered.filter(d => d.status === 'closed_won' && d.createdDate)
+    const toSql = timelineFiltered.filter(d => d.sqlDate && d.createdDate).map(d => daysBetween(d.createdDate, d.sqlDate!));
+    const toConv = timelineFiltered.filter(d => d.convertedAt && d.createdDate).map(d => daysBetween(d.createdDate, d.convertedAt!));
+    const toWon = timelineFiltered.filter(d => d.status === 'closed_won' && d.createdDate)
       .map(d => {
         const opp = oppMap.get(d.opportunityId);
         if (!opp?.closeDate) return null;
@@ -517,7 +517,7 @@ export default function DrPipeline() {
       { label: 'Created → Converted to Pipeline', avg: avg(toConv), n: toConv.length },
       { label: 'Created → Closed Won', avg: avg(toWon), n: toWon.length },
     ];
-  }, [filtered, opportunities]);
+  }, [timelineFiltered, opportunities]);
 
   // Cohort: last 4 months of createdDate
   const cohortRows = useMemo(() => {
