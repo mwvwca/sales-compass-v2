@@ -716,28 +716,44 @@ export default function RepGoalSetup() {
           )}
 
           {/* Rollup */}
-          {reps.length > 0 && (
-            <div className="border border-border rounded-md p-3 bg-secondary/30 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total commit</p>
-                <p className="text-sm font-mono font-semibold text-commit">{fmtMoney(rollup.commitTotal)}</p>
+          {reps.length > 0 && (() => {
+            const selectedYear = parseInt(selectedMonth.split('-')[0]);
+            const mqForMonth = getManagerQuota(selectedYear);
+            const managerMonthlyQuota = mqForMonth ? mqForMonth.annualAmount / 12 : 0;
+            const teamQuotaTotal = rollup.quotaTotal + managerMonthlyQuota;
+            const teamGap = teamQuotaTotal - rollup.commitTotal;
+            return (
+              <div className="border border-border rounded-md p-3 bg-secondary/30 space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total commit</p>
+                    <p className="text-sm font-mono font-semibold text-commit">{fmtMoney(rollup.commitTotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AE quota total</p>
+                    <p className="text-sm font-mono font-semibold">{fmtMoney(teamQuotaTotal)}</p>
+                    <p className="text-[10px] text-muted-foreground">Reps (Q÷3) + Manager (Annual÷12)</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gap</p>
+                    <p className={`text-sm font-mono font-semibold ${teamGap > 0 ? 'text-negative' : 'text-positive'}`}>
+                      {fmtMoney(teamGap)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {teamGap > 0 ? 'Commits below quota' : 'Commits meet/exceed quota'}
+                    </p>
+                  </div>
+                </div>
+                <div className="border-t border-border/60 pt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                  <span className="text-muted-foreground">Rep quota total: <span className="font-mono text-foreground">{fmtMoney(rollup.quotaTotal)}</span></span>
+                  <span className="text-muted-foreground">Manager quota: <span className="font-mono text-foreground">{fmtMoney(managerMonthlyQuota)}</span></span>
+                  <span className="text-muted-foreground">Team total: <span className="font-mono text-foreground">{fmtMoney(teamQuotaTotal)}</span></span>
+                  <span className="text-muted-foreground">Your commit: <span className="font-mono text-foreground">{fmtMoney(rollup.commitTotal)}</span></span>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AE quota total</p>
-                <p className="text-sm font-mono font-semibold">{fmtMoney(rollup.quotaTotal)}</p>
-                <p className="text-[10px] text-muted-foreground">Q goal ÷ 3</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gap</p>
-                <p className={`text-sm font-mono font-semibold ${rollup.gap > 0 ? 'text-negative' : 'text-positive'}`}>
-                  {fmtMoney(rollup.gap)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {rollup.gap > 0 ? 'Commits below quota' : 'Commits meet/exceed quota'}
-                </p>
-              </div>
-            </div>
-          )}
+            );
+          })()}
+
 
           {/* Forecast deal list */}
           <Collapsible open={dealListOpen} onOpenChange={setDealListOpen} className="space-y-3 border-t border-border pt-4">
