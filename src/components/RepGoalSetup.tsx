@@ -460,9 +460,73 @@ export default function RepGoalSetup() {
     );
   };
 
+  // Warning: active reps missing a quota for the current quarter
+  const currentQuarter = getQuarter(new Date().toISOString());
+  const repsMissingQuota = activeReps.filter(r => !r.quarterlyGoals[currentQuarter] || r.quarterlyGoals[currentQuarter] <= 0);
+
+  const mqAnnual = mqRecord?.annualAmount ?? (parseFloat(effectiveMqAmount) || 0);
+  const mqQuarterly = mqAnnual / 4;
+  const mqMonthly = mqAnnual / 12;
+
   return (
     <div className="space-y-8">
+      {/* My Quota — manager's annual territory quota */}
+      <div className="rounded-lg border-2 border-primary/60 bg-primary/5 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">My quota</p>
+            <p className="text-xs text-muted-foreground max-w-xl">
+              Your annual quota assigned by the business. No opportunities are tied to this number — it represents territory expectation.
+            </p>
+          </div>
+          <select
+            value={mqYear}
+            onChange={e => { const y = parseInt(e.target.value); setMqYear(y); setMqYearKey(y); setMqAmountDraft(''); setMqNotesDraft(''); }}
+            className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_auto] gap-3 items-end">
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Annual amount</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+              <input
+                type="number"
+                value={effectiveMqAmount}
+                onChange={e => { setMqYearKey(mqYear); setMqAmountDraft(e.target.value); }}
+                placeholder="0"
+                className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-base font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Notes</label>
+            <input
+              type="text"
+              value={effectiveMqNotes}
+              onChange={e => { setMqYearKey(mqYear); setMqNotesDraft(e.target.value); }}
+              placeholder="Optional context"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <Button onClick={handleSaveManagerQuota} size="sm" className="gap-1.5">
+            <Check size={14} /> Save
+          </Button>
+        </div>
+        <div className="flex items-center gap-4 text-xs flex-wrap text-muted-foreground">
+          <span>Quarterly: <span className="font-mono text-foreground">{fmtMoney(mqQuarterly)}</span></span>
+          <span>·</span>
+          <span>Monthly: <span className="font-mono text-foreground">{fmtMoney(mqMonthly)}</span></span>
+          {mqRecord?.updatedAt && (
+            <span className="ml-auto">Last saved: {fmtTs(mqRecord.updatedAt)}</span>
+          )}
+        </div>
+      </div>
+
       <Collapsible open={goalsOpen} onOpenChange={setGoalsOpen} className="space-y-4">
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Rep quarterly goals</h2>
