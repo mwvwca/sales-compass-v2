@@ -1109,8 +1109,18 @@ export default function DrPipeline() {
             </div>
 
             <div className="border border-border rounded-md">
-              <div className="px-3 py-2 border-b border-border">
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between">
                 <h3 className="text-xs font-semibold">Conversion Timeline</h3>
+                <label className="text-xs flex items-center gap-1">
+                  <span className="text-muted-foreground">Period:</span>
+                  <select value={timelinePeriod} onChange={e => setTimelinePeriod(e.target.value as Period)} className="text-xs bg-background border border-border rounded px-1.5 py-1">
+                    <option value="this-month">This month</option>
+                    <option value="last-month">Last month</option>
+                    <option value="this-quarter">This quarter</option>
+                    <option value="last-quarter">Last quarter</option>
+                    <option value="all">All time</option>
+                  </select>
+                </label>
               </div>
               <table className="w-full text-xs">
                 <thead className="bg-secondary/40 text-muted-foreground">
