@@ -180,6 +180,7 @@ export default function DrPipeline() {
   const [camFilter, setCamFilter] = useState<string>('all');
   const [repFilter, setRepFilter] = useState<string>('all');
   const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
+  const [timelinePeriod, setTimelinePeriod] = useState<Period>('all');
   const [statuses, setStatuses] = useState<Set<DrStatus>>(() => new Set(DEFAULT_STATUSES));
 
   // Detail table
@@ -220,6 +221,7 @@ export default function DrPipeline() {
 
   // ---------- Apply filters ----------
   const periodRange = useMemo(() => getPeriodRange(period), [period]);
+  const timelineRange = useMemo(() => getPeriodRange(timelinePeriod), [timelinePeriod]);
 
   const filtered = useMemo(() => {
     return dealRegistrations.filter(d => {
@@ -230,6 +232,16 @@ export default function DrPipeline() {
       return true;
     });
   }, [dealRegistrations, camFilter, repFilter, periodRange, statuses]);
+
+  const timelineFiltered = useMemo(() => {
+    return dealRegistrations.filter(d => {
+      if (camFilter !== 'all' && (d.channelAccountManager || '(none)') !== camFilter) return false;
+      if (repFilter !== 'all' && d.repName !== repFilter) return false;
+      if (!inRange(d.createdDate, timelineRange)) return false;
+      if (statuses.size > 0 && !statuses.has(d.status)) return false;
+      return true;
+    });
+  }, [dealRegistrations, camFilter, repFilter, timelineRange, statuses]);
 
   // Section-B "scope" ignores statuses (so all rows show) but applies cam/rep/period
   const scopeNoStatus = useMemo(() => {
@@ -490,9 +502,9 @@ export default function DrPipeline() {
   // Conversion timeline
   const timeline = useMemo(() => {
     const oppMap = new Map(opportunities.map(o => [o.id, o]));
-    const toSql = filtered.filter(d => d.sqlDate && d.createdDate).map(d => daysBetween(d.createdDate, d.sqlDate!));
-    const toConv = filtered.filter(d => d.convertedAt && d.createdDate).map(d => daysBetween(d.createdDate, d.convertedAt!));
-    const toWon = filtered.filter(d => d.status === 'closed_won' && d.createdDate)
+    const toSql = timelineFiltered.filter(d => d.sqlDate && d.createdDate).map(d => daysBetween(d.createdDate, d.sqlDate!));
+    const toConv = timelineFiltered.filter(d => d.convertedAt && d.createdDate).map(d => daysBetween(d.createdDate, d.convertedAt!));
+    const toWon = timelineFiltered.filter(d => d.status === 'closed_won' && d.createdDate)
       .map(d => {
         const opp = oppMap.get(d.opportunityId);
         if (!opp?.closeDate) return null;
@@ -505,7 +517,7 @@ export default function DrPipeline() {
       { label: 'Created → Converted to Pipeline', avg: avg(toConv), n: toConv.length },
       { label: 'Created → Closed Won', avg: avg(toWon), n: toWon.length },
     ];
-  }, [filtered, opportunities]);
+  }, [timelineFiltered, opportunities]);
 
   // Cohort: last 4 months of createdDate
   const cohortRows = useMemo(() => {
@@ -1097,8 +1109,18 @@ export default function DrPipeline() {
             </div>
 
             <div className="border border-border rounded-md">
-              <div className="px-3 py-2 border-b border-border">
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between">
                 <h3 className="text-xs font-semibold">Conversion Timeline</h3>
+                <label className="text-xs flex items-center gap-1">
+                  <span className="text-muted-foreground">Period:</span>
+                  <select value={timelinePeriod} onChange={e => setTimelinePeriod(e.target.value as Period)} className="text-xs bg-background border border-border rounded px-1.5 py-1">
+                    <option value="this-month">This month</option>
+                    <option value="last-month">Last month</option>
+                    <option value="this-quarter">This quarter</option>
+                    <option value="last-quarter">Last quarter</option>
+                    <option value="all">All time</option>
+                  </select>
+                </label>
               </div>
               <table className="w-full text-xs">
                 <thead className="bg-secondary/40 text-muted-foreground">
