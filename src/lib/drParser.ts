@@ -159,6 +159,10 @@ export function parseDrExport(rawRows: any[][]): {
     const opportunityName = String(raw.opportunityName ?? '').trim();
     if (!opportunityId && !opportunityName) continue;
 
+    // Skip Salesforce report footer/summary rows (Total, Confidential, copyright, etc.)
+    const sfIdPattern = /^006[A-Za-z0-9]{12,15}$/;
+    if (!sfIdPattern.test(opportunityId)) continue;
+
     try {
       let prob = parseNumber(raw.probability) ?? 0;
       if (prob > 1) prob = prob / 100;
