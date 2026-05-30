@@ -40,6 +40,7 @@ const STORAGE_KEYS = {
   forecastSnapshots: 'forecast_forecast_snapshots',
   dealRegistrations: 'forecast_deal_registrations',
   drBatches: 'forecast_dr_batches',
+  managerQuotas: 'forecast_manager_quotas',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
