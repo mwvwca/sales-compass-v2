@@ -67,6 +67,34 @@ export default function RepGoalSetup() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [viewingSnapshot, setViewingSnapshot] = useState<ForecastSnapshot | null>(null);
 
+  // Manager quota state
+  const currentYear = new Date().getFullYear();
+  const [mqYear, setMqYear] = useState<number>(currentYear);
+  const mqRecord = getManagerQuota(mqYear);
+  const [mqAmountDraft, setMqAmountDraft] = useState<string>('');
+  const [mqNotesDraft, setMqNotesDraft] = useState<string>('');
+  const [mqYearKey, setMqYearKey] = useState<number>(mqYear);
+  const effectiveMqAmount = mqYearKey === mqYear ? mqAmountDraft : (mqRecord ? String(mqRecord.annualAmount) : '');
+  const effectiveMqNotes = mqYearKey === mqYear ? mqNotesDraft : (mqRecord?.notes ?? '');
+
+  const yearOptions = useMemo(() => {
+    const list: number[] = [];
+    for (let y = currentYear - 2; y <= currentYear + 3; y++) list.push(y);
+    return list;
+  }, [currentYear]);
+
+  const handleSaveManagerQuota = () => {
+    const amount = parseFloat(effectiveMqAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a non-negative number.', variant: 'destructive' });
+      return;
+    }
+    setManagerQuota(mqYear, amount, effectiveMqNotes);
+    triggerBackup();
+    toast({ title: 'Manager quota saved and backup downloaded' });
+  };
+
+
   // Monthly commit selector — single month at a time
   const currentMonthKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
