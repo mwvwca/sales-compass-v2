@@ -575,6 +575,13 @@ export default function RepGoalSetup() {
             </button>
           </div>
 
+          {repsMissingQuota.length > 0 && (
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <span className="font-semibold">⚠ {repsMissingQuota.length} active rep{repsMissingQuota.length === 1 ? '' : 's'}</span>{' '}
+              {repsMissingQuota.length === 1 ? 'has' : 'have'} no quota set for {currentQuarter}: {repsMissingQuota.map(r => r.name).join(', ')}.
+              <span className="block text-[11px] opacity-90 mt-0.5">Set their quotas to ensure accurate team totals.</span>
+            </div>
+          )}
           {reps.length > 0 && (
             <div className="border border-border rounded-md overflow-hidden">
               <table className="w-full text-sm">
