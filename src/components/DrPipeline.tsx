@@ -143,6 +143,7 @@ function UploadZone({ onParsed }: {
       <Upload size={24} className="mx-auto mb-2 text-muted-foreground" />
       <p className="text-sm font-medium">Upload Salesforce DR Report</p>
       <p className="text-xs text-muted-foreground mt-1">Each upload merges into your DR history — lifecycle is preserved.</p>
+      <p className="text-xs text-muted-foreground mt-1">For best results, re-import your main pipeline report before uploading the DR report to ensure deal matching is current.</p>
       {parsing && <p className="text-xs text-muted-foreground mt-2">Parsing…</p>}
       <input ref={inputRef} type="file" accept=".xlsx" className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); if (inputRef.current) inputRef.current.value = ''; }}
