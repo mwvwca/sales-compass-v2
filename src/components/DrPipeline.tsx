@@ -180,6 +180,7 @@ export default function DrPipeline() {
   const [camFilter, setCamFilter] = useState<string>('all');
   const [repFilter, setRepFilter] = useState<string>('all');
   const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
+  const [timelinePeriod, setTimelinePeriod] = useState<Period>('all');
   const [statuses, setStatuses] = useState<Set<DrStatus>>(() => new Set(DEFAULT_STATUSES));
 
   // Detail table
