@@ -206,7 +206,14 @@ const ForecastContext = createContext<ForecastContextValue | null>(null);
 
 export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ForecastState>(() => {
-    const opportunities = loadFromStorage<Opportunity[]>(STORAGE_KEYS.opportunities, []);
+    const rawOpps = loadFromStorage<Opportunity[]>(STORAGE_KEYS.opportunities, []);
+    // Backward-compat: ensure salesforceId field exists on every record.
+    // Legacy records used the Salesforce Opportunity ID as their internal `id`,
+    // so use that as the salesforceId fallback. New imports populate it explicitly.
+    const opportunities = rawOpps.map((o: any) => ({
+      ...o,
+      salesforceId: o.salesforceId ?? (typeof o.id === 'string' && /^[0-9a-zA-Z]{15,18}$/.test(o.id) ? o.id : undefined),
+    })) as Opportunity[];
 
     const migrated = opportunities.map(o => {
       const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
