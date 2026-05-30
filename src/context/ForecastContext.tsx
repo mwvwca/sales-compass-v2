@@ -350,15 +350,30 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     const record: ImportRecord = { id: importId, date: importDate, fileName, opportunityCount: opps.length };
 
     setState(s => {
-      const existingMap = new Map(s.opportunities.map(o => [o.id, o]));
+      const existingBySfId = new Map<string, Opportunity>();
+      const existingById = new Map<string, Opportunity>();
+      for (const o of s.opportunities) {
+        if (o.salesforceId) existingBySfId.set(o.salesforceId, o);
+        existingById.set(o.id, o);
+      }
       const newChanges: ChangeLogEntry[] = [];
       const newSnapshots: OpportunitySnapshot[] = [];
+      const processedExistingIds = new Set<string>();
 
       const merged = opps.map(o => {
-        const existing = existingMap.get(o.id);
+        const sfid = o.salesforceId;
+        const existing =
+          (sfid && existingBySfId.get(sfid)) ||
+          existingById.get(o.id) ||
+          (sfid && existingById.get(sfid)) ||
+          undefined;
+
+        // Preserve internal UUID for existing records; mint a fresh UUID for truly new ones.
+        const stableId = existing ? existing.id : crypto.randomUUID();
+        if (existing) processedExistingIds.add(existing.id);
 
         newSnapshots.push({
-          opportunityId: o.id,
+          opportunityId: stableId,
           importDate,
           fileName,
           amount: o.amount,
@@ -384,7 +399,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
                 id: crypto.randomUUID(),
                 importDate,
                 fileName,
-                opportunityId: o.id,
+                opportunityId: stableId,
                 opportunityName: o.name,
                 repName: o.repName,
                 field,
@@ -400,6 +415,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           // the stored record. Only app-generated fields not present in the export are preserved.
           return {
             ...o,
+            id: stableId,
+            salesforceId: sfid ?? existing.salesforceId,
             // Always-overwrite Salesforce fields (explicit for clarity and safety)
             closeDate: o.closeDate,
             stage: o.stage,
@@ -426,11 +443,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           };
         }
 
-        return o;
+        return { ...o, id: stableId, salesforceId: sfid };
       });
 
-      const importedIds = new Set(opps.map(o => o.id));
-      const kept = s.opportunities.filter(o => !importedIds.has(o.id));
+      const kept = s.opportunities.filter(o => !processedExistingIds.has(o.id));
       return {
         ...s,
         opportunities: [...kept, ...merged],
