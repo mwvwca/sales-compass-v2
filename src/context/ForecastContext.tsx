@@ -319,6 +319,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.forecastSnapshots,
     state.dealRegistrations,
     state.drBatches,
+    state.managerQuotas,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
