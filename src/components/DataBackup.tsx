@@ -215,6 +215,14 @@ const backupSchema = z.object({
   dealRegistrations: z.array(dealRegistrationSchema).max(20000).optional(),
   drBatches: z.array(drBatchSchema).max(1000).optional(),
   drScores: z.any().optional(),
+  managerQuotas: z.array(z.object({
+    id: z.string(),
+    annualAmount: z.number().finite().min(0),
+    year: z.number().int().min(2020).max(2040),
+    notes: z.string().max(500).optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })).max(20).optional(),
   exportedAt: z.string().optional(),
 });
 
