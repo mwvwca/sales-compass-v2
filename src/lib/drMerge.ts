@@ -43,21 +43,44 @@ function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus } 
 }
 
 /** Compute closedWonDate / cycleDays / inPeriodWon for a DR matched to a closed won opp. */
-function computeCycleFields(dr: { createdDate: string }, opp: Opportunity | undefined):
-  Pick<DealRegistration, 'closedWonDate' | 'cycleDays' | 'inPeriodWon'> {
-  if (!opp?.closeDate || !dr.createdDate) return { cycleDays: undefined, closedWonDate: undefined };
-  const created = parseExcelDate(dr.createdDate);
-  const closed = parseExcelDate(opp.closeDate);
-  if (!created || !closed) return { cycleDays: undefined, closedWonDate: undefined };
-  const createdMs = new Date(created).getTime();
-  const closedMs = new Date(closed).getTime();
-  if (!isFinite(createdMs) || !isFinite(closedMs)) return { cycleDays: undefined, closedWonDate: closed };
-  const raw = Math.floor((closedMs - createdMs) / 86_400_000);
-  const cycleDays = raw < 0 ? 0 : raw;
+function computeCycleFields(
+  dr: { createdDate: string },
+  opp: Opportunity | undefined
+): Pick<DealRegistration, 'closedWonDate' | 'cycleDays' | 'inPeriodWon'> {
+  if (!opp?.closeDate || !dr.createdDate) {
+    return { cycleDays: undefined, closedWonDate: undefined, inPeriodWon: undefined };
+  }
+
+  // Both dates should already be YYYY-MM-DD strings after import parsing
+  // Use direct string parsing to avoid any re-parsing issues
+  const parseYMD = (s: string): Date | null => {
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
+    const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (us) return new Date(Date.UTC(+us[3], +us[1] - 1, +us[2]));
+    const parsed = parseExcelDate(s);
+    if (parsed) return new Date(parsed);
+    return null;
+  };
+
+  const created = parseYMD(dr.createdDate);
+  const closed = parseYMD(opp.closeDate);
+
+  if (!created || !closed) {
+    console.warn('computeCycleFields: failed to parse dates', { createdDate: dr.createdDate, closeDate: opp.closeDate });
+    return { cycleDays: undefined, closedWonDate: opp.closeDate, inPeriodWon: undefined };
+  }
+
+  const cycleDays = Math.max(0, Math.floor((closed.getTime() - created.getTime()) / 86_400_000));
+
   let inPeriodWon = false;
-  try { inPeriodWon = getQuarter(created) === getQuarter(closed); } catch { /* noop */ }
-  return { closedWonDate: closed, cycleDays, inPeriodWon };
+  try {
+    inPeriodWon = getQuarter(dr.createdDate) === getQuarter(opp.closeDate);
+  } catch { /* noop */ }
+
+  return { closedWonDate: opp.closeDate, cycleDays, inPeriodWon };
 }
+
 
 /** Returns whether mutable fields differ between an existing record and incoming raw record. */
 function hasFieldChanges(existing: DealRegistration, incoming: RawDrRecord): boolean {
