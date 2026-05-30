@@ -10,6 +10,7 @@ import type {
   RepCommissionSettings,
   MonthlyRepCommit,
   MonthlyManagerCommit,
+  ManagerQuota,
   ForecastPromotion,
   ForecastSnapshot,
   ForecastDealLine,
