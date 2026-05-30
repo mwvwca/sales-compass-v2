@@ -297,6 +297,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.forecastSnapshots, state.forecastSnapshots);
     saveToStorage(STORAGE_KEYS.dealRegistrations, state.dealRegistrations);
     saveToStorage(STORAGE_KEYS.drBatches, state.drBatches);
+    saveToStorage(STORAGE_KEYS.managerQuotas, state.managerQuotas);
 
 
     const sizeKB = getStorageSizeKB();
