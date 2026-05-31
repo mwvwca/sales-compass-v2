@@ -215,6 +215,11 @@ export default function ImportSheet() {
           return;
         }
 
+        if (!mapping.id && !mapping.name) {
+          setError('Could not find Opportunity ID or Name column. Ensure your export has standard Salesforce column names.');
+          return;
+        }
+
         const importDate = new Date().toISOString();
         const opps: Opportunity[] = validRows.map((row, i) => {
           const closeDate = parseImportDate(row[mapping.closeDate || '']);
