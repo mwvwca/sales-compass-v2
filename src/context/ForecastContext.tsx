@@ -214,14 +214,37 @@ const ForecastContext = createContext<ForecastContextValue | null>(null);
 
 export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ForecastState>(() => {
+    const sfIdPattern = /^006[A-Za-z0-9]{12,15}$/;
+
     const rawOpps = loadFromStorage<Opportunity[]>(STORAGE_KEYS.opportunities, []);
+    // One-time cleanup: purge corrupted Salesforce footer rows ("Total", "Confidential", copyright)
+    // that lack a valid Salesforce Opportunity ID.
+    const cleanedOpps = rawOpps.filter((o: any) =>
+      sfIdPattern.test(o.salesforceId || '') || sfIdPattern.test(o.id || '')
+    );
+    if (cleanedOpps.length !== rawOpps.length) {
+      try { localStorage.setItem(STORAGE_KEYS.opportunities, JSON.stringify(cleanedOpps)); } catch { /* noop */ }
+    }
     // Backward-compat: ensure salesforceId field exists on every record.
     // Legacy records used the Salesforce Opportunity ID as their internal `id`,
     // so use that as the salesforceId fallback. New imports populate it explicitly.
-    const opportunities = rawOpps.map((o: any) => ({
+    const opportunities = cleanedOpps.map((o: any) => ({
       ...o,
       salesforceId: o.salesforceId ?? (typeof o.id === 'string' && /^[0-9a-zA-Z]{15,18}$/.test(o.id) ? o.id : undefined),
     })) as Opportunity[];
+
+    const rawChangelog = loadFromStorage<any[]>(STORAGE_KEYS.changelog, []);
+    const cleanedChangelog = rawChangelog.filter(e => sfIdPattern.test(e?.opportunityId || ''));
+    if (cleanedChangelog.length !== rawChangelog.length) {
+      try { localStorage.setItem(STORAGE_KEYS.changelog, JSON.stringify(cleanedChangelog)); } catch { /* noop */ }
+    }
+
+    const rawSnapshots = loadFromStorage<OpportunitySnapshot[]>(STORAGE_KEYS.snapshots, []);
+    const cleanedSnapshots = rawSnapshots.filter(s => sfIdPattern.test(s?.opportunityId || ''));
+    if (cleanedSnapshots.length !== rawSnapshots.length) {
+      try { localStorage.setItem(STORAGE_KEYS.snapshots, JSON.stringify(cleanedSnapshots)); } catch { /* noop */ }
+    }
+
 
     const migrated = opportunities.map(o => {
       const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
@@ -259,8 +282,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       })),
       opportunities: migrated,
       imports: loadFromStorage(STORAGE_KEYS.imports, []),
-      changelog: loadFromStorage(STORAGE_KEYS.changelog, []),
-      snapshots: loadFromStorage(STORAGE_KEYS.snapshots, []),
+      changelog: cleanedChangelog,
+      snapshots: cleanedSnapshots,
       commissionSettings: loadFromStorage(STORAGE_KEYS.commissionSettings, {}),
       commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
       commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
