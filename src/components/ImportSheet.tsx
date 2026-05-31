@@ -208,8 +208,20 @@ export default function ImportSheet() {
           return;
         }
 
+        // Filter out Salesforce footer/summary rows (Total, Confidential, copyright, etc.)
+        const sfIdPattern = /^006[A-Za-z0-9]{12,15}$/;
+        const validRows = rows.filter(row => {
+          const sfId = String(row[mapping.id || ''] || '').trim();
+          return sfIdPattern.test(sfId);
+        });
+
+        if (validRows.length === 0) {
+          setError('No valid opportunity rows found after header.');
+          return;
+        }
+
         const importDate = new Date().toISOString();
-        const opps: Opportunity[] = rows.map((row, i) => {
+        const opps: Opportunity[] = validRows.map((row, i) => {
           const closeDate = parseImportDate(row[mapping.closeDate || '']);
           const sfid = String(row[mapping.id || ''] || '').trim() || undefined;
 
