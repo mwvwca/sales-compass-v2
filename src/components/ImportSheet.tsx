@@ -203,6 +203,11 @@ export default function ImportSheet() {
           return;
         }
 
+        if (!mapping.id && !mapping.name) {
+          setError('Could not find Opportunity ID or Name column. Ensure your export has standard Salesforce column names.');
+          return;
+        }
+
         // Filter out Salesforce footer/summary rows (Total, Confidential, copyright, etc.)
         const sfIdPattern = /^006[A-Za-z0-9]{12,15}$/;
         const validRows = rows.filter(row => {
@@ -212,11 +217,6 @@ export default function ImportSheet() {
 
         if (validRows.length === 0) {
           setError('No valid opportunity rows found after header.');
-          return;
-        }
-
-        if (!mapping.id && !mapping.name) {
-          setError('Could not find Opportunity ID or Name column. Ensure your export has standard Salesforce column names.');
           return;
         }
 
