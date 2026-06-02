@@ -471,6 +471,7 @@ export default function DrPipeline() {
   }, [camRows]);
 
   // ---------- Section C2: Reseller Performance ----------
+  type PaddedAccountRow = { account: string; drs: number; preSqlNoActivity: number; products: string[] };
   type ResellerRow = {
     reseller: string;
     totalDrs: number;
@@ -483,6 +484,9 @@ export default function DrPipeline() {
     slowest: number | null;
     activeReps: number;
     topCam: string;
+    paddedAccts: number;
+    paddingRate: number;
+    paddedAccountsList: PaddedAccountRow[];
     cohort: CohortRow[];
     repBreakdown: { rep: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
     camBreakdown: { cam: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
