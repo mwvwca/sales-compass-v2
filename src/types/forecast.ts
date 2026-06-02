@@ -57,6 +57,10 @@ export interface Opportunity {
   accountName?: string;
   productName?: string;
   channelAccountManager?: string;
+  resellerName?: string;
+  distributorReseller?: string;
+  /** Normalized reseller name resolved from resellerName / distributorReseller via resellerUtils. */
+  resolvedReseller?: string;
 }
 
 export interface MonthlyRepCommit {
