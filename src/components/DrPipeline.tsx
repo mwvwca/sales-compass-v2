@@ -471,6 +471,7 @@ export default function DrPipeline() {
   }, [camRows]);
 
   // ---------- Section C2: Reseller Performance ----------
+  type PaddedAccountRow = { account: string; drs: number; preSqlNoActivity: number; products: string[] };
   type ResellerRow = {
     reseller: string;
     totalDrs: number;
@@ -483,6 +484,9 @@ export default function DrPipeline() {
     slowest: number | null;
     activeReps: number;
     topCam: string;
+    paddedAccts: number;
+    paddingRate: number;
+    paddedAccountsList: PaddedAccountRow[];
     cohort: CohortRow[];
     repBreakdown: { rep: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
     camBreakdown: { cam: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
@@ -545,7 +549,31 @@ export default function DrPipeline() {
       const camBreakdown = breakdown(camMap).map(({ key, ...rest }) => ({ cam: key, ...rest }));
       const cohort = buildCohortRows(deals);
 
-      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, cohort, repBreakdown, camBreakdown });
+      // Padding analysis: group reseller's DRs by account, find accounts with 2+ pre-SQL no-activity DRs.
+      // pre-SQL no-activity = !isSql, lastActivity === null, status not in (rejected, closed_won, closed_lost, withdrawn).
+      const isPreSqlNoActivity = (d: DealRegistration) =>
+        !d.isSql && !d.lastActivity &&
+        d.status !== 'rejected' && d.status !== 'closed_won' && d.status !== 'closed_lost' && d.status !== 'withdrawn';
+      const byAcct = new Map<string, DealRegistration[]>();
+      for (const d of deals) {
+        const a = d.accountName || '(none)';
+        const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
+      }
+      const paddedAccountsList: PaddedAccountRow[] = [];
+      let paddingDrCount = 0;
+      for (const [account, arr] of byAcct.entries()) {
+        const preSqlNoActivity = arr.filter(isPreSqlNoActivity).length;
+        if (preSqlNoActivity >= 2) {
+          const products = Array.from(new Set(arr.map(d => d.product).filter(Boolean))) as string[];
+          paddedAccountsList.push({ account, drs: arr.length, preSqlNoActivity, products });
+          paddingDrCount += preSqlNoActivity;
+        }
+      }
+      paddedAccountsList.sort((a, b) => b.preSqlNoActivity - a.preSqlNoActivity);
+      const paddedAccts = paddedAccountsList.length;
+      const paddingRate = totalDrs ? paddingDrCount / totalDrs : 0;
+
+      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
     }
     rows.sort((a, b) => {
       const dir = resellerSortDir === 'asc' ? 1 : -1;
@@ -561,14 +589,17 @@ export default function DrPipeline() {
       acc.totalDrs += r.totalDrs;
       acc.sqls += r.sqls;
       acc.closedWon += r.closedWon;
+      acc.paddedAccts += r.paddedAccts;
+      acc.paddingDrs += r.paddingRate * r.totalDrs;
       if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
       return acc;
-    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0 });
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0, paddedAccts: 0, paddingDrs: 0 });
     return {
       ...t,
       sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
       cohortRate: t.totalDrs ? t.closedWon / t.totalDrs : 0,
       avgCycle: t.cycleN ? t.cycleSum / t.cycleN : null,
+      paddingRate: t.totalDrs ? t.paddingDrs / t.totalDrs : 0,
     };
   }, [resellerRows]);
 
@@ -583,6 +614,9 @@ export default function DrPipeline() {
       }
       if (r.avgCycle !== null && r.avgCycle > 180 && r.closedWon >= 2) {
         out.push(`⚠ ${r.reseller}'s deals average ${r.avgCycle.toFixed(0)} days to close — factor into pipeline timing.`);
+      }
+      if (r.paddingRate >= 0.2 && r.totalDrs >= 10) {
+        out.push(`⚠ ${r.reseller} has ${fmtPct(r.paddingRate, 0)} of registrations showing padding patterns (${r.paddedAccts} accounts with multiple pre-SQL, no-activity DRs) — raise in next QBR.`);
       }
     }
     return out;
@@ -802,6 +836,8 @@ export default function DrPipeline() {
         'Slowest (d)': r.slowest ?? '—',
         'Active Reps': r.activeReps,
         'Top CAM': r.topCam,
+        'Padded Accts': r.paddedAccts,
+        'Padding %': fmtPct(r.paddingRate, 1),
       });
     }
     const resellerSheet = XLSX.utils.json_to_sheet(resellerData, { skipHeader: false });
@@ -1241,6 +1277,8 @@ export default function DrPipeline() {
                           ['slowest','Slowest','right'],
                           ['activeReps','Active Reps','right'],
                           ['topCam','Top CAM','left'],
+                          ['paddedAccts','Padded Accts','right'],
+                          ['paddingRate','Padding %','right'],
                         ] as [keyof ResellerRow, string, 'left'|'right'][]).map(([k, label, align]) => {
                           const tooltip = k === 'cohortRate' ? "% of this reseller's DRs that closed won, all time" : undefined;
                           return (
@@ -1258,7 +1296,7 @@ export default function DrPipeline() {
                     </thead>
                     <tbody>
                       {resellerRows.length === 0 && (
-                        <tr><td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
+                        <tr><td colSpan={12} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
                       )}
                       {resellerRows.map(r => {
                         const isOpen = expandedReseller === r.reseller;
@@ -1279,10 +1317,12 @@ export default function DrPipeline() {
                               <td className="text-right px-2 py-1.5">{r.slowest !== null ? `${r.slowest} days` : '—'}</td>
                               <td className="text-right px-2 py-1.5">{r.activeReps}</td>
                               <td className="px-2 py-1.5 text-muted-foreground">{r.topCam}</td>
+                              <td className="text-right px-2 py-1.5">{r.paddedAccts}</td>
+                              <td className={`text-right px-2 py-1.5 font-semibold ${r.paddingRate >= 0.2 ? 'text-red-600 dark:text-red-400' : r.paddingRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>{fmtPct(r.paddingRate, 0)}</td>
                             </tr>
                             {isOpen && (
                               <tr className="bg-muted/20 border-t border-border">
-                                <td colSpan={10} className="px-3 py-2 space-y-3">
+                                <td colSpan={12} className="px-3 py-2 space-y-3">
                                   <div>
                                     <p className="text-[11px] font-semibold text-muted-foreground mb-1">Vintage breakdown by created quarter</p>
                                     {r.cohort.length === 0 ? <p className="text-[11px] text-muted-foreground">No data.</p> : (
@@ -1364,6 +1404,33 @@ export default function DrPipeline() {
                                       </table>
                                     </div>
                                   </div>
+                                  <div>
+                                    <p className="text-[11px] font-semibold text-muted-foreground mb-1">Padded accounts</p>
+                                    {r.paddedAccountsList.length === 0 ? (
+                                      <p className="text-[11px] text-muted-foreground">No accounts with 2+ pre-SQL, no-activity DRs.</p>
+                                    ) : (
+                                      <table className="text-[11px] w-full">
+                                        <thead className="text-muted-foreground">
+                                          <tr>
+                                            <th className="text-left pr-4 py-0.5 font-medium">Account</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">DRs on Account</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">Pre-SQL No-Activity</th>
+                                            <th className="text-left py-0.5 font-medium">Products</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {r.paddedAccountsList.map(p => (
+                                            <tr key={p.account}>
+                                              <td className="pr-4 py-0.5">{p.account}</td>
+                                              <td className="text-right pr-4 py-0.5">{p.drs}</td>
+                                              <td className="text-right pr-4 py-0.5 text-red-600 dark:text-red-400 font-medium">{p.preSqlNoActivity}</td>
+                                              <td className="py-0.5 text-muted-foreground">{p.products.join(', ') || '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             )}
@@ -1382,6 +1449,8 @@ export default function DrPipeline() {
                           <td className="text-right px-2 py-1.5">—</td>
                           <td className="text-right px-2 py-1.5">—</td>
                           <td className="px-2 py-1.5">—</td>
+                          <td className="text-right px-2 py-1.5">{resellerTotals.paddedAccts}</td>
+                          <td className={`text-right px-2 py-1.5 font-semibold ${resellerTotals.paddingRate >= 0.2 ? 'text-red-600 dark:text-red-400' : resellerTotals.paddingRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>{fmtPct(resellerTotals.paddingRate, 0)}</td>
                         </tr>
                       )}
                     </tbody>
