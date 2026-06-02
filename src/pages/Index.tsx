@@ -43,6 +43,7 @@ const Index = () => {
           <h1 className="text-sm font-semibold tracking-tight">FORECAST</h1>
           <span className="text-xs text-muted-foreground font-mono">offline</span>
           <DataBackup />
+          <WeeklyBriefing />
         </div>
         <nav className="flex gap-0.5 bg-secondary rounded-md p-0.5">
           {tabs.map(t => (
