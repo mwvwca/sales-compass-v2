@@ -21,6 +21,8 @@ interface ColumnMapping {
   accountName?: string;
   productName?: string;
   channelAccountManager?: string;
+  resellerName?: string;
+  distributorReseller?: string;
 }
 
 function normalizeHeader(header: string): string {
