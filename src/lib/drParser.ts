@@ -1,4 +1,5 @@
 import type { RawDrRecord } from '@/types/forecast';
+import { resolveReseller } from './resellerUtils';
 
 type RawDr = RawDrRecord;
 
