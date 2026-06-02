@@ -99,7 +99,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const lastImportFile = lastImport?.fileName || '';
 
   const activeReps = input.reps.filter(r => r.isActive !== false);
-  const activeRepNames = new Set(activeReps.map(r => r.name.toLowerCase().trim()));
+  
 
   const opps = input.opportunities;
   const openOpps = opps.filter(isOpen);
