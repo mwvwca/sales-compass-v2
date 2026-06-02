@@ -86,9 +86,7 @@ function inMonth(dateStr: string, monthKey: string): boolean {
   try { return getMonthKey(dateStr) === monthKey; } catch { return false; }
 }
 
-function inQuarter(dateStr: string, q: string): boolean {
-  try { return getQuarter(dateStr) === q; } catch { return false; }
-}
+
 
 export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const now = new Date();
