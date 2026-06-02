@@ -40,7 +40,7 @@ export interface BriefingPayload {
     closedWonMTD: number;
     staleDealCount: number;
     commitDeals: { name: string; amount: number; closeDate: string }[];
-    upsideDeals: { name: string; amount: number; closeDate: string }[];
+    upsideDeals?: { name: string; amount: number; closeDate: string }[];
     changesSinceLastImport: { name: string; type: string; detail: string }[];
   }[];
   drSignals: {
