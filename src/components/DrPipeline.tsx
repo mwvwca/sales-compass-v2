@@ -836,6 +836,8 @@ export default function DrPipeline() {
         'Slowest (d)': r.slowest ?? '—',
         'Active Reps': r.activeReps,
         'Top CAM': r.topCam,
+        'Padded Accts': r.paddedAccts,
+        'Padding %': fmtPct(r.paddingRate, 1),
       });
     }
     const resellerSheet = XLSX.utils.json_to_sheet(resellerData, { skipHeader: false });
