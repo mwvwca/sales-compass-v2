@@ -166,6 +166,7 @@ export function mergeDrBatch(
         channelAccountManager: inc.channelAccountManager,
         resellerName: inc.resellerName,
         distributorReseller: inc.distributorReseller,
+        resolvedReseller: inc.resolvedReseller,
         product: inc.product,
         stage: inc.stage,
         probability: inc.probability,
