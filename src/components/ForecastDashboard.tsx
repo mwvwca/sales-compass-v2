@@ -19,6 +19,31 @@ import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentation
 
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
+/** Parse a close-date string as a LOCAL date to avoid UTC midnight shifting
+ *  the day into the prior day in negative-offset timezones. */
+function parseDateLocal(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const iso = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+  const us = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (us) return new Date(+us[3], +us[1] - 1, +us[2]);
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function localMonthKey(dateStr: string): string | null {
+  const d = parseDateLocal(dateStr);
+  if (!d) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function localQuarter(dateStr: string): string | null {
+  const d = parseDateLocal(dateStr);
+  if (!d) return null;
+  const q = Math.ceil((d.getMonth() + 1) / 3);
+  return `${d.getFullYear()}-Q${q}`;
+}
+
 export default function ForecastDashboard() {
   const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
@@ -43,9 +68,11 @@ export default function ForecastDashboard() {
       const d = getDateAtUtcStart(cd);
       return d >= weekRange.start && d <= weekRange.end;
     }
-    if (scope === 'monthly') return getMonthKey(cd) === anchorMonthKey;
-    if (scope === 'quarterly') return getQuarter(cd) === anchorQuarter;
-    return getDateAtUtcStart(cd).getUTCFullYear() === anchor.getUTCFullYear();
+    if (scope === 'monthly') return localMonthKey(cd) === anchorMonthKey;
+    if (scope === 'quarterly') return localQuarter(cd) === anchorQuarter;
+    // Annual: strict year equality on the locally-parsed close date
+    const oppYear = parseDateLocal(cd)?.getFullYear();
+    return oppYear === anchor.getUTCFullYear();
   }, [scope, anchor, anchorMonthKey, anchorQuarter, weekRange]);
 
   // Quarters this scope spans (for rep goal aggregation + downstream comps)
@@ -60,11 +87,11 @@ export default function ForecastDashboard() {
   type Bucket = { key: string; label: string; matches: (cd: string) => boolean };
   const buckets: Bucket[] = useMemo(() => {
     if (scope === 'weekly') return [{ key: 'w', label: weekRange.label, matches: () => true }];
-    if (scope === 'monthly') return [{ key: anchorMonthKey, label: getMonthLabel(anchorMonthKey), matches: cd => getMonthKey(cd) === anchorMonthKey }];
+    if (scope === 'monthly') return [{ key: anchorMonthKey, label: getMonthLabel(anchorMonthKey), matches: cd => localMonthKey(cd) === anchorMonthKey }];
     if (scope === 'quarterly') {
-      return getQuarterMonths(anchorQuarter).map(m => ({ key: m, label: getMonthLabel(m), matches: (cd: string) => getMonthKey(cd) === m }));
+      return getQuarterMonths(anchorQuarter).map(m => ({ key: m, label: getMonthLabel(m), matches: (cd: string) => localMonthKey(cd) === m }));
     }
-    return getYearQuarters(anchor.getUTCFullYear()).map(q => ({ key: q, label: q.split('-')[1], matches: (cd: string) => getQuarter(cd) === q }));
+    return getYearQuarters(anchor.getUTCFullYear()).map(q => ({ key: q, label: q.split('-')[1], matches: (cd: string) => localQuarter(cd) === q }));
   }, [scope, anchor, anchorMonthKey, anchorQuarter, weekRange]);
 
   // Inactive reps are hidden ONLY from the rep breakdown table and the rep filter dropdown.
