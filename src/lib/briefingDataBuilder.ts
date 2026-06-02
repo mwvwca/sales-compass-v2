@@ -264,6 +264,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         detail: `${e.oldValue || '∅'} → ${e.newValue || '∅'}`,
       }));
 
+    const upsideDeals = topByAmount(upsides.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })), 5);
     return {
       repName: rep.name,
       openPipeline: open.reduce((s, o) => s + o.amount, 0),
@@ -271,7 +272,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       closedWonMTD: cwMtd.reduce((s, o) => s + o.amount, 0),
       staleDealCount: stale.length,
       commitDeals: topByAmount(commits.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })), 5),
-      upsideDeals: topByAmount(upsides.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })), 5),
+      ...(upsideDeals.length > 0 ? { upsideDeals } : {}),
       changesSinceLastImport: changes,
     };
   }).filter(r =>
