@@ -9,6 +9,7 @@ import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
 import DrPipeline from '@/components/DrPipeline';
 import SlipReport from '@/components/SlipReport';
+import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
 import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'slips' | 'graveyard';
