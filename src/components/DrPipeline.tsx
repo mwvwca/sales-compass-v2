@@ -612,6 +612,9 @@ export default function DrPipeline() {
       if (r.avgCycle !== null && r.avgCycle > 180 && r.closedWon >= 2) {
         out.push(`⚠ ${r.reseller}'s deals average ${r.avgCycle.toFixed(0)} days to close — factor into pipeline timing.`);
       }
+      if (r.paddingRate >= 0.2 && r.totalDrs >= 10) {
+        out.push(`⚠ ${r.reseller} has ${fmtPct(r.paddingRate, 0)} of registrations showing padding patterns (${r.paddedAccts} accounts with multiple pre-SQL, no-activity DRs) — raise in next QBR.`);
+      }
     }
     return out;
   }, [resellerRows]);
