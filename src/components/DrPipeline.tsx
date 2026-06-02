@@ -575,6 +575,7 @@ export default function DrPipeline() {
 
       rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
     }
+    rows.sort((a, b) => {
       const dir = resellerSortDir === 'asc' ? 1 : -1;
       const av = a[resellerSortKey] as any; const bv = b[resellerSortKey] as any;
       if (typeof av === 'string') return av.localeCompare(bv) * dir;
