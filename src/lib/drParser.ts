@@ -180,6 +180,7 @@ export function parseDrExport(rawRows: any[][]): {
         channelAccountManager: raw.channelAccountManager ? String(raw.channelAccountManager).trim() || undefined : undefined,
         resellerName: raw.resellerName ? String(raw.resellerName).trim() || undefined : undefined,
         distributorReseller: raw.distributorReseller ? String(raw.distributorReseller).trim() || undefined : undefined,
+        resolvedReseller: resolveReseller(raw.resellerName as any, raw.distributorReseller as any),
         product: raw.product ? String(raw.product).trim() || undefined : undefined,
         stage: String(raw.stage ?? '').trim(),
         probability: prob,
