@@ -470,6 +470,125 @@ export default function DrPipeline() {
     return out;
   }, [camRows]);
 
+  // ---------- Section C2: Reseller Performance ----------
+  type ResellerRow = {
+    reseller: string;
+    totalDrs: number;
+    sqls: number;
+    sqlRate: number;
+    closedWon: number;
+    cohortRate: number;
+    avgCycle: number | null;
+    fastest: number | null;
+    slowest: number | null;
+    activeReps: number;
+    topCam: string;
+    cohort: CohortRow[];
+    repBreakdown: { rep: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
+    camBreakdown: { cam: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
+  };
+
+  const [showReseller, setShowReseller] = useState(false);
+  const [resellerSortKey, setResellerSortKey] = useState<keyof ResellerRow>('cohortRate');
+  const [resellerSortDir, setResellerSortDir] = useState<'asc' | 'desc'>('desc');
+  const [expandedReseller, setExpandedReseller] = useState<string | null>(null);
+
+  const resellerRows: ResellerRow[] = useMemo(() => {
+    const byReseller = new Map<string, DealRegistration[]>();
+    for (const d of scopeNoStatus) {
+      if (d.status === 'rejected') continue;
+      const name = d.resolvedReseller?.trim();
+      if (!name) continue;
+      const arr = byReseller.get(name) || [];
+      arr.push(d);
+      byReseller.set(name, arr);
+    }
+    const rows: ResellerRow[] = [];
+    for (const [reseller, deals] of byReseller.entries()) {
+      const totalDrs = deals.length;
+      if (totalDrs < 3) continue;
+      const sqls = deals.filter(d => d.isSql).length;
+      const sqlRate = totalDrs ? sqls / totalDrs : 0;
+      const wonDeals = deals.filter(d => d.status === 'closed_won');
+      const closedWon = wonDeals.length;
+      const cohortRate = totalDrs ? closedWon / totalDrs : 0;
+      const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
+      const avgCycle = cycles.length >= 2 ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
+      const fastest = cycles.length ? Math.min(...cycles) : null;
+      const slowest = cycles.length ? Math.max(...cycles) : null;
+      const repSet = new Set(deals.map(d => d.repName).filter(Boolean));
+      const activeReps = repSet.size;
+      const camCounts = new Map<string, number>();
+      for (const d of deals) {
+        const c = d.channelAccountManager || '(none)';
+        camCounts.set(c, (camCounts.get(c) || 0) + 1);
+      }
+      const topCam = [...camCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+
+      const breakdown = (group: Map<string, DealRegistration[]>) =>
+        [...group.entries()].map(([key, arr]) => {
+          const t = arr.length;
+          const s = arr.filter(d => d.isSql).length;
+          const w = arr.filter(d => d.status === 'closed_won').length;
+          return { key, drs: t, sqls: s, closedWon: w, cohortRate: t ? w / t : 0 };
+        }).sort((a, b) => b.drs - a.drs);
+
+      const repMap = new Map<string, DealRegistration[]>();
+      const camMap = new Map<string, DealRegistration[]>();
+      for (const d of deals) {
+        const r = d.repName || '(unassigned)';
+        const c = d.channelAccountManager || '(none)';
+        const ra = repMap.get(r) || []; ra.push(d); repMap.set(r, ra);
+        const ca = camMap.get(c) || []; ca.push(d); camMap.set(c, ca);
+      }
+      const repBreakdown = breakdown(repMap).map(({ key, ...rest }) => ({ rep: key, ...rest }));
+      const camBreakdown = breakdown(camMap).map(({ key, ...rest }) => ({ cam: key, ...rest }));
+      const cohort = buildCohortRows(deals);
+
+      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, cohort, repBreakdown, camBreakdown });
+    }
+    rows.sort((a, b) => {
+      const dir = resellerSortDir === 'asc' ? 1 : -1;
+      const av = a[resellerSortKey] as any; const bv = b[resellerSortKey] as any;
+      if (typeof av === 'string') return av.localeCompare(bv) * dir;
+      return ((av ?? -1) - (bv ?? -1)) * dir;
+    });
+    return rows;
+  }, [scopeNoStatus, resellerSortKey, resellerSortDir]);
+
+  const resellerTotals = useMemo(() => {
+    const t = resellerRows.reduce((acc, r) => {
+      acc.totalDrs += r.totalDrs;
+      acc.sqls += r.sqls;
+      acc.closedWon += r.closedWon;
+      if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
+      return acc;
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0 });
+    return {
+      ...t,
+      sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
+      cohortRate: t.totalDrs ? t.closedWon / t.totalDrs : 0,
+      avgCycle: t.cycleN ? t.cycleSum / t.cycleN : null,
+    };
+  }, [resellerRows]);
+
+  const resellerInsights = useMemo(() => {
+    const out: string[] = [];
+    for (const r of resellerRows) {
+      if (r.cohortRate >= 0.2 && r.totalDrs >= 10) {
+        out.push(`✓ ${r.reseller} is your highest-converting partner at ${fmtPct(r.cohortRate, 0)} cohort rate — prioritize their leads.`);
+      }
+      if (r.totalDrs >= 20 && r.cohortRate < 0.05) {
+        out.push(`⚠ ${r.reseller} has registered ${r.totalDrs} DRs with only ${fmtPct(r.cohortRate, 0)} closing — review lead quality with this partner.`);
+      }
+      if (r.avgCycle !== null && r.avgCycle > 180 && r.closedWon >= 2) {
+        out.push(`⚠ ${r.reseller}'s deals average ${r.avgCycle.toFixed(0)} days to close — factor into pipeline timing.`);
+      }
+    }
+    return out;
+  }, [resellerRows]);
+
+
   // ---------- Section D: Funnel + Conversion timeline + Cohort ----------
   const funnelMonthDate = useMemo(() => {
     const now = new Date();
@@ -665,6 +784,28 @@ export default function DrPipeline() {
       'Age (days)': d.ageDays, 'Last Activity': d.lastActivity || '', Status: statusLabel(d.status),
     })));
     XLSX.utils.book_append_sheet(wb, staleSheet, 'Stale & No Activity');
+
+    // Sheet 4 — Reseller Performance
+    const resellerData: any[] = [
+      { Note: "Reseller name normalized from 'Reseller Name' and 'Distributor - Reseller' fields. Partners with fewer than 3 DRs excluded." },
+      {},
+    ];
+    for (const r of resellerRows) {
+      resellerData.push({
+        Reseller: r.reseller,
+        'Total DRs': r.totalDrs,
+        'SQL Rate': fmtPct(r.sqlRate, 1),
+        'Closed Won': r.closedWon,
+        'Cohort Rate': fmtPct(r.cohortRate, 1),
+        'Avg Cycle (d)': r.avgCycle !== null ? r.avgCycle.toFixed(0) : '—',
+        'Fastest (d)': r.fastest ?? '—',
+        'Slowest (d)': r.slowest ?? '—',
+        'Active Reps': r.activeReps,
+        'Top CAM': r.topCam,
+      });
+    }
+    const resellerSheet = XLSX.utils.json_to_sheet(resellerData, { skipHeader: false });
+    XLSX.utils.book_append_sheet(wb, resellerSheet, 'Reseller Performance');
 
     XLSX.writeFile(wb, `DR_Pipeline_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
@@ -1071,6 +1212,191 @@ export default function DrPipeline() {
               </>
             )}
           </section>
+
+          {/* Section C2: Reseller Performance (collapsible) */}
+          <section className="border border-border rounded-md">
+            <button onClick={() => setShowReseller(s => !s)} className="w-full px-3 py-2 flex items-center justify-between hover:bg-muted/30">
+              <div className="text-left">
+                <h3 className="text-xs font-semibold flex items-center gap-1.5">
+                  {showReseller ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Reseller Performance
+                </h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5 ml-4">Conversion and quality metrics by partner. Only resellers with DR data are shown.</p>
+              </div>
+              <span className="text-xs text-muted-foreground">{resellerRows.length} partners · min 3 DRs</span>
+            </button>
+            {showReseller && (
+              <>
+                <div className="overflow-x-auto border-t border-border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-secondary/40 text-muted-foreground">
+                      <tr>
+                        {([
+                          ['reseller','Reseller','left'],
+                          ['totalDrs','Total DRs','right'],
+                          ['sqlRate','SQL Rate','right'],
+                          ['closedWon','Closed Won','right'],
+                          ['cohortRate','Cohort Rate','right'],
+                          ['avgCycle','Avg Cycle','right'],
+                          ['fastest','Fastest','right'],
+                          ['slowest','Slowest','right'],
+                          ['activeReps','Active Reps','right'],
+                          ['topCam','Top CAM','left'],
+                        ] as [keyof ResellerRow, string, 'left'|'right'][]).map(([k, label, align]) => {
+                          const tooltip = k === 'cohortRate' ? "% of this reseller's DRs that closed won, all time" : undefined;
+                          return (
+                            <th key={k} title={tooltip}
+                              className={`px-2 py-1.5 font-medium cursor-pointer select-none hover:text-foreground ${align === 'right' ? 'text-right' : 'text-left'} ${k === 'cohortRate' ? 'font-semibold' : ''}`}
+                              onClick={() => {
+                                if (resellerSortKey === k) setResellerSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                                else { setResellerSortKey(k); setResellerSortDir('desc'); }
+                              }}>
+                              {label}{resellerSortKey === k ? (resellerSortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resellerRows.length === 0 && (
+                        <tr><td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
+                      )}
+                      {resellerRows.map(r => {
+                        const isOpen = expandedReseller === r.reseller;
+                        return (
+                          <Fragment key={r.reseller}>
+                            <tr
+                              onClick={() => setExpandedReseller(isOpen ? null : r.reseller)}
+                              className={`border-t border-border cursor-pointer hover:bg-muted/40 ${isOpen ? 'bg-muted/60' : ''}`}>
+                              <td className="px-2 py-1.5 font-medium">{r.reseller}</td>
+                              <td className="text-right px-2 py-1.5">{r.totalDrs}</td>
+                              <td className={`text-right px-2 py-1.5 ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 0)}</td>
+                              <td className="text-right px-2 py-1.5">{r.closedWon}</td>
+                              <td className={`text-right px-2 py-1.5 font-semibold ${r.cohortRate >= 0.15 ? 'text-green-600 dark:text-green-400' : r.cohortRate >= 0.08 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{fmtPct(r.cohortRate, 0)}</td>
+                              <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
+                                {r.avgCycle !== null ? `${r.avgCycle.toFixed(0)} days` : '—'}
+                              </td>
+                              <td className="text-right px-2 py-1.5">{r.fastest !== null ? `${r.fastest} days` : '—'}</td>
+                              <td className="text-right px-2 py-1.5">{r.slowest !== null ? `${r.slowest} days` : '—'}</td>
+                              <td className="text-right px-2 py-1.5">{r.activeReps}</td>
+                              <td className="px-2 py-1.5 text-muted-foreground">{r.topCam}</td>
+                            </tr>
+                            {isOpen && (
+                              <tr className="bg-muted/20 border-t border-border">
+                                <td colSpan={10} className="px-3 py-2 space-y-3">
+                                  <div>
+                                    <p className="text-[11px] font-semibold text-muted-foreground mb-1">Vintage breakdown by created quarter</p>
+                                    {r.cohort.length === 0 ? <p className="text-[11px] text-muted-foreground">No data.</p> : (
+                                      <table className="text-[11px]">
+                                        <thead className="text-muted-foreground">
+                                          <tr>
+                                            <th className="text-left pr-4 py-0.5 font-medium">Quarter Created</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">DRs</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">SQL'd</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">Closed Won</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">Cohort Rate</th>
+                                            <th className="text-right py-0.5 font-medium">Avg Cycle</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {r.cohort.map(c => (
+                                            <tr key={c.quarter}>
+                                              <td className="pr-4 py-0.5">{c.quarter}</td>
+                                              <td className="text-right pr-4 py-0.5">{c.total}</td>
+                                              <td className="text-right pr-4 py-0.5">{c.sql}</td>
+                                              <td className="text-right pr-4 py-0.5">{c.closedWon}</td>
+                                              <td className={`text-right pr-4 py-0.5 ${colorConvRate(c.cohortRate)}`}>{fmtPct(c.cohortRate, 0)}</td>
+                                              <td className="text-right py-0.5">{c.avgCycle !== null ? `${c.avgCycle.toFixed(0)} days` : '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rep breakdown</p>
+                                      <table className="text-[11px] w-full">
+                                        <thead className="text-muted-foreground">
+                                          <tr>
+                                            <th className="text-left pr-4 py-0.5 font-medium">Rep</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">DRs</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">SQL'd</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">Closed Won</th>
+                                            <th className="text-right py-0.5 font-medium">Cohort Rate</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {r.repBreakdown.map(rb => (
+                                            <tr key={rb.rep}>
+                                              <td className="pr-4 py-0.5">{rb.rep}</td>
+                                              <td className="text-right pr-4 py-0.5">{rb.drs}</td>
+                                              <td className="text-right pr-4 py-0.5">{rb.sqls}</td>
+                                              <td className="text-right pr-4 py-0.5">{rb.closedWon}</td>
+                                              <td className={`text-right py-0.5 ${colorConvRate(rb.cohortRate)}`}>{fmtPct(rb.cohortRate, 0)}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                    <div>
+                                      <p className="text-[11px] font-semibold text-muted-foreground mb-1">CAM breakdown</p>
+                                      <table className="text-[11px] w-full">
+                                        <thead className="text-muted-foreground">
+                                          <tr>
+                                            <th className="text-left pr-4 py-0.5 font-medium">CAM</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">DRs</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">SQL'd</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">Closed Won</th>
+                                            <th className="text-right py-0.5 font-medium">Cohort Rate</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {r.camBreakdown.map(cb => (
+                                            <tr key={cb.cam}>
+                                              <td className="pr-4 py-0.5">{cb.cam}</td>
+                                              <td className="text-right pr-4 py-0.5">{cb.drs}</td>
+                                              <td className="text-right pr-4 py-0.5">{cb.sqls}</td>
+                                              <td className="text-right pr-4 py-0.5">{cb.closedWon}</td>
+                                              <td className={`text-right py-0.5 ${colorConvRate(cb.cohortRate)}`}>{fmtPct(cb.cohortRate, 0)}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                      {resellerRows.length > 0 && (
+                        <tr className="border-t-2 border-border font-medium bg-secondary/30">
+                          <td className="px-2 py-1.5">Total</td>
+                          <td className="text-right px-2 py-1.5">{resellerTotals.totalDrs}</td>
+                          <td className={`text-right px-2 py-1.5 ${colorRate(resellerTotals.sqlRate)}`}>{fmtPct(resellerTotals.sqlRate, 0)}</td>
+                          <td className="text-right px-2 py-1.5">{resellerTotals.closedWon}</td>
+                          <td className={`text-right px-2 py-1.5 ${colorConvRate(resellerTotals.cohortRate)}`}>{fmtPct(resellerTotals.cohortRate, 0)}</td>
+                          <td className="text-right px-2 py-1.5">{resellerTotals.avgCycle !== null ? `${resellerTotals.avgCycle.toFixed(0)} days` : '—'}</td>
+                          <td className="text-right px-2 py-1.5">—</td>
+                          <td className="text-right px-2 py-1.5">—</td>
+                          <td className="text-right px-2 py-1.5">—</td>
+                          <td className="px-2 py-1.5">—</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {resellerInsights.length > 0 && (
+                  <div className="px-3 py-2 border-t border-border bg-secondary/20 space-y-1">
+                    {resellerInsights.map((line, i) => <p key={i} className="text-xs">{line}</p>)}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+
 
 
           {/* Section D: Funnel + Conversion timeline + Cohort */}

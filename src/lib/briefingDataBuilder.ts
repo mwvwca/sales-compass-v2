@@ -48,6 +48,8 @@ export interface BriefingPayload {
     staleDrCount: number;
     rejectedCount: number;
     topCams: { cam: string; openCount: number }[];
+    topResellers: { name: string; totalDrs: number; cohortRate: number; closedWon: number }[];
+    lowResellers: { name: string; totalDrs: number; cohortRate: number }[];
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
@@ -294,11 +296,40 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([cam, openCount]) => ({ cam, openCount }));
+
+    // Reseller signals — only resellers with 3+ DRs
+    const byReseller = new Map<string, DealRegistration[]>();
+    for (const d of drs) {
+      const name = d.resolvedReseller?.trim();
+      if (!name) continue;
+      const arr = byReseller.get(name) || [];
+      arr.push(d);
+      byReseller.set(name, arr);
+    }
+    const resellerStats = [...byReseller.entries()]
+      .filter(([, arr]) => arr.filter(d => d.status !== 'rejected').length >= 3)
+      .map(([name, arr]) => {
+        const nonRej = arr.filter(d => d.status !== 'rejected');
+        const totalDrs = nonRej.length;
+        const closedWon = nonRej.filter(d => d.status === 'closed_won').length;
+        const cohortRate = totalDrs ? closedWon / totalDrs : 0;
+        return { name, totalDrs, closedWon, cohortRate };
+      });
+    const topResellers = [...resellerStats]
+      .sort((a, b) => b.cohortRate - a.cohortRate)
+      .slice(0, 5)
+      .map(({ name, totalDrs, cohortRate, closedWon }) => ({ name, totalDrs, cohortRate, closedWon }));
+    const lowResellers = resellerStats
+      .filter(r => r.totalDrs >= 20 && r.cohortRate < 0.05)
+      .map(({ name, totalDrs, cohortRate }) => ({ name, totalDrs, cohortRate }));
+
     return {
       totalOpenDrs: openDrs.length,
       staleDrCount: stale.length,
       rejectedCount: rejected.length,
       topCams,
+      topResellers,
+      lowResellers,
     };
   })();
 

@@ -3,6 +3,7 @@ import type { Opportunity } from '@/types/forecast';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { getImportedClassification } from '@/lib/forecastClassification';
+import { resolveReseller } from '@/lib/resellerUtils';
 import ImportReview from './ImportReview';
 import { notifyImportComplete } from './WeeklyBriefing';
 
@@ -20,6 +21,8 @@ interface ColumnMapping {
   accountName?: string;
   productName?: string;
   channelAccountManager?: string;
+  resellerName?: string;
+  distributorReseller?: string;
 }
 
 function normalizeHeader(header: string): string {
@@ -67,6 +70,10 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'channel account manager': 'channelAccountManager',
   'cam': 'channelAccountManager',
   'channel manager': 'channelAccountManager',
+  'reseller name': 'resellerName',
+  'reseller': 'resellerName',
+  'distributor reseller': 'distributorReseller',
+  'distributor - reseller': 'distributorReseller',
 };
 
 function parseImportDate(raw: unknown): string {
@@ -226,6 +233,9 @@ export default function ImportSheet() {
           const closeDate = parseImportDate(row[mapping.closeDate || '']);
           const sfid = String(row[mapping.id || ''] || '').trim() || undefined;
 
+          const resellerName = String(row[mapping.resellerName || ''] || '').trim() || undefined;
+          const distributorReseller = String(row[mapping.distributorReseller || ''] || '').trim() || undefined;
+
           return {
             id: sfid || `import-${Date.now()}-${i}`,
             salesforceId: sfid,
@@ -248,6 +258,9 @@ export default function ImportSheet() {
             accountName: String(row[mapping.accountName || ''] || '').trim() || undefined,
             productName: String(row[mapping.productName || ''] || '').trim() || undefined,
             channelAccountManager: String(row[mapping.channelAccountManager || ''] || '').trim() || undefined,
+            resellerName,
+            distributorReseller,
+            resolvedReseller: resolveReseller(resellerName, distributorReseller),
           };
         });
 

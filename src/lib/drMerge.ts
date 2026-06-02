@@ -86,7 +86,7 @@ function computeCycleFields(
 function hasFieldChanges(existing: DealRegistration, incoming: RawDrRecord): boolean {
   const fields: Array<keyof RawDrRecord> = [
     'opportunityName', 'accountName', 'repName', 'secondOwner', 'channelAccountManager',
-    'resellerName', 'distributorReseller', 'product', 'stage', 'probability', 'amount',
+    'resellerName', 'distributorReseller', 'resolvedReseller', 'product', 'stage', 'probability', 'amount',
     'expectedRevenue', 'closeDate', 'billingState', 'leadSource', 'type', 'registeredDeal',
     'lastActivity', 'ageDays',
   ];
@@ -166,6 +166,7 @@ export function mergeDrBatch(
         channelAccountManager: inc.channelAccountManager,
         resellerName: inc.resellerName,
         distributorReseller: inc.distributorReseller,
+        resolvedReseller: inc.resolvedReseller,
         product: inc.product,
         stage: inc.stage,
         probability: inc.probability,
