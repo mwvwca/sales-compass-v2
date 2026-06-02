@@ -87,11 +87,11 @@ export default function ForecastDashboard() {
   type Bucket = { key: string; label: string; matches: (cd: string) => boolean };
   const buckets: Bucket[] = useMemo(() => {
     if (scope === 'weekly') return [{ key: 'w', label: weekRange.label, matches: () => true }];
-    if (scope === 'monthly') return [{ key: anchorMonthKey, label: getMonthLabel(anchorMonthKey), matches: cd => getMonthKey(cd) === anchorMonthKey }];
+    if (scope === 'monthly') return [{ key: anchorMonthKey, label: getMonthLabel(anchorMonthKey), matches: cd => localMonthKey(cd) === anchorMonthKey }];
     if (scope === 'quarterly') {
-      return getQuarterMonths(anchorQuarter).map(m => ({ key: m, label: getMonthLabel(m), matches: (cd: string) => getMonthKey(cd) === m }));
+      return getQuarterMonths(anchorQuarter).map(m => ({ key: m, label: getMonthLabel(m), matches: (cd: string) => localMonthKey(cd) === m }));
     }
-    return getYearQuarters(anchor.getUTCFullYear()).map(q => ({ key: q, label: q.split('-')[1], matches: (cd: string) => getQuarter(cd) === q }));
+    return getYearQuarters(anchor.getUTCFullYear()).map(q => ({ key: q, label: q.split('-')[1], matches: (cd: string) => localQuarter(cd) === q }));
   }, [scope, anchor, anchorMonthKey, anchorQuarter, weekRange]);
 
   // Inactive reps are hidden ONLY from the rep breakdown table and the rep filter dropdown.
