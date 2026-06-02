@@ -19,6 +19,31 @@ import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentation
 
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
+/** Parse a close-date string as a LOCAL date to avoid UTC midnight shifting
+ *  the day into the prior day in negative-offset timezones. */
+function parseDateLocal(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const iso = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+  const us = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (us) return new Date(+us[3], +us[1] - 1, +us[2]);
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function localMonthKey(dateStr: string): string | null {
+  const d = parseDateLocal(dateStr);
+  if (!d) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function localQuarter(dateStr: string): string | null {
+  const d = parseDateLocal(dateStr);
+  if (!d) return null;
+  const q = Math.ceil((d.getMonth() + 1) / 3);
+  return `${d.getFullYear()}-Q${q}`;
+}
+
 export default function ForecastDashboard() {
   const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
