@@ -4,6 +4,7 @@ import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { getImportedClassification } from '@/lib/forecastClassification';
 import ImportReview from './ImportReview';
+import { notifyImportComplete } from './WeeklyBriefing';
 
 interface ColumnMapping {
   id: string;
@@ -281,6 +282,7 @@ export default function ImportSheet() {
         onDone={() => {
           setLastImport({ name: review.fileName, count: review.opps.length });
           setReview(null);
+          notifyImportComplete();
         }}
         onCancel={() => setReview(null)}
       />

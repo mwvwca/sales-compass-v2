@@ -9,6 +9,7 @@ import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
 import DrPipeline from '@/components/DrPipeline';
 import SlipReport from '@/components/SlipReport';
+import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
 import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'slips' | 'graveyard';
@@ -42,6 +43,7 @@ const Index = () => {
           <h1 className="text-sm font-semibold tracking-tight">FORECAST</h1>
           <span className="text-xs text-muted-foreground font-mono">offline</span>
           <DataBackup />
+          <WeeklyBriefing />
         </div>
         <nav className="flex gap-0.5 bg-secondary rounded-md p-0.5">
           {tabs.map(t => (
@@ -60,6 +62,8 @@ const Index = () => {
           ))}
         </nav>
       </header>
+
+      <PostImportBriefingBanner />
 
       <main className="max-w-6xl mx-auto px-6 py-6">
         {tab === 'forecast' && <ForecastDashboard />}
