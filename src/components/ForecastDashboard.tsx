@@ -68,9 +68,11 @@ export default function ForecastDashboard() {
       const d = getDateAtUtcStart(cd);
       return d >= weekRange.start && d <= weekRange.end;
     }
-    if (scope === 'monthly') return getMonthKey(cd) === anchorMonthKey;
-    if (scope === 'quarterly') return getQuarter(cd) === anchorQuarter;
-    return getDateAtUtcStart(cd).getUTCFullYear() === anchor.getUTCFullYear();
+    if (scope === 'monthly') return localMonthKey(cd) === anchorMonthKey;
+    if (scope === 'quarterly') return localQuarter(cd) === anchorQuarter;
+    // Annual: strict year equality on the locally-parsed close date
+    const oppYear = parseDateLocal(cd)?.getFullYear();
+    return oppYear === anchor.getUTCFullYear();
   }, [scope, anchor, anchorMonthKey, anchorQuarter, weekRange]);
 
   // Quarters this scope spans (for rep goal aggregation + downstream comps)
