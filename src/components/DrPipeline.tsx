@@ -1402,6 +1402,34 @@ export default function DrPipeline() {
                                       </table>
                                     </div>
                                   </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-semibold text-muted-foreground mb-1">Padded accounts</p>
+                                    {r.paddedAccountsList.length === 0 ? (
+                                      <p className="text-[11px] text-muted-foreground">No accounts with 2+ pre-SQL, no-activity DRs.</p>
+                                    ) : (
+                                      <table className="text-[11px] w-full">
+                                        <thead className="text-muted-foreground">
+                                          <tr>
+                                            <th className="text-left pr-4 py-0.5 font-medium">Account</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">DRs on Account</th>
+                                            <th className="text-right pr-4 py-0.5 font-medium">Pre-SQL No-Activity</th>
+                                            <th className="text-left py-0.5 font-medium">Products</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {r.paddedAccountsList.map(p => (
+                                            <tr key={p.account}>
+                                              <td className="pr-4 py-0.5">{p.account}</td>
+                                              <td className="text-right pr-4 py-0.5">{p.drs}</td>
+                                              <td className="text-right pr-4 py-0.5 text-red-600 dark:text-red-400 font-medium">{p.preSqlNoActivity}</td>
+                                              <td className="py-0.5 text-muted-foreground">{p.products.join(', ') || '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             )}
