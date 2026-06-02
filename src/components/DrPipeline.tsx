@@ -1402,7 +1402,6 @@ export default function DrPipeline() {
                                       </table>
                                     </div>
                                   </div>
-                                  </div>
                                   <div>
                                     <p className="text-[11px] font-semibold text-muted-foreground mb-1">Padded accounts</p>
                                     {r.paddedAccountsList.length === 0 ? (
