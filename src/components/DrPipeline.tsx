@@ -549,9 +549,32 @@ export default function DrPipeline() {
       const camBreakdown = breakdown(camMap).map(({ key, ...rest }) => ({ cam: key, ...rest }));
       const cohort = buildCohortRows(deals);
 
-      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, cohort, repBreakdown, camBreakdown });
+      // Padding analysis: group reseller's DRs by account, find accounts with 2+ pre-SQL no-activity DRs.
+      // pre-SQL no-activity = !isSql, lastActivity === null, status not in (rejected, closed_won, closed_lost, withdrawn).
+      const isPreSqlNoActivity = (d: DealRegistration) =>
+        !d.isSql && !d.lastActivity &&
+        d.status !== 'rejected' && d.status !== 'closed_won' && d.status !== 'closed_lost' && d.status !== 'withdrawn';
+      const byAcct = new Map<string, DealRegistration[]>();
+      for (const d of deals) {
+        const a = d.accountName || '(none)';
+        const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
+      }
+      const paddedAccountsList: PaddedAccountRow[] = [];
+      let paddingDrCount = 0;
+      for (const [account, arr] of byAcct.entries()) {
+        const preSqlNoActivity = arr.filter(isPreSqlNoActivity).length;
+        if (preSqlNoActivity >= 2) {
+          const products = Array.from(new Set(arr.map(d => d.product).filter(Boolean))) as string[];
+          paddedAccountsList.push({ account, drs: arr.length, preSqlNoActivity, products });
+          paddingDrCount += preSqlNoActivity;
+        }
+      }
+      paddedAccountsList.sort((a, b) => b.preSqlNoActivity - a.preSqlNoActivity);
+      const paddedAccts = paddedAccountsList.length;
+      const paddingRate = totalDrs ? paddingDrCount / totalDrs : 0;
+
+      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
     }
-    rows.sort((a, b) => {
       const dir = resellerSortDir === 'asc' ? 1 : -1;
       const av = a[resellerSortKey] as any; const bv = b[resellerSortKey] as any;
       if (typeof av === 'string') return av.localeCompare(bv) * dir;
