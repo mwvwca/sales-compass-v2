@@ -1272,6 +1272,8 @@ export default function DrPipeline() {
                           ['slowest','Slowest','right'],
                           ['activeReps','Active Reps','right'],
                           ['topCam','Top CAM','left'],
+                          ['paddedAccts','Padded Accts','right'],
+                          ['paddingRate','Padding %','right'],
                         ] as [keyof ResellerRow, string, 'left'|'right'][]).map(([k, label, align]) => {
                           const tooltip = k === 'cohortRate' ? "% of this reseller's DRs that closed won, all time" : undefined;
                           return (
