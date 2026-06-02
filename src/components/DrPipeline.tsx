@@ -1294,7 +1294,7 @@ export default function DrPipeline() {
                     </thead>
                     <tbody>
                       {resellerRows.length === 0 && (
-                        <tr><td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
+                        <tr><td colSpan={12} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
                       )}
                       {resellerRows.map(r => {
                         const isOpen = expandedReseller === r.reseller;
