@@ -1315,6 +1315,8 @@ export default function DrPipeline() {
                               <td className="text-right px-2 py-1.5">{r.slowest !== null ? `${r.slowest} days` : '—'}</td>
                               <td className="text-right px-2 py-1.5">{r.activeReps}</td>
                               <td className="px-2 py-1.5 text-muted-foreground">{r.topCam}</td>
+                              <td className="text-right px-2 py-1.5">{r.paddedAccts}</td>
+                              <td className={`text-right px-2 py-1.5 font-semibold ${r.paddingRate >= 0.2 ? 'text-red-600 dark:text-red-400' : r.paddingRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>{fmtPct(r.paddingRate, 0)}</td>
                             </tr>
                             {isOpen && (
                               <tr className="bg-muted/20 border-t border-border">
