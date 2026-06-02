@@ -785,6 +785,28 @@ export default function DrPipeline() {
     })));
     XLSX.utils.book_append_sheet(wb, staleSheet, 'Stale & No Activity');
 
+    // Sheet 4 — Reseller Performance
+    const resellerData: any[] = [
+      { Note: "Reseller name normalized from 'Reseller Name' and 'Distributor - Reseller' fields. Partners with fewer than 3 DRs excluded." },
+      {},
+    ];
+    for (const r of resellerRows) {
+      resellerData.push({
+        Reseller: r.reseller,
+        'Total DRs': r.totalDrs,
+        'SQL Rate': fmtPct(r.sqlRate, 1),
+        'Closed Won': r.closedWon,
+        'Cohort Rate': fmtPct(r.cohortRate, 1),
+        'Avg Cycle (d)': r.avgCycle !== null ? r.avgCycle.toFixed(0) : '—',
+        'Fastest (d)': r.fastest ?? '—',
+        'Slowest (d)': r.slowest ?? '—',
+        'Active Reps': r.activeReps,
+        'Top CAM': r.topCam,
+      });
+    }
+    const resellerSheet = XLSX.utils.json_to_sheet(resellerData, { skipHeader: false });
+    XLSX.utils.book_append_sheet(wb, resellerSheet, 'Reseller Performance');
+
     XLSX.writeFile(wb, `DR_Pipeline_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
