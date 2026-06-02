@@ -258,6 +258,9 @@ export default function ImportSheet() {
             accountName: String(row[mapping.accountName || ''] || '').trim() || undefined,
             productName: String(row[mapping.productName || ''] || '').trim() || undefined,
             channelAccountManager: String(row[mapping.channelAccountManager || ''] || '').trim() || undefined,
+            resellerName,
+            distributorReseller,
+            resolvedReseller: resolveReseller(resellerName, distributorReseller),
           };
         });
 
