@@ -70,6 +70,10 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'channel account manager': 'channelAccountManager',
   'cam': 'channelAccountManager',
   'channel manager': 'channelAccountManager',
+  'reseller name': 'resellerName',
+  'reseller': 'resellerName',
+  'distributor reseller': 'distributorReseller',
+  'distributor - reseller': 'distributorReseller',
 };
 
 function parseImportDate(raw: unknown): string {
