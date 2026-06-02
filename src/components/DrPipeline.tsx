@@ -589,14 +589,17 @@ export default function DrPipeline() {
       acc.totalDrs += r.totalDrs;
       acc.sqls += r.sqls;
       acc.closedWon += r.closedWon;
+      acc.paddedAccts += r.paddedAccts;
+      acc.paddingDrs += r.paddingRate * r.totalDrs;
       if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
       return acc;
-    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0 });
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0, paddedAccts: 0, paddingDrs: 0 });
     return {
       ...t,
       sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
       cohortRate: t.totalDrs ? t.closedWon / t.totalDrs : 0,
       avgCycle: t.cycleN ? t.cycleSum / t.cycleN : null,
+      paddingRate: t.totalDrs ? t.paddingDrs / t.totalDrs : 0,
     };
   }, [resellerRows]);
 
