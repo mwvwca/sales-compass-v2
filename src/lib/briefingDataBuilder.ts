@@ -48,6 +48,8 @@ export interface BriefingPayload {
     staleDrCount: number;
     rejectedCount: number;
     topCams: { cam: string; openCount: number }[];
+    topResellers: { name: string; totalDrs: number; cohortRate: number; closedWon: number }[];
+    lowResellers: { name: string; totalDrs: number; cohortRate: number }[];
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
