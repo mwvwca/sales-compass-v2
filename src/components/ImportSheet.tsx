@@ -282,6 +282,7 @@ export default function ImportSheet() {
         onDone={() => {
           setLastImport({ name: review.fileName, count: review.opps.length });
           setReview(null);
+          notifyImportComplete();
         }}
         onCancel={() => setReview(null)}
       />
