@@ -1447,6 +1447,8 @@ export default function DrPipeline() {
                           <td className="text-right px-2 py-1.5">—</td>
                           <td className="text-right px-2 py-1.5">—</td>
                           <td className="px-2 py-1.5">—</td>
+                          <td className="text-right px-2 py-1.5">{resellerTotals.paddedAccts}</td>
+                          <td className={`text-right px-2 py-1.5 font-semibold ${resellerTotals.paddingRate >= 0.2 ? 'text-red-600 dark:text-red-400' : resellerTotals.paddingRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>{fmtPct(resellerTotals.paddingRate, 0)}</td>
                         </tr>
                       )}
                     </tbody>
