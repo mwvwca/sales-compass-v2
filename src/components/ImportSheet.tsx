@@ -3,6 +3,7 @@ import type { Opportunity } from '@/types/forecast';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { getImportedClassification } from '@/lib/forecastClassification';
+import { resolveReseller } from '@/lib/resellerUtils';
 import ImportReview from './ImportReview';
 import { notifyImportComplete } from './WeeklyBriefing';
 
