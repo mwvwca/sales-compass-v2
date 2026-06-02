@@ -470,6 +470,125 @@ export default function DrPipeline() {
     return out;
   }, [camRows]);
 
+  // ---------- Section C2: Reseller Performance ----------
+  type ResellerRow = {
+    reseller: string;
+    totalDrs: number;
+    sqls: number;
+    sqlRate: number;
+    closedWon: number;
+    cohortRate: number;
+    avgCycle: number | null;
+    fastest: number | null;
+    slowest: number | null;
+    activeReps: number;
+    topCam: string;
+    cohort: CohortRow[];
+    repBreakdown: { rep: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
+    camBreakdown: { cam: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
+  };
+
+  const [showReseller, setShowReseller] = useState(false);
+  const [resellerSortKey, setResellerSortKey] = useState<keyof ResellerRow>('cohortRate');
+  const [resellerSortDir, setResellerSortDir] = useState<'asc' | 'desc'>('desc');
+  const [expandedReseller, setExpandedReseller] = useState<string | null>(null);
+
+  const resellerRows: ResellerRow[] = useMemo(() => {
+    const byReseller = new Map<string, DealRegistration[]>();
+    for (const d of scopeNoStatus) {
+      if (d.status === 'rejected') continue;
+      const name = d.resolvedReseller?.trim();
+      if (!name) continue;
+      const arr = byReseller.get(name) || [];
+      arr.push(d);
+      byReseller.set(name, arr);
+    }
+    const rows: ResellerRow[] = [];
+    for (const [reseller, deals] of byReseller.entries()) {
+      const totalDrs = deals.length;
+      if (totalDrs < 3) continue;
+      const sqls = deals.filter(d => d.isSql).length;
+      const sqlRate = totalDrs ? sqls / totalDrs : 0;
+      const wonDeals = deals.filter(d => d.status === 'closed_won');
+      const closedWon = wonDeals.length;
+      const cohortRate = totalDrs ? closedWon / totalDrs : 0;
+      const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
+      const avgCycle = cycles.length >= 2 ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
+      const fastest = cycles.length ? Math.min(...cycles) : null;
+      const slowest = cycles.length ? Math.max(...cycles) : null;
+      const repSet = new Set(deals.map(d => d.repName).filter(Boolean));
+      const activeReps = repSet.size;
+      const camCounts = new Map<string, number>();
+      for (const d of deals) {
+        const c = d.channelAccountManager || '(none)';
+        camCounts.set(c, (camCounts.get(c) || 0) + 1);
+      }
+      const topCam = [...camCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+
+      const breakdown = (group: Map<string, DealRegistration[]>) =>
+        [...group.entries()].map(([key, arr]) => {
+          const t = arr.length;
+          const s = arr.filter(d => d.isSql).length;
+          const w = arr.filter(d => d.status === 'closed_won').length;
+          return { key, drs: t, sqls: s, closedWon: w, cohortRate: t ? w / t : 0 };
+        }).sort((a, b) => b.drs - a.drs);
+
+      const repMap = new Map<string, DealRegistration[]>();
+      const camMap = new Map<string, DealRegistration[]>();
+      for (const d of deals) {
+        const r = d.repName || '(unassigned)';
+        const c = d.channelAccountManager || '(none)';
+        const ra = repMap.get(r) || []; ra.push(d); repMap.set(r, ra);
+        const ca = camMap.get(c) || []; ca.push(d); camMap.set(c, ca);
+      }
+      const repBreakdown = breakdown(repMap).map(({ key, ...rest }) => ({ rep: key, ...rest }));
+      const camBreakdown = breakdown(camMap).map(({ key, ...rest }) => ({ cam: key, ...rest }));
+      const cohort = buildCohortRows(deals);
+
+      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, cohort, repBreakdown, camBreakdown });
+    }
+    rows.sort((a, b) => {
+      const dir = resellerSortDir === 'asc' ? 1 : -1;
+      const av = a[resellerSortKey] as any; const bv = b[resellerSortKey] as any;
+      if (typeof av === 'string') return av.localeCompare(bv) * dir;
+      return ((av ?? -1) - (bv ?? -1)) * dir;
+    });
+    return rows;
+  }, [scopeNoStatus, resellerSortKey, resellerSortDir]);
+
+  const resellerTotals = useMemo(() => {
+    const t = resellerRows.reduce((acc, r) => {
+      acc.totalDrs += r.totalDrs;
+      acc.sqls += r.sqls;
+      acc.closedWon += r.closedWon;
+      if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
+      return acc;
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0 });
+    return {
+      ...t,
+      sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
+      cohortRate: t.totalDrs ? t.closedWon / t.totalDrs : 0,
+      avgCycle: t.cycleN ? t.cycleSum / t.cycleN : null,
+    };
+  }, [resellerRows]);
+
+  const resellerInsights = useMemo(() => {
+    const out: string[] = [];
+    for (const r of resellerRows) {
+      if (r.cohortRate >= 0.2 && r.totalDrs >= 10) {
+        out.push(`✓ ${r.reseller} is your highest-converting partner at ${fmtPct(r.cohortRate, 0)} cohort rate — prioritize their leads.`);
+      }
+      if (r.totalDrs >= 20 && r.cohortRate < 0.05) {
+        out.push(`⚠ ${r.reseller} has registered ${r.totalDrs} DRs with only ${fmtPct(r.cohortRate, 0)} closing — review lead quality with this partner.`);
+      }
+      if (r.avgCycle !== null && r.avgCycle > 180 && r.closedWon >= 2) {
+        out.push(`⚠ ${r.reseller}'s deals average ${r.avgCycle.toFixed(0)} days to close — factor into pipeline timing.`);
+      }
+    }
+    return out;
+  }, [resellerRows]);
+
+
   // ---------- Section D: Funnel + Conversion timeline + Cohort ----------
   const funnelMonthDate = useMemo(() => {
     const now = new Date();
