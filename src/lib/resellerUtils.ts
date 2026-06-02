@@ -12,7 +12,17 @@ export function normalizeResellerName(name: string): string {
     .toLowerCase()
     .replace(/\b\w/g, c => c.toUpperCase())
     .replace(/\bEplus\b/gi, 'ePlus')
-    .replace(/\bBorderlan\b/gi, 'BorderLAN');
+    .replace(/\bBorderlan\b/gi, 'BorderLAN')
+    .replace(/\bCdw\b/g, 'CDW')
+    .replace(/\bShi\b/g, 'SHI')
+    .replace(/\bSsa\b/g, 'SSA')
+    .replace(/\bVlcm\b/g, 'VLCM')
+    .replace(/\bMnj\b/g, 'MNJ')
+    .replace(/\bBw\b/g, 'BW')
+    .replace(/\bIt\b/g, 'IT')
+    .replace(/\bAti\b/g, 'ATI')
+    .replace(/\bGrm\b/g, 'GRM')
+    .replace(/\bTrace3\b/gi, 'Trace3');
 }
 
 /**
