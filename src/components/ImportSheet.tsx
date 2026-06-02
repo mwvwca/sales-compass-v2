@@ -233,6 +233,9 @@ export default function ImportSheet() {
           const closeDate = parseImportDate(row[mapping.closeDate || '']);
           const sfid = String(row[mapping.id || ''] || '').trim() || undefined;
 
+          const resellerName = String(row[mapping.resellerName || ''] || '').trim() || undefined;
+          const distributorReseller = String(row[mapping.distributorReseller || ''] || '').trim() || undefined;
+
           return {
             id: sfid || `import-${Date.now()}-${i}`,
             salesforceId: sfid,
