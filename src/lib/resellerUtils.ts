@@ -8,7 +8,11 @@ export function normalizeResellerName(name: string): string {
     .replace(/,?\s*Ltd\.?$/i, '')
     .replace(/,?\s*Limited$/i, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\bEplus\b/gi, 'ePlus')
+    .replace(/\bBorderlan\b/gi, 'BorderLAN');
 }
 
 /**
