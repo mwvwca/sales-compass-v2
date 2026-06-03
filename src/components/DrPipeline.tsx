@@ -518,6 +518,8 @@ export default function DrPipeline() {
     sqlRate: number;
     closedWon: number;
     cohortRate: number;
+    pipelineAmount: number;
+    closedWonAmount: number;
     avgCycle: number | null;
     fastest: number | null;
     slowest: number | null;
