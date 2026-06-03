@@ -50,6 +50,8 @@ export interface BriefingPayload {
     topCams: { cam: string; openCount: number }[];
     topResellers: { name: string; totalDrs: number; cohortRate: number; closedWon: number }[];
     lowResellers: { name: string; totalDrs: number; cohortRate: number }[];
+    dataFloor: string;
+    dataNote: string;
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
@@ -330,6 +332,8 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       topCams,
       topResellers,
       lowResellers,
+      dataFloor: 'July 15, 2025',
+      dataNote: 'Closed won matches reflect formally registered deals only',
     };
   })();
 

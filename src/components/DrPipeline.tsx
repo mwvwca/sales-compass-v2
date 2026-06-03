@@ -2,7 +2,7 @@ import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Upload, FileSpreadsheet, Download, RefreshCw, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, RefreshCw, X, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { parseDrExport } from '@/lib/drParser';
 import { mergeDrBatch } from '@/lib/drMerge';
@@ -992,6 +992,12 @@ export default function DrPipeline() {
 
       {hasData && (
         <>
+          {/* Data boundary notice */}
+          <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <span>DR data reflects registrations from July 15, 2025 onwards. Closed won matches reflect formally registered deals only — unregistered channel-sourced deals are not included.</span>
+          </div>
+
           {/* Global filter bar */}
           <div className="p-3 border border-border rounded-md bg-secondary/20 space-y-2">
             <div className="flex flex-wrap items-center gap-3">
