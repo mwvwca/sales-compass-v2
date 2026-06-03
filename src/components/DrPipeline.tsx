@@ -614,7 +614,10 @@ export default function DrPipeline() {
       const paddedAccts = paddedAccountsList.length;
       const paddingRate = totalDrs ? paddingDrCount / totalDrs : 0;
 
-      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
+      const pipelineAmount = pipelineSum(deals);
+      const closedWonAmount = closedWonSum(deals, oppMap);
+
+      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, pipelineAmount, closedWonAmount, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
     }
     rows.sort((a, b) => {
       const dir = resellerSortDir === 'asc' ? 1 : -1;
