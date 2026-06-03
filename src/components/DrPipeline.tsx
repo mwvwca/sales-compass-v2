@@ -724,7 +724,7 @@ export default function DrPipeline() {
   }, [dealRegistrations]);
 
   // ---------- Section E: Detail table ----------
-  const oppMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
+
 
   const detailRows = useMemo(() => {
     let rows = filtered.slice();
