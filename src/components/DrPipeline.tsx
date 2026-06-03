@@ -1298,6 +1298,8 @@ export default function DrPipeline() {
                         <td className="px-2 py-1.5">Total</td>
                         <td className="text-right px-2 py-1.5">{camTotals.totalDrs}</td>
                         <td className={`text-right px-2 py-1.5 ${colorRate(camTotals.sqlRate)}`}>{fmtPct(camTotals.sqlRate, 1)}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(camTotals.pipelineAmount)}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(camTotals.closedWonAmount)}</td>
                         <td className="text-right px-2 py-1.5">{camTotals.closedWon}</td>
                         <td className={`text-right px-2 py-1.5 ${colorConvRate(camTotals.cohortRate)}`}>{fmtPct(camTotals.cohortRate, 1)}</td>
                         <td className="text-right px-2 py-1.5">{camTotals.avgCycle !== null ? `${camTotals.avgCycle.toFixed(0)} days` : '—'}</td>
