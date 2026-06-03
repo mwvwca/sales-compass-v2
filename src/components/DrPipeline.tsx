@@ -316,6 +316,7 @@ export default function DrPipeline() {
     stale: number; noActivity: number; avgAge: number;
     converted: number; closedWon: number; convRate: number;
     cohortRate: number; avgCycle: number | null;
+    pipelineAmount: number; closedWonAmount: number;
     rejectedByCam: Map<string, { count: number; products: string[] }>;
     cohort: CohortRow[];
   };
