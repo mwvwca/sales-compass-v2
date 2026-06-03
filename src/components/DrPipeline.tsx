@@ -1162,8 +1162,10 @@ export default function DrPipeline() {
                     <td className="text-right px-2 py-1.5">{aeTotals.assigned}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.rejected}</td>
                     <td className={`text-right px-2 py-1.5 ${colorRate(aeTotals.sqlRate)}`}>{fmtPct(aeTotals.sqlRate, 1)}</td>
+                    <td className="text-right px-2 py-1.5">{fmtDollar(aeTotals.pipelineAmount)}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.converted}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.closedWon}</td>
+                    <td className="text-right px-2 py-1.5">{fmtDollar(aeTotals.closedWonAmount)}</td>
                     <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(aeTotals.convRate)}`}>{fmtPct(aeTotals.convRate, 1)}</td>
                     <td className="text-right px-2 py-1.5">—</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
