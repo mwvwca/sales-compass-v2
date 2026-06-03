@@ -1071,8 +1071,10 @@ export default function DrPipeline() {
                     <th className="text-right px-2 py-1.5 font-medium" title="Total DRs including rejected">Assigned</th>
                     <th className="text-right px-2 py-1.5 font-medium" title="DRs this rep explicitly rejected in Salesforce">Rejected</th>
                     <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Sum of amount on SQL'd, open DRs with amount > 0">Pipeline $</th>
                     <th className="text-right px-2 py-1.5 font-medium">Converted</th>
                     <th className="text-right px-2 py-1.5 font-medium">Closed Won</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Lifetime closed won revenue">Closed Won $</th>
                     <th className="text-right px-2 py-1.5 font-semibold" title="Closed Won / Assigned (excl. rejected)">Cohort Rate</th>
                     <th className="text-right px-2 py-1.5 font-medium">Avg Cycle</th>
                     <th className="text-right px-2 py-1.5 font-medium">Stale</th>
