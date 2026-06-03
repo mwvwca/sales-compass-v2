@@ -32,7 +32,28 @@ function fmtMoney(n: number): string {
   if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
 }
+function fmtDollar(n: number): string {
+  return `$${Math.round(n || 0).toLocaleString()}`;
+}
 function fmtPct(n: number, digits = 0): string { return `${(n * 100).toFixed(digits)}%`; }
+
+// Pipeline DR = SQL'd, amount > 0, still open
+function isPipelineDr(d: DealRegistration): boolean {
+  return !!d.isSql && (d.amount ?? 0) > 0 &&
+    d.status !== 'closed_won' && d.status !== 'closed_lost' &&
+    d.status !== 'rejected' && d.status !== 'withdrawn';
+}
+function pipelineSum(deals: DealRegistration[]): number {
+  return deals.filter(isPipelineDr).reduce((s, d) => s + (d.amount || 0), 0);
+}
+function closedWonSum(deals: DealRegistration[], oppMap?: Map<string, Opportunity>): number {
+  return deals.filter(d => d.status === 'closed_won').reduce((s, d) => {
+    const amt = (d.amount ?? null) !== null && (d.amount ?? 0) > 0
+      ? (d.amount as number)
+      : (oppMap?.get(d.opportunityId)?.amount ?? 0);
+    return s + (amt || 0);
+  }, 0);
+}
 
 function normalizeStage(s: string): string {
   const low = (s || '').toLowerCase();
