@@ -32,7 +32,28 @@ function fmtMoney(n: number): string {
   if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
 }
+function fmtDollar(n: number): string {
+  return `$${Math.round(n || 0).toLocaleString()}`;
+}
 function fmtPct(n: number, digits = 0): string { return `${(n * 100).toFixed(digits)}%`; }
+
+// Pipeline DR = SQL'd, amount > 0, still open
+function isPipelineDr(d: DealRegistration): boolean {
+  return !!d.isSql && (d.amount ?? 0) > 0 &&
+    d.status !== 'closed_won' && d.status !== 'closed_lost' &&
+    d.status !== 'rejected' && d.status !== 'withdrawn';
+}
+function pipelineSum(deals: DealRegistration[]): number {
+  return deals.filter(isPipelineDr).reduce((s, d) => s + (d.amount || 0), 0);
+}
+function closedWonSum(deals: DealRegistration[], oppMap?: Map<string, Opportunity>): number {
+  return deals.filter(d => d.status === 'closed_won').reduce((s, d) => {
+    const amt = (d.amount ?? null) !== null && (d.amount ?? 0) > 0
+      ? (d.amount as number)
+      : (oppMap?.get(d.opportunityId)?.amount ?? 0);
+    return s + (amt || 0);
+  }, 0);
+}
 
 function normalizeStage(s: string): string {
   const low = (s || '').toLowerCase();
@@ -253,6 +274,8 @@ export default function DrPipeline() {
     });
   }, [dealRegistrations, camFilter, repFilter, periodRange]);
 
+  const oppMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
+
   const defaultStatusesActive = DEFAULT_STATUSES.length === statuses.size && DEFAULT_STATUSES.every(s => statuses.has(s));
   const filtersActive = camFilter !== 'all' || repFilter !== 'all' || period !== DEFAULT_PERIOD || !defaultStatusesActive;
   const clearFilters = () => { setCamFilter('all'); setRepFilter('all'); setPeriod(DEFAULT_PERIOD); setStatuses(new Set(DEFAULT_STATUSES)); };
@@ -293,6 +316,7 @@ export default function DrPipeline() {
     stale: number; noActivity: number; avgAge: number;
     converted: number; closedWon: number; convRate: number;
     cohortRate: number; avgCycle: number | null;
+    pipelineAmount: number; closedWonAmount: number;
     rejectedByCam: Map<string, { count: number; products: string[] }>;
     cohort: CohortRow[];
   };
@@ -332,7 +356,9 @@ export default function DrPipeline() {
         rejectedByCam.set(cam, e);
       }
       const cohort = buildCohortRows(nonRejected);
-      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, rejectedByCam, cohort };
+      const pipelineAmount = pipelineSum(nonRejected);
+      const closedWonAmount = closedWonSum(nonRejected, oppMap);
+      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, pipelineAmount, closedWonAmount, rejectedByCam, cohort };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
     if (!showInactiveReps) {
@@ -359,8 +385,10 @@ export default function DrPipeline() {
       acc.sqls += r.sqls; acc.stale += r.stale;
       acc.noActivity += r.noActivity; acc.converted += r.converted; acc.closedWon += r.closedWon;
       acc.ageSum += r.avgAge * nonRej;
+      acc.pipelineAmount += r.pipelineAmount;
+      acc.closedWonAmount += r.closedWonAmount;
       return acc;
-    }, { assigned: 0, rejected: 0, nonRejected: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0 });
+    }, { assigned: 0, rejected: 0, nonRejected: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0, pipelineAmount: 0, closedWonAmount: 0 });
     return {
       ...t,
       sqlRate: t.nonRejected ? t.sqls / t.nonRejected : 0,
@@ -388,6 +416,7 @@ export default function DrPipeline() {
   type CamRow = {
     cam: string; totalDrs: number; sqls: number; sqlRate: number;
     closedWon: number; cohortRate: number;
+    pipelineAmount: number; closedWonAmount: number;
     avgCycle: number | null; fastest: number | null; slowest: number | null;
     inPeriodWon: number; withdrawn: number; withdrawnRate: number;
     cohort: CohortRow[];
@@ -420,8 +449,10 @@ export default function DrPipeline() {
       const inPeriodWon = wonDeals.filter(d => d.inPeriodWon === true).length;
       const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
       const withdrawnRate = totalDrs ? withdrawn / totalDrs : 0;
+      const pipelineAmount = pipelineSum(deals);
+      const closedWonAmount = closedWonSum(deals, oppMap);
       const cohort = buildCohortRows(deals);
-      return { cam, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, inPeriodWon, withdrawn, withdrawnRate, cohort };
+      return { cam, totalDrs, sqls, sqlRate, closedWon, cohortRate, pipelineAmount, closedWonAmount, avgCycle, fastest, slowest, inPeriodWon, withdrawn, withdrawnRate, cohort };
     });
     rows.sort((a, b) => {
       const dir = camSortDir === 'asc' ? 1 : -1;
@@ -430,7 +461,7 @@ export default function DrPipeline() {
       return ((av ?? -1) - (bv ?? -1)) * dir;
     });
     return rows;
-  }, [scopeNoStatus, camSortKey, camSortDir]);
+  }, [scopeNoStatus, camSortKey, camSortDir, oppMap]);
 
   const camTotals = useMemo(() => {
     const t = camRows.reduce((acc, r) => {
@@ -439,9 +470,11 @@ export default function DrPipeline() {
       acc.closedWon += r.closedWon;
       acc.inPeriodWon += r.inPeriodWon;
       acc.withdrawn += r.withdrawn;
+      acc.pipelineAmount += r.pipelineAmount;
+      acc.closedWonAmount += r.closedWonAmount;
       if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
       return acc;
-    }, { totalDrs: 0, sqls: 0, closedWon: 0, inPeriodWon: 0, withdrawn: 0, cycleSum: 0, cycleN: 0 });
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, inPeriodWon: 0, withdrawn: 0, cycleSum: 0, cycleN: 0, pipelineAmount: 0, closedWonAmount: 0 });
     return {
       ...t,
       sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
@@ -466,6 +499,12 @@ export default function DrPipeline() {
       if (r.fastest !== null && r.fastest < 30 && r.closedWon > 2) {
         out.push(`✓ ${r.cam} is generating fast-moving deals — fastest close is ${r.fastest} days.`);
       }
+      if (r.closedWonAmount > 150_000) {
+        out.push(`✓ ${r.cam} has delivered ${fmtDollar(r.closedWonAmount)} in closed won revenue.`);
+      }
+      if (r.pipelineAmount > 300_000 && r.cohortRate < 0.05) {
+        out.push(`⚠ ${r.cam} has ${fmtDollar(r.pipelineAmount)} in qualified pipeline with ${fmtPct(r.cohortRate, 0)} historical close rate.`);
+      }
     }
     return out;
   }, [camRows]);
@@ -479,6 +518,8 @@ export default function DrPipeline() {
     sqlRate: number;
     closedWon: number;
     cohortRate: number;
+    pipelineAmount: number;
+    closedWonAmount: number;
     avgCycle: number | null;
     fastest: number | null;
     slowest: number | null;
@@ -573,7 +614,10 @@ export default function DrPipeline() {
       const paddedAccts = paddedAccountsList.length;
       const paddingRate = totalDrs ? paddingDrCount / totalDrs : 0;
 
-      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
+      const pipelineAmount = pipelineSum(deals);
+      const closedWonAmount = closedWonSum(deals, oppMap);
+
+      rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, pipelineAmount, closedWonAmount, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
     }
     rows.sort((a, b) => {
       const dir = resellerSortDir === 'asc' ? 1 : -1;
@@ -582,7 +626,7 @@ export default function DrPipeline() {
       return ((av ?? -1) - (bv ?? -1)) * dir;
     });
     return rows;
-  }, [scopeNoStatus, resellerSortKey, resellerSortDir]);
+  }, [scopeNoStatus, resellerSortKey, resellerSortDir, oppMap]);
 
   const resellerTotals = useMemo(() => {
     const t = resellerRows.reduce((acc, r) => {
@@ -591,9 +635,11 @@ export default function DrPipeline() {
       acc.closedWon += r.closedWon;
       acc.paddedAccts += r.paddedAccts;
       acc.paddingDrs += r.paddingRate * r.totalDrs;
+      acc.pipelineAmount += r.pipelineAmount;
+      acc.closedWonAmount += r.closedWonAmount;
       if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
       return acc;
-    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0, paddedAccts: 0, paddingDrs: 0 });
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0, paddedAccts: 0, paddingDrs: 0, pipelineAmount: 0, closedWonAmount: 0 });
     return {
       ...t,
       sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
@@ -617,6 +663,12 @@ export default function DrPipeline() {
       }
       if (r.paddingRate >= 0.2 && r.totalDrs >= 10) {
         out.push(`⚠ ${r.reseller} has ${fmtPct(r.paddingRate, 0)} of registrations showing padding patterns (${r.paddedAccts} accounts with multiple pre-SQL, no-activity DRs) — raise in next QBR.`);
+      }
+      if (r.closedWonAmount > 200_000) {
+        out.push(`✓ ${r.reseller} has delivered ${fmtDollar(r.closedWonAmount)} in closed won revenue — your highest-value partner.`);
+      }
+      if (r.pipelineAmount > 500_000 && r.cohortRate < 0.05) {
+        out.push(`⚠ ${r.reseller} has ${fmtDollar(r.pipelineAmount)} in qualified pipeline but only ${fmtPct(r.cohortRate, 0)} historical close rate — treat pipeline value with caution.`);
       }
     }
     return out;
@@ -701,7 +753,7 @@ export default function DrPipeline() {
   }, [dealRegistrations]);
 
   // ---------- Section E: Detail table ----------
-  const oppMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
+
 
   const detailRows = useMemo(() => {
     let rows = filtered.slice();
@@ -865,6 +917,8 @@ export default function DrPipeline() {
   const colorConvRate = (r: number) =>
     r >= 0.2 ? 'text-green-600 dark:text-green-400' : r >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
   const colorAge = (a: number) => a > 90 ? 'text-red-600 dark:text-red-400' : a > 45 ? 'text-amber-600 dark:text-amber-400' : '';
+  const colorDollar = (n: number) =>
+    n > 100_000 ? 'text-green-600 dark:text-green-400' : n >= 10_000 ? 'text-amber-600 dark:text-amber-400' : '';
 
   return (
     <div className="space-y-6">
@@ -1017,8 +1071,10 @@ export default function DrPipeline() {
                     <th className="text-right px-2 py-1.5 font-medium" title="Total DRs including rejected">Assigned</th>
                     <th className="text-right px-2 py-1.5 font-medium" title="DRs this rep explicitly rejected in Salesforce">Rejected</th>
                     <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Sum of amount on SQL'd, open DRs with amount > 0">Pipeline $</th>
                     <th className="text-right px-2 py-1.5 font-medium">Converted</th>
                     <th className="text-right px-2 py-1.5 font-medium">Closed Won</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Lifetime closed won revenue">Closed Won $</th>
                     <th className="text-right px-2 py-1.5 font-semibold" title="Closed Won / Assigned (excl. rejected)">Cohort Rate</th>
                     <th className="text-right px-2 py-1.5 font-medium">Avg Cycle</th>
                     <th className="text-right px-2 py-1.5 font-medium">Stale</th>
@@ -1035,8 +1091,10 @@ export default function DrPipeline() {
                         <td className="text-right px-2 py-1.5">{r.assigned}</td>
                         <td className={`text-right px-2 py-1.5 ${r.rejected > 15 ? 'text-red-600 dark:text-red-400 font-medium' : r.rejected > 5 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.rejected}</td>
                         <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(r.pipelineAmount)}</td>
                         <td className="text-right px-2 py-1.5">{r.converted}</td>
                         <td className="text-right px-2 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{r.closedWon}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(r.closedWonAmount)}</td>
                         <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 1)}</td>
                         <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
                           {r.avgCycle !== null ? `${r.avgCycle.toFixed(0)} days` : '—'}
@@ -1046,7 +1104,7 @@ export default function DrPipeline() {
                       </tr>
                       {expandedRep === r.rep && (
                         <tr className="bg-muted/20 border-t border-border">
-                          <td colSpan={10} className="px-3 py-2 space-y-3">
+                          <td colSpan={12} className="px-3 py-2 space-y-3">
                             {r.rejected > 0 && (
                               <div>
                                 <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rejected DRs by CAM (coaching context)</p>
@@ -1104,8 +1162,10 @@ export default function DrPipeline() {
                     <td className="text-right px-2 py-1.5">{aeTotals.assigned}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.rejected}</td>
                     <td className={`text-right px-2 py-1.5 ${colorRate(aeTotals.sqlRate)}`}>{fmtPct(aeTotals.sqlRate, 1)}</td>
+                    <td className="text-right px-2 py-1.5">{fmtDollar(aeTotals.pipelineAmount)}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.converted}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.closedWon}</td>
+                    <td className="text-right px-2 py-1.5">{fmtDollar(aeTotals.closedWonAmount)}</td>
                     <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(aeTotals.convRate)}`}>{fmtPct(aeTotals.convRate, 1)}</td>
                     <td className="text-right px-2 py-1.5">—</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
@@ -1139,6 +1199,8 @@ export default function DrPipeline() {
                           ['cam','CAM','left'],
                           ['totalDrs','Total DRs','right'],
                           ['sqlRate','SQL Rate','right'],
+                          ['pipelineAmount','Pipeline $','right'],
+                          ['closedWonAmount','Closed Won $','right'],
                           ['closedWon','Closed Won','right'],
                           ['cohortRate','Cohort Rate','right'],
                           ['avgCycle','Avg Cycle','right'],
@@ -1176,6 +1238,8 @@ export default function DrPipeline() {
                               <td className="px-2 py-1.5 font-medium">{r.cam}</td>
                               <td className="text-right px-2 py-1.5">{r.totalDrs}</td>
                               <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
+                              <td className="text-right px-2 py-1.5">{fmtDollar(r.pipelineAmount)}</td>
+                              <td className={`text-right px-2 py-1.5 ${colorDollar(r.closedWonAmount)}`}>{fmtDollar(r.closedWonAmount)}</td>
                               <td className="text-right px-2 py-1.5">{r.closedWon}</td>
                               <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 1)}</td>
                               <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
@@ -1188,7 +1252,12 @@ export default function DrPipeline() {
                             </tr>
                             {isOpen && (
                               <tr className="bg-muted/20 border-t border-border">
-                                <td colSpan={10} className="px-3 py-2">
+                                <td colSpan={12} className="px-3 py-2 space-y-2">
+                                  <p className="text-[11px]">
+                                    <span className="text-muted-foreground">Pipeline $: </span><span className="font-semibold">{fmtDollar(r.pipelineAmount)}</span>
+                                    <span className="text-muted-foreground"> · Closed Won $: </span><span className="font-semibold">{fmtDollar(r.closedWonAmount)}</span>
+                                    <span className="text-muted-foreground"> · Avg Deal Size (CW): </span><span className="font-semibold">{fmtDollar(r.closedWon > 0 ? r.closedWonAmount / r.closedWon : 0)}</span>
+                                  </p>
                                   <p className="text-[11px] font-semibold text-muted-foreground mb-1">Vintage breakdown by created quarter</p>
                                   {r.cohort.length === 0 ? (
                                     <p className="text-[11px] text-muted-foreground">No data.</p>
@@ -1229,6 +1298,8 @@ export default function DrPipeline() {
                         <td className="px-2 py-1.5">Total</td>
                         <td className="text-right px-2 py-1.5">{camTotals.totalDrs}</td>
                         <td className={`text-right px-2 py-1.5 ${colorRate(camTotals.sqlRate)}`}>{fmtPct(camTotals.sqlRate, 1)}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(camTotals.pipelineAmount)}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(camTotals.closedWonAmount)}</td>
                         <td className="text-right px-2 py-1.5">{camTotals.closedWon}</td>
                         <td className={`text-right px-2 py-1.5 ${colorConvRate(camTotals.cohortRate)}`}>{fmtPct(camTotals.cohortRate, 1)}</td>
                         <td className="text-right px-2 py-1.5">{camTotals.avgCycle !== null ? `${camTotals.avgCycle.toFixed(0)} days` : '—'}</td>
@@ -1270,7 +1341,8 @@ export default function DrPipeline() {
                           ['reseller','Reseller','left'],
                           ['totalDrs','Total DRs','right'],
                           ['sqlRate','SQL Rate','right'],
-                          ['closedWon','Closed Won','right'],
+                          ['pipelineAmount','Pipeline $','right'],
+                          ['closedWonAmount','Closed Won $','right'],
                           ['cohortRate','Cohort Rate','right'],
                           ['avgCycle','Avg Cycle','right'],
                           ['fastest','Fastest','right'],
@@ -1296,7 +1368,7 @@ export default function DrPipeline() {
                     </thead>
                     <tbody>
                       {resellerRows.length === 0 && (
-                        <tr><td colSpan={12} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
+                        <tr><td colSpan={13} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
                       )}
                       {resellerRows.map(r => {
                         const isOpen = expandedReseller === r.reseller;
@@ -1308,7 +1380,8 @@ export default function DrPipeline() {
                               <td className="px-2 py-1.5 font-medium">{r.reseller}</td>
                               <td className="text-right px-2 py-1.5">{r.totalDrs}</td>
                               <td className={`text-right px-2 py-1.5 ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 0)}</td>
-                              <td className="text-right px-2 py-1.5">{r.closedWon}</td>
+                              <td className="text-right px-2 py-1.5">{fmtDollar(r.pipelineAmount)}</td>
+                              <td className={`text-right px-2 py-1.5 ${colorDollar(r.closedWonAmount)}`}>{fmtDollar(r.closedWonAmount)}</td>
                               <td className={`text-right px-2 py-1.5 font-semibold ${r.cohortRate >= 0.15 ? 'text-green-600 dark:text-green-400' : r.cohortRate >= 0.08 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{fmtPct(r.cohortRate, 0)}</td>
                               <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
                                 {r.avgCycle !== null ? `${r.avgCycle.toFixed(0)} days` : '—'}
@@ -1322,7 +1395,12 @@ export default function DrPipeline() {
                             </tr>
                             {isOpen && (
                               <tr className="bg-muted/20 border-t border-border">
-                                <td colSpan={12} className="px-3 py-2 space-y-3">
+                                <td colSpan={13} className="px-3 py-2 space-y-3">
+                                  <p className="text-[11px]">
+                                    <span className="text-muted-foreground">Pipeline $: </span><span className="font-semibold">{fmtDollar(r.pipelineAmount)}</span>
+                                    <span className="text-muted-foreground"> · Closed Won $: </span><span className="font-semibold">{fmtDollar(r.closedWonAmount)}</span>
+                                    <span className="text-muted-foreground"> · Avg Deal Size (CW): </span><span className="font-semibold">{fmtDollar(r.closedWon > 0 ? r.closedWonAmount / r.closedWon : 0)}</span>
+                                  </p>
                                   <div>
                                     <p className="text-[11px] font-semibold text-muted-foreground mb-1">Vintage breakdown by created quarter</p>
                                     {r.cohort.length === 0 ? <p className="text-[11px] text-muted-foreground">No data.</p> : (
