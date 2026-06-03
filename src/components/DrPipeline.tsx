@@ -626,7 +626,7 @@ export default function DrPipeline() {
       return ((av ?? -1) - (bv ?? -1)) * dir;
     });
     return rows;
-  }, [scopeNoStatus, resellerSortKey, resellerSortDir]);
+  }, [scopeNoStatus, resellerSortKey, resellerSortDir, oppMap]);
 
   const resellerTotals = useMemo(() => {
     const t = resellerRows.reduce((acc, r) => {
@@ -635,9 +635,11 @@ export default function DrPipeline() {
       acc.closedWon += r.closedWon;
       acc.paddedAccts += r.paddedAccts;
       acc.paddingDrs += r.paddingRate * r.totalDrs;
+      acc.pipelineAmount += r.pipelineAmount;
+      acc.closedWonAmount += r.closedWonAmount;
       if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
       return acc;
-    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0, paddedAccts: 0, paddingDrs: 0 });
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, cycleSum: 0, cycleN: 0, paddedAccts: 0, paddingDrs: 0, pipelineAmount: 0, closedWonAmount: 0 });
     return {
       ...t,
       sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
@@ -661,6 +663,12 @@ export default function DrPipeline() {
       }
       if (r.paddingRate >= 0.2 && r.totalDrs >= 10) {
         out.push(`⚠ ${r.reseller} has ${fmtPct(r.paddingRate, 0)} of registrations showing padding patterns (${r.paddedAccts} accounts with multiple pre-SQL, no-activity DRs) — raise in next QBR.`);
+      }
+      if (r.closedWonAmount > 200_000) {
+        out.push(`✓ ${r.reseller} has delivered ${fmtDollar(r.closedWonAmount)} in closed won revenue — your highest-value partner.`);
+      }
+      if (r.pipelineAmount > 500_000 && r.cohortRate < 0.05) {
+        out.push(`⚠ ${r.reseller} has ${fmtDollar(r.pipelineAmount)} in qualified pipeline but only ${fmtPct(r.cohortRate, 0)} historical close rate — treat pipeline value with caution.`);
       }
     }
     return out;
