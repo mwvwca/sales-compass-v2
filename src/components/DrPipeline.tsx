@@ -1341,7 +1341,8 @@ export default function DrPipeline() {
                           ['reseller','Reseller','left'],
                           ['totalDrs','Total DRs','right'],
                           ['sqlRate','SQL Rate','right'],
-                          ['closedWon','Closed Won','right'],
+                          ['pipelineAmount','Pipeline $','right'],
+                          ['closedWonAmount','Closed Won $','right'],
                           ['cohortRate','Cohort Rate','right'],
                           ['avgCycle','Avg Cycle','right'],
                           ['fastest','Fastest','right'],
@@ -1367,7 +1368,7 @@ export default function DrPipeline() {
                     </thead>
                     <tbody>
                       {resellerRows.length === 0 && (
-                        <tr><td colSpan={12} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
+                        <tr><td colSpan={13} className="px-3 py-4 text-center text-muted-foreground">No resellers with 3+ DRs in scope.</td></tr>
                       )}
                       {resellerRows.map(r => {
                         const isOpen = expandedReseller === r.reseller;
@@ -1379,7 +1380,8 @@ export default function DrPipeline() {
                               <td className="px-2 py-1.5 font-medium">{r.reseller}</td>
                               <td className="text-right px-2 py-1.5">{r.totalDrs}</td>
                               <td className={`text-right px-2 py-1.5 ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 0)}</td>
-                              <td className="text-right px-2 py-1.5">{r.closedWon}</td>
+                              <td className="text-right px-2 py-1.5">{fmtDollar(r.pipelineAmount)}</td>
+                              <td className={`text-right px-2 py-1.5 ${colorDollar(r.closedWonAmount)}`}>{fmtDollar(r.closedWonAmount)}</td>
                               <td className={`text-right px-2 py-1.5 font-semibold ${r.cohortRate >= 0.15 ? 'text-green-600 dark:text-green-400' : r.cohortRate >= 0.08 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{fmtPct(r.cohortRate, 0)}</td>
                               <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
                                 {r.avgCycle !== null ? `${r.avgCycle.toFixed(0)} days` : '—'}
@@ -1393,9 +1395,12 @@ export default function DrPipeline() {
                             </tr>
                             {isOpen && (
                               <tr className="bg-muted/20 border-t border-border">
-                                <td colSpan={12} className="px-3 py-2 space-y-3">
-                                  <div>
-                                    <p className="text-[11px] font-semibold text-muted-foreground mb-1">Vintage breakdown by created quarter</p>
+                                <td colSpan={13} className="px-3 py-2 space-y-3">
+                                  <p className="text-[11px]">
+                                    <span className="text-muted-foreground">Pipeline $: </span><span className="font-semibold">{fmtDollar(r.pipelineAmount)}</span>
+                                    <span className="text-muted-foreground"> · Closed Won $: </span><span className="font-semibold">{fmtDollar(r.closedWonAmount)}</span>
+                                    <span className="text-muted-foreground"> · Avg Deal Size (CW): </span><span className="font-semibold">{fmtDollar(r.closedWon > 0 ? r.closedWonAmount / r.closedWon : 0)}</span>
+                                  </p>
                                     {r.cohort.length === 0 ? <p className="text-[11px] text-muted-foreground">No data.</p> : (
                                       <table className="text-[11px]">
                                         <thead className="text-muted-foreground">
