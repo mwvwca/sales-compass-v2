@@ -274,6 +274,8 @@ export default function DrPipeline() {
     });
   }, [dealRegistrations, camFilter, repFilter, periodRange]);
 
+  const oppMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
+
   const defaultStatusesActive = DEFAULT_STATUSES.length === statuses.size && DEFAULT_STATUSES.every(s => statuses.has(s));
   const filtersActive = camFilter !== 'all' || repFilter !== 'all' || period !== DEFAULT_PERIOD || !defaultStatusesActive;
   const clearFilters = () => { setCamFilter('all'); setRepFilter('all'); setPeriod(DEFAULT_PERIOD); setStatuses(new Set(DEFAULT_STATUSES)); };
