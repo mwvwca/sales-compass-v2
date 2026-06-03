@@ -1091,8 +1091,10 @@ export default function DrPipeline() {
                         <td className="text-right px-2 py-1.5">{r.assigned}</td>
                         <td className={`text-right px-2 py-1.5 ${r.rejected > 15 ? 'text-red-600 dark:text-red-400 font-medium' : r.rejected > 5 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.rejected}</td>
                         <td className={`text-right px-2 py-1.5 font-medium ${colorRate(r.sqlRate)}`}>{fmtPct(r.sqlRate, 1)}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(r.pipelineAmount)}</td>
                         <td className="text-right px-2 py-1.5">{r.converted}</td>
                         <td className="text-right px-2 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{r.closedWon}</td>
+                        <td className="text-right px-2 py-1.5">{fmtDollar(r.closedWonAmount)}</td>
                         <td className={`text-right px-2 py-1.5 font-semibold ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 1)}</td>
                         <td className={`text-right px-2 py-1.5 ${r.avgCycle !== null ? (r.avgCycle < 90 ? 'text-green-600 dark:text-green-400' : r.avgCycle <= 180 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : ''}`}>
                           {r.avgCycle !== null ? `${r.avgCycle.toFixed(0)} days` : '—'}
@@ -1102,7 +1104,7 @@ export default function DrPipeline() {
                       </tr>
                       {expandedRep === r.rep && (
                         <tr className="bg-muted/20 border-t border-border">
-                          <td colSpan={10} className="px-3 py-2 space-y-3">
+                          <td colSpan={12} className="px-3 py-2 space-y-3">
                             {r.rejected > 0 && (
                               <div>
                                 <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rejected DRs by CAM (coaching context)</p>
