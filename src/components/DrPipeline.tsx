@@ -356,7 +356,9 @@ export default function DrPipeline() {
         rejectedByCam.set(cam, e);
       }
       const cohort = buildCohortRows(nonRejected);
-      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, rejectedByCam, cohort };
+      const pipelineAmount = pipelineSum(nonRejected);
+      const closedWonAmount = closedWonSum(nonRejected, oppMap);
+      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, pipelineAmount, closedWonAmount, rejectedByCam, cohort };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
     if (!showInactiveReps) {
