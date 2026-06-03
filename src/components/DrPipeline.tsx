@@ -992,6 +992,12 @@ export default function DrPipeline() {
 
       {hasData && (
         <>
+          {/* Data boundary notice */}
+          <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <span>DR data reflects registrations from July 15, 2025 onwards. Closed won matches reflect formally registered deals only — unregistered channel-sourced deals are not included.</span>
+          </div>
+
           {/* Global filter bar */}
           <div className="p-3 border border-border rounded-md bg-secondary/20 space-y-2">
             <div className="flex flex-wrap items-center gap-3">
