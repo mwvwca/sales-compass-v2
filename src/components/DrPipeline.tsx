@@ -385,8 +385,10 @@ export default function DrPipeline() {
       acc.sqls += r.sqls; acc.stale += r.stale;
       acc.noActivity += r.noActivity; acc.converted += r.converted; acc.closedWon += r.closedWon;
       acc.ageSum += r.avgAge * nonRej;
+      acc.pipelineAmount += r.pipelineAmount;
+      acc.closedWonAmount += r.closedWonAmount;
       return acc;
-    }, { assigned: 0, rejected: 0, nonRejected: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0 });
+    }, { assigned: 0, rejected: 0, nonRejected: 0, sqls: 0, stale: 0, noActivity: 0, converted: 0, closedWon: 0, ageSum: 0, pipelineAmount: 0, closedWonAmount: 0 });
     return {
       ...t,
       sqlRate: t.nonRejected ? t.sqls / t.nonRejected : 0,
