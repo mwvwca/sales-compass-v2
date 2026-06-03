@@ -332,6 +332,8 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       topCams,
       topResellers,
       lowResellers,
+      dataFloor: 'July 15, 2025',
+      dataNote: 'Closed won matches reflect formally registered deals only',
     };
   })();
 
