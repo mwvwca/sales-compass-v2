@@ -917,6 +917,8 @@ export default function DrPipeline() {
   const colorConvRate = (r: number) =>
     r >= 0.2 ? 'text-green-600 dark:text-green-400' : r >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
   const colorAge = (a: number) => a > 90 ? 'text-red-600 dark:text-red-400' : a > 45 ? 'text-amber-600 dark:text-amber-400' : '';
+  const colorDollar = (n: number) =>
+    n > 100_000 ? 'text-green-600 dark:text-green-400' : n >= 10_000 ? 'text-amber-600 dark:text-amber-400' : '';
 
   return (
     <div className="space-y-6">
