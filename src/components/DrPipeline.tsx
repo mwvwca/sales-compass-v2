@@ -1199,6 +1199,8 @@ export default function DrPipeline() {
                           ['cam','CAM','left'],
                           ['totalDrs','Total DRs','right'],
                           ['sqlRate','SQL Rate','right'],
+                          ['pipelineAmount','Pipeline $','right'],
+                          ['closedWonAmount','Closed Won $','right'],
                           ['closedWon','Closed Won','right'],
                           ['cohortRate','Cohort Rate','right'],
                           ['avgCycle','Avg Cycle','right'],
