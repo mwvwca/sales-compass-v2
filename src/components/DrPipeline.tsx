@@ -416,6 +416,7 @@ export default function DrPipeline() {
   type CamRow = {
     cam: string; totalDrs: number; sqls: number; sqlRate: number;
     closedWon: number; cohortRate: number;
+    pipelineAmount: number; closedWonAmount: number;
     avgCycle: number | null; fastest: number | null; slowest: number | null;
     inPeriodWon: number; withdrawn: number; withdrawnRate: number;
     cohort: CohortRow[];
@@ -448,8 +449,10 @@ export default function DrPipeline() {
       const inPeriodWon = wonDeals.filter(d => d.inPeriodWon === true).length;
       const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
       const withdrawnRate = totalDrs ? withdrawn / totalDrs : 0;
+      const pipelineAmount = pipelineSum(deals);
+      const closedWonAmount = closedWonSum(deals, oppMap);
       const cohort = buildCohortRows(deals);
-      return { cam, totalDrs, sqls, sqlRate, closedWon, cohortRate, avgCycle, fastest, slowest, inPeriodWon, withdrawn, withdrawnRate, cohort };
+      return { cam, totalDrs, sqls, sqlRate, closedWon, cohortRate, pipelineAmount, closedWonAmount, avgCycle, fastest, slowest, inPeriodWon, withdrawn, withdrawnRate, cohort };
     });
     rows.sort((a, b) => {
       const dir = camSortDir === 'asc' ? 1 : -1;
@@ -458,7 +461,7 @@ export default function DrPipeline() {
       return ((av ?? -1) - (bv ?? -1)) * dir;
     });
     return rows;
-  }, [scopeNoStatus, camSortKey, camSortDir]);
+  }, [scopeNoStatus, camSortKey, camSortDir, oppMap]);
 
   const camTotals = useMemo(() => {
     const t = camRows.reduce((acc, r) => {
@@ -467,9 +470,11 @@ export default function DrPipeline() {
       acc.closedWon += r.closedWon;
       acc.inPeriodWon += r.inPeriodWon;
       acc.withdrawn += r.withdrawn;
+      acc.pipelineAmount += r.pipelineAmount;
+      acc.closedWonAmount += r.closedWonAmount;
       if (r.avgCycle !== null) { acc.cycleSum += r.avgCycle * r.closedWon; acc.cycleN += r.closedWon; }
       return acc;
-    }, { totalDrs: 0, sqls: 0, closedWon: 0, inPeriodWon: 0, withdrawn: 0, cycleSum: 0, cycleN: 0 });
+    }, { totalDrs: 0, sqls: 0, closedWon: 0, inPeriodWon: 0, withdrawn: 0, cycleSum: 0, cycleN: 0, pipelineAmount: 0, closedWonAmount: 0 });
     return {
       ...t,
       sqlRate: t.totalDrs ? t.sqls / t.totalDrs : 0,
@@ -493,6 +498,12 @@ export default function DrPipeline() {
       }
       if (r.fastest !== null && r.fastest < 30 && r.closedWon > 2) {
         out.push(`✓ ${r.cam} is generating fast-moving deals — fastest close is ${r.fastest} days.`);
+      }
+      if (r.closedWonAmount > 150_000) {
+        out.push(`✓ ${r.cam} has delivered ${fmtDollar(r.closedWonAmount)} in closed won revenue.`);
+      }
+      if (r.pipelineAmount > 300_000 && r.cohortRate < 0.05) {
+        out.push(`⚠ ${r.cam} has ${fmtDollar(r.pipelineAmount)} in qualified pipeline with ${fmtPct(r.cohortRate, 0)} historical close rate.`);
       }
     }
     return out;
