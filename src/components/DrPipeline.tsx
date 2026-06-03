@@ -1401,6 +1401,8 @@ export default function DrPipeline() {
                                     <span className="text-muted-foreground"> · Closed Won $: </span><span className="font-semibold">{fmtDollar(r.closedWonAmount)}</span>
                                     <span className="text-muted-foreground"> · Avg Deal Size (CW): </span><span className="font-semibold">{fmtDollar(r.closedWon > 0 ? r.closedWonAmount / r.closedWon : 0)}</span>
                                   </p>
+                                  <div>
+                                    <p className="text-[11px] font-semibold text-muted-foreground mb-1">Vintage breakdown by created quarter</p>
                                     {r.cohort.length === 0 ? <p className="text-[11px] text-muted-foreground">No data.</p> : (
                                       <table className="text-[11px]">
                                         <thead className="text-muted-foreground">
