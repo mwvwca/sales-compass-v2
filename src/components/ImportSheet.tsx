@@ -75,6 +75,7 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'reseller': 'resellerName',
   'distributor reseller': 'distributorReseller',
   'distributor - reseller': 'distributorReseller',
+  'opportunity source': 'opportunitySource',
 };
 
 function parseImportDate(raw: unknown): string {
