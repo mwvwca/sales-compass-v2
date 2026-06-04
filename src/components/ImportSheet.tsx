@@ -23,6 +23,7 @@ interface ColumnMapping {
   channelAccountManager?: string;
   resellerName?: string;
   distributorReseller?: string;
+  opportunitySource?: string;
 }
 
 function normalizeHeader(header: string): string {
