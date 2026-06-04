@@ -263,6 +263,7 @@ export default function ImportSheet() {
             resellerName,
             distributorReseller,
             resolvedReseller: resolveReseller(resellerName, distributorReseller),
+            opportunitySource: String(row[mapping.opportunitySource || ''] || '').trim() || undefined,
           };
         });
 
