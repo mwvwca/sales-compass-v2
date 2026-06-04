@@ -61,6 +61,7 @@ export interface Opportunity {
   distributorReseller?: string;
   /** Normalized reseller name resolved from resellerName / distributorReseller via resellerUtils. */
   resolvedReseller?: string;
+  opportunitySource?: string;
 }
 
 export interface MonthlyRepCommit {
