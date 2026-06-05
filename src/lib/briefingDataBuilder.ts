@@ -433,6 +433,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         insightStatement,
         primaryProblem,
       },
+      cleanupSummary: buildCleanupSummary(classifyCleanupDeals(drs)),
     };
   })();
 
