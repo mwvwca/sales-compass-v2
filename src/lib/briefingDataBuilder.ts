@@ -41,7 +41,9 @@ export interface BriefingPayload {
     commitPipeline: number;
     closedWonMTD: number;
     staleDealCount: number;
-    commitDeals: { name: string; amount: number; closeDate: string }[];
+    commitDeals: { name: string; amount: number; closeDate: string; weekLabel: string }[];
+    futureCommits: { name: string; amount: number; closeDate: string }[];
+    futureCommitTotal: number;
     upsideDeals?: { name: string; amount: number; closeDate: string }[];
     changesSinceLastImport: { name: string; type: string; detail: string }[];
   }[];
