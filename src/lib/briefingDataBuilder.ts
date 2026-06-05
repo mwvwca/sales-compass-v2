@@ -91,6 +91,18 @@ function inMonth(dateStr: string, monthKey: string): boolean {
   try { return getMonthKey(dateStr) === monthKey; } catch { return false; }
 }
 
+function parseDateLocal(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const iso = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+  const us = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (us) return new Date(+us[3], +us[1] - 1, +us[2]);
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+
+
 
 
 export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
