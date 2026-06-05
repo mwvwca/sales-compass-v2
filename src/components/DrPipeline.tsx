@@ -2,6 +2,7 @@ import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Upload, FileSpreadsheet, Download, RefreshCw, X, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { parseDrExport } from '@/lib/drParser';
@@ -991,11 +992,12 @@ export default function DrPipeline() {
     const nonQualifyingPct = total > 0 ? ((total - reachedSQL) / total * 100).toFixed(0) : '0';
     let insightText: string;
     if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
-      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals. The overall ${(overallCohortRate * 100).toFixed(0)}% cohort rate reflects that ${nonQualifyingPct}% of registered deals never qualified — a lead quality issue, not a closing issue.`;
+      const mult = overallCohortRate > 0 ? Math.round(winRateOnSQL / overallCohortRate) : 0;
+      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
     } else if (winRateOnSQL < 0.15) {
       insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
     } else {
-      insightText = `Win rate on SQL'd deals is ${(winRateOnSQL * 100).toFixed(0)}% vs ${(overallCohortRate * 100).toFixed(0)}% overall. The ${qualityGap > 0 ? (qualityGap * 100).toFixed(0) + 'pp gap' : 'difference'} is explained by leads that never qualified.`;
+      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
     }
 
     // By-CAM breakdown
@@ -1283,11 +1285,19 @@ export default function DrPipeline() {
                             <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
                             <p className="text-[11px] text-muted-foreground mt-0.5">SQL'd DRs → Closed Won</p>
                           </div>
-                          <div className="border border-border rounded-md p-3" title="The gap between win rate on qualified deals and overall cohort rate. This represents deals lost before AEs had a real opportunity to close them.">
-                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Quality Gap</p>
-                            <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">{(dq.qualityGap * 100).toFixed(1)}pp</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Difference explained by lead quality</p>
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="border border-border rounded-md p-3 cursor-help">
+                                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Quality Gap</p>
+                                <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">+{(dq.qualityGap * 100).toFixed(1)} pts</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Win rate on qualified deals vs. overall</p>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>AEs close at {(dq.winRateOnSQL * 100).toFixed(0)}% when given a qualified lead.</p>
+                              <p>The overall {(dq.overallCohortRate * 100).toFixed(0)}% reflects leads that never qualified.</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
 
                         {/* Insight line */}
