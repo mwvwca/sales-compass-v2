@@ -66,6 +66,7 @@ export interface BriefingPayload {
       insightStatement: string;
       primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
     };
+    cleanupSummary: CleanupSummary;
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
