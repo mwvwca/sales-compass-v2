@@ -901,6 +901,113 @@ export default function DrPipeline() {
     XLSX.writeFile(wb, `DR_Pipeline_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
+
+  // ---------- Deal Quality Analysis ----------
+  const MORTALITY_STAGES = ['Unqualified', 'Qualified 5%', 'Discovery 25%', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%', 'Closed Won'] as const;
+  const MORTALITY_LABELS = ['Registered', 'Qualified 5%', 'Discovery 25% (SQL)', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%', 'Closed Won'];
+
+  const dealQuality = useMemo(() => {
+    const drs = scopeNoStatus;
+    const nonRej = drs.filter(d => d.status !== 'rejected');
+    const total = nonRej.length;
+    const reachedSQL = nonRej.filter(d => d.isSql).length;
+    const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
+    const closedWon = drs.filter(d => d.status === 'closed_won').length;
+    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
+
+    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    const overallCohortRate = total > 0 ? closedWon / total : 0;
+    const sqlRate = total > 0 ? reachedSQL / total : 0;
+    const conversionRate = reachedSQL > 0 ? convertedToPipeline / reachedSQL : 0;
+    const closeRate = convertedToPipeline > 0 ? closedWon / convertedToPipeline : 0;
+
+    // Stage mortality
+    const stageEligible = drs.filter(d => d.status !== 'rejected' && d.status !== 'withdrawn');
+    const getRank = (d: DealRegistration): number => {
+      if (d.status === 'closed_won') return 6;
+      const ns = normalizeStage(d.stage);
+      const idx = (MORTALITY_STAGES as readonly string[]).indexOf(ns);
+      return idx >= 0 ? idx : -1;
+    };
+    const cumCounts = MORTALITY_STAGES.map((_, i) => stageEligible.filter(d => getRank(d) >= i).length);
+    // For "Registered" we use total non-rejected (includes withdrawn? — exclude withdrawn for consistency)
+    const registeredCount = stageEligible.length;
+
+    const avgAgeAtStage = (rank: number): number => {
+      const at = stageEligible.filter(d => getRank(d) === rank);
+      if (at.length === 0) return 0;
+      return at.reduce((s, d) => s + (d.ageDays || 0), 0) / at.length;
+    };
+    const avgAgeAll = stageEligible.length
+      ? stageEligible.reduce((s, d) => s + (d.ageDays || 0), 0) / stageEligible.length
+      : 0;
+
+    type MortRow = { from: string; to: string; fromCount: number; toCount: number; dropOff: number; avgDays: number; isGate?: boolean; isTerminal?: boolean };
+    const mortality: MortRow[] = [
+      { from: 'Registered', to: 'Qualified 5%', fromCount: registeredCount, toCount: cumCounts[1], dropOff: registeredCount > 0 ? (registeredCount - cumCounts[1]) / registeredCount : 0, avgDays: avgAgeAll },
+      { from: 'Qualified 5%', to: 'Discovery 25% (SQL)', fromCount: cumCounts[1], toCount: cumCounts[2], dropOff: cumCounts[1] > 0 ? (cumCounts[1] - cumCounts[2]) / cumCounts[1] : 0, avgDays: avgAgeAtStage(1), isGate: true },
+      { from: 'Discovery 25%', to: 'Technical 50%', fromCount: cumCounts[2], toCount: cumCounts[3], dropOff: cumCounts[2] > 0 ? (cumCounts[2] - cumCounts[3]) / cumCounts[2] : 0, avgDays: avgAgeAtStage(2) },
+      { from: 'Technical 50%', to: 'Commercial 75%', fromCount: cumCounts[3], toCount: cumCounts[4], dropOff: cumCounts[3] > 0 ? (cumCounts[3] - cumCounts[4]) / cumCounts[3] : 0, avgDays: avgAgeAtStage(3) },
+      { from: 'Commercial 75%', to: 'Purchasing 90%', fromCount: cumCounts[4], toCount: cumCounts[5], dropOff: cumCounts[4] > 0 ? (cumCounts[4] - cumCounts[5]) / cumCounts[4] : 0, avgDays: avgAgeAtStage(4) },
+      { from: 'Purchasing 90%', to: 'Closed Won', fromCount: cumCounts[5], toCount: cumCounts[6], dropOff: cumCounts[5] > 0 ? (cumCounts[5] - cumCounts[6]) / cumCounts[5] : 0, avgDays: avgAgeAtStage(5), isTerminal: true },
+    ];
+
+    // Insight statement
+    const qualityGap = winRateOnSQL - overallCohortRate;
+    const nonQualifyingPct = total > 0 ? ((total - reachedSQL) / total * 100).toFixed(0) : '0';
+    let insightText: string;
+    if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
+      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals. The overall ${(overallCohortRate * 100).toFixed(0)}% cohort rate reflects that ${nonQualifyingPct}% of registered deals never qualified — a lead quality issue, not a closing issue.`;
+    } else if (winRateOnSQL < 0.15) {
+      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
+    } else {
+      insightText = `Win rate on SQL'd deals is ${(winRateOnSQL * 100).toFixed(0)}% vs ${(overallCohortRate * 100).toFixed(0)}% overall. The ${qualityGap > 0 ? (qualityGap * 100).toFixed(0) + 'pp gap' : 'difference'} is explained by leads that never qualified.`;
+    }
+
+    // By-CAM breakdown
+    type CamQualityRow = {
+      cam: string; drs: number; sqlRate: number; winRateOnSQL: number; qualityGap: number;
+      verdict: 'Lead Quality' | 'Execution' | 'Developing' | 'Performing';
+    };
+    const byCam = new Map<string, DealRegistration[]>();
+    for (const d of scopeNoStatus) {
+      const k = d.channelAccountManager || '(none)';
+      const arr = byCam.get(k) || [];
+      arr.push(d);
+      byCam.set(k, arr);
+    }
+    const camRowsDQ: CamQualityRow[] = [];
+    for (const [cam, deals] of byCam.entries()) {
+      const nr = deals.filter(d => d.status !== 'rejected');
+      const camTotal = nr.length;
+      if (camTotal < 5) continue;
+      const camSql = nr.filter(d => d.isSql).length;
+      const camSqlRate = camTotal > 0 ? camSql / camTotal : 0;
+      const camSqlWon = deals.filter(d => d.isSql && d.status === 'closed_won').length;
+      const camWinOnSql = camSql > 0 ? camSqlWon / camSql : 0;
+      const camWon = deals.filter(d => d.status === 'closed_won').length;
+      const camCohortRate = camTotal > 0 ? camWon / camTotal : 0;
+      const camQualityGap = camWinOnSql - camCohortRate;
+      let verdict: CamQualityRow['verdict'];
+      if (camSqlRate < 0.2) verdict = 'Lead Quality';
+      else if (camWinOnSql < 0.15) verdict = 'Execution';
+      else if (camWinOnSql >= 0.2) verdict = 'Performing';
+      else verdict = 'Developing';
+      camRowsDQ.push({ cam, drs: camTotal, sqlRate: camSqlRate, winRateOnSQL: camWinOnSql, qualityGap: camQualityGap, verdict });
+    }
+    const verdictOrder = { 'Lead Quality': 0, 'Execution': 1, 'Developing': 2, 'Performing': 3 } as const;
+    camRowsDQ.sort((a, b) => {
+      const d = verdictOrder[a.verdict] - verdictOrder[b.verdict];
+      return d !== 0 ? d : b.drs - a.drs;
+    });
+
+    return {
+      total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon,
+      winRateOnSQL, overallCohortRate, sqlRate, conversionRate, closeRate,
+      mortality, insightText, camRowsDQ, qualityGap,
+    };
+  }, [scopeNoStatus]);
+
   // ---------- Render helpers ----------
   const lastBatch = drBatches[drBatches.length - 1];
   const hasData = dealRegistrations.length > 0;
