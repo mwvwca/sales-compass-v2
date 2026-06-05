@@ -14,6 +14,7 @@ import {
   getDateAtUtcStart,
 } from '@/types/forecast';
 import type { BriefingMode } from './briefingPrompts';
+import { classifyCleanupDeals, buildCleanupSummary, type CleanupSummary } from './drCleanup';
 
 export interface BriefingPayload {
   mode: BriefingMode;
@@ -65,6 +66,7 @@ export interface BriefingPayload {
       insightStatement: string;
       primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
     };
+    cleanupSummary: CleanupSummary;
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
@@ -431,6 +433,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         insightStatement,
         primaryProblem,
       },
+      cleanupSummary: buildCleanupSummary(classifyCleanupDeals(drs)),
     };
   })();
 
