@@ -1466,7 +1466,7 @@ export default function DrPipeline() {
                         {/* By-CAM quality breakdown */}
                         <div>
                           <h4 className="text-xs font-semibold mb-2">By-CAM Quality Breakdown <span className="text-[11px] font-normal text-muted-foreground">(min 5 DRs)</span></h4>
-                          {dq.camRowsDQ.length === 0 ? (
+                          {dqAll.camRowsDQ.length === 0 ? (
                             <p className="text-xs text-muted-foreground">No CAMs meet the 5-DR minimum in this scope.</p>
                           ) : (
                             <div className="overflow-x-auto border border-border rounded-md">
