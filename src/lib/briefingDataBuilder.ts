@@ -283,6 +283,8 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     })),
   );
 
+  const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
   // Per-rep summaries
   const repSummaries = activeReps.map(rep => {
     const repOpps = opps.filter(o => o.repName.toLowerCase().trim() === rep.name.toLowerCase().trim());
@@ -308,13 +310,21 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       }));
 
     const upsideDeals = topByAmount(upsides.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })), 5);
+
+    const currentMonthCommits = commits.filter(o => o.closeDate?.slice(0, 7) === thisMonthKey);
+    const futureCommitDeals = commits.filter(o => o.closeDate?.slice(0, 7) > thisMonthKey);
+
     return {
       repName: rep.name,
       openPipeline: open.reduce((s, o) => s + o.amount, 0),
       commitPipeline: commits.reduce((s, o) => s + o.amount, 0),
       closedWonMTD: cwMtd.reduce((s, o) => s + o.amount, 0),
       staleDealCount: stale.length,
-      commitDeals: topByAmount(commits.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })), 5),
+      commitDeals: topByAmount(currentMonthCommits.map(o => ({
+        name: o.name, amount: o.amount, closeDate: o.closeDate, weekLabel: getWeekLabel(o.closeDate, thisMonthKey),
+      })), 5),
+      futureCommits: futureCommitDeals.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })),
+      futureCommitTotal: futureCommitDeals.reduce((s, o) => s + o.amount, 0),
       ...(upsideDeals.length > 0 ? { upsideDeals } : {}),
       changesSinceLastImport: changes,
     };
