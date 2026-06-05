@@ -102,10 +102,14 @@ function parseDateLocal(dateStr: string): Date | null {
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? null : d;
 }
-
-
-
-
+function getWeekLabel(dateStr: string, monthKey: string): string {
+  const weeks = getWeeksInMonth(monthKey);
+  const d = getDateAtUtcStart(dateStr);
+  for (const w of weeks) {
+    if (d >= w.start && d <= w.end) return w.label;
+  }
+  return '';
+}
 
 export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const now = new Date();
