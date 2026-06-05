@@ -56,6 +56,15 @@ export interface BriefingPayload {
     lowResellers: { name: string; totalDrs: number; cohortRate: number }[];
     dataFloor: string;
     dataNote: string;
+    dealQualityAnalysis: {
+      totalDrs: number;
+      sqlRate: number;
+      winRateOnSQL: number;
+      overallCohortRate: number;
+      qualityGapPp: number;
+      insightStatement: string;
+      primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
+    };
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
