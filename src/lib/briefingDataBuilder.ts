@@ -91,6 +91,11 @@ function isOpen(o: Opportunity): boolean {
     o.classification !== 'rejected';
 }
 
+function isCommit(o: Opportunity): boolean {
+  return o.classification === 'commit' ||
+    o.forecastCategory?.toLowerCase().trim() === 'commit';
+}
+
 function inMonth(dateStr: string, monthKey: string): boolean {
   try { return getMonthKey(dateStr) === monthKey; } catch { return false; }
 }
