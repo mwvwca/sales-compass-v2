@@ -898,6 +898,40 @@ export default function DrPipeline() {
     const resellerSheet = XLSX.utils.json_to_sheet(resellerData, { skipHeader: false });
     XLSX.utils.book_append_sheet(wb, resellerSheet, 'Reseller Performance');
 
+    // Sheet 5 — Deal Quality Analysis
+    const dqAoa: any[][] = [];
+    dqAoa.push(['Deal Quality Analysis']);
+    dqAoa.push([]);
+    dqAoa.push(['Funnel Summary']);
+    dqAoa.push(['Stage', 'Count', '% of Total']);
+    const t = dealQuality.total || 1;
+    dqAoa.push(['DRs Registered', dealQuality.total, '100%']);
+    dqAoa.push(['Reached SQL (25%+)', dealQuality.reachedSQL, fmtPct(dealQuality.reachedSQL / t, 0)]);
+    dqAoa.push(['In Pipeline', dealQuality.convertedToPipeline, fmtPct(dealQuality.convertedToPipeline / t, 0)]);
+    dqAoa.push(['Closed Won', dealQuality.closedWon, fmtPct(dealQuality.closedWon / t, 0)]);
+    dqAoa.push([]);
+    dqAoa.push(['Key Metrics']);
+    dqAoa.push(['Overall Cohort Rate', fmtPct(dealQuality.overallCohortRate, 1), 'All DRs → Closed Won']);
+    dqAoa.push(["Win Rate on SQL'd Deals", fmtPct(dealQuality.winRateOnSQL, 1), "SQL'd DRs → Closed Won"]);
+    dqAoa.push(['Lead Quality Gap (pp)', (dealQuality.qualityGap * 100).toFixed(1), 'Difference explained by lead quality']);
+    dqAoa.push([]);
+    dqAoa.push(['Insight']);
+    dqAoa.push([dealQuality.insightText]);
+    dqAoa.push([]);
+    dqAoa.push(['Stage Mortality']);
+    dqAoa.push(['From Stage', 'To Stage', 'Deals', 'Drop-off', 'Avg Days at Stage']);
+    for (const m of dealQuality.mortality) {
+      dqAoa.push([m.from, m.to, `${m.fromCount} → ${m.toCount}`, m.isTerminal ? '—' : fmtPct(m.dropOff, 0), `${m.avgDays.toFixed(0)}d`]);
+    }
+    dqAoa.push([]);
+    dqAoa.push(['By-CAM Quality Breakdown (min 5 DRs)']);
+    dqAoa.push(['CAM', 'DRs', 'SQL Rate', 'Win Rate (on SQL)', 'Quality Gap (pp)', 'Verdict']);
+    for (const r of dealQuality.camRowsDQ) {
+      dqAoa.push([r.cam, r.drs, fmtPct(r.sqlRate, 1), fmtPct(r.winRateOnSQL, 1), (r.qualityGap * 100).toFixed(1), r.verdict]);
+    }
+    const dqSheet = XLSX.utils.aoa_to_sheet(dqAoa);
+    XLSX.utils.book_append_sheet(wb, dqSheet, 'Deal Quality Analysis');
+
     XLSX.writeFile(wb, `DR_Pipeline_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
