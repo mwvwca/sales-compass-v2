@@ -221,6 +221,7 @@ export default function DrPipeline() {
 
   // Deal Quality Analysis collapsible
   const [qualityExpanded, setQualityExpanded] = useState(true);
+  const [dqView, setDqView] = useState<'defensible' | 'all'>('defensible');
 
   // Section F
   const [showPaddedOnly, setShowPaddedOnly] = useState(false);
