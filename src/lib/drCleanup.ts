@@ -55,7 +55,7 @@ export function classifyCleanupDeals(drs: DealRegistration[]): CleanupDeal[] {
 
     const paddingKey = `${(dr.accountName || '').toLowerCase()}::${dr.channelAccountManager || ''}`;
     const paddingCount = accountCamMap.get(paddingKey) || 0;
-    const isPadded = paddingCount >= 3 && !dr.isSql && !hasActivity;
+    const isPadded = paddingCount >= 3 && !dr.isSql && !hasActivity && ageDays >= 30;
 
     // Tier 1
     if ((stage === 'Unqualified' && !hasActivity && ageDays > 90) || isPadded) {
