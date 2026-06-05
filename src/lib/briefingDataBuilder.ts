@@ -257,6 +257,24 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     })),
   );
 
+  // Past-due commits: classified commit, close date already passed, not closed
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const pastDueCommits = topByAmount(
+    commitOpps.filter(o => {
+      const d = parseDateLocal(o.closeDate);
+      if (!d) return false;
+      return (
+        o.stage !== 'Closed Won' &&
+        o.stage !== 'Closed Lost' &&
+        o.stage !== 'Rejected' &&
+        d < today
+      );
+    }).map(o => ({
+      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate,
+    })),
+  );
+
   // Per-rep summaries
   const repSummaries = activeReps.map(rep => {
     const repOpps = opps.filter(o => o.repName.toLowerCase().trim() === rep.name.toLowerCase().trim());
