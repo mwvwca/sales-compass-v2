@@ -58,6 +58,7 @@ export interface Opportunity {
   productName?: string;
   channelAccountManager?: string;
   resellerName?: string;
+  forecastCategory?: string;
   distributorReseller?: string;
   /** Normalized reseller name resolved from resellerName / distributorReseller via resellerUtils. */
   resolvedReseller?: string;

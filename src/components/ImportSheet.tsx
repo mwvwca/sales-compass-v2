@@ -238,6 +238,25 @@ export default function ImportSheet() {
           const resellerName = String(row[mapping.resellerName || ''] || '').trim() || undefined;
           const distributorReseller = String(row[mapping.distributorReseller || ''] || '').trim() || undefined;
 
+          const forecastCategoryRaw = String(row[mapping.forecastCategory || ''] || '').trim();
+          const forecastCategoryNorm = forecastCategoryRaw.toLowerCase();
+          let classification = getImportedClassification({
+            stage: row[mapping.stage || ''],
+            forecastCategory: row[mapping.forecastCategory || ''],
+            forecastFlag: row[mapping.forecast || ''],
+            upsideFlag: row[mapping.upsideFlag || ''],
+          });
+          // Salesforce Forecast Category is authoritative: if SF explicitly says
+          // Commit, the internal classification must be 'commit' regardless of
+          // any prior/stale classification value.
+          if (forecastCategoryNorm === 'commit' &&
+              classification !== 'closed_won' &&
+              classification !== 'lost' &&
+              classification !== 'rejected' &&
+              classification !== 'omitted') {
+            classification = 'commit';
+          }
+
           return {
             id: sfid || `import-${Date.now()}-${i}`,
             salesforceId: sfid,
@@ -247,12 +266,7 @@ export default function ImportSheet() {
             amount: parseFloat(row[mapping.amount || ''] || '0') || 0,
             closeDate,
             stage: String(row[mapping.stage || ''] || '').trim(),
-            classification: getImportedClassification({
-              stage: row[mapping.stage || ''],
-              forecastCategory: row[mapping.forecastCategory || ''],
-              forecastFlag: row[mapping.forecast || ''],
-              upsideFlag: row[mapping.upsideFlag || ''],
-            }),
+            classification,
             lostDate: (() => { const s = String(row[mapping.stage || ''] || '').toLowerCase().trim(); return s === 'closed lost' || s === 'rejected' ? importDate : undefined; })(),
             lostReason: (() => { const s = String(row[mapping.stage || ''] || '').toLowerCase().trim(); if (s === 'closed lost') return 'Closed Lost in Salesforce'; if (s === 'rejected') return 'Rejected in Salesforce'; return undefined; })(),
             probability: parseFloat(row[mapping.probability || ''] || '0') || 0,
@@ -264,6 +278,7 @@ export default function ImportSheet() {
             distributorReseller,
             resolvedReseller: resolveReseller(resellerName, distributorReseller),
             opportunitySource: String(row[mapping.opportunitySource || ''] || '').trim() || undefined,
+            forecastCategory: forecastCategoryRaw || undefined,
           };
         });
 

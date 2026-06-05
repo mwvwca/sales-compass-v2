@@ -91,6 +91,11 @@ function isOpen(o: Opportunity): boolean {
     o.classification !== 'rejected';
 }
 
+function isCommit(o: Opportunity): boolean {
+  return o.classification === 'commit' ||
+    o.forecastCategory?.toLowerCase().trim() === 'commit';
+}
+
 function inMonth(dateStr: string, monthKey: string): boolean {
   try { return getMonthKey(dateStr) === monthKey; } catch { return false; }
 }
@@ -128,7 +133,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
 
   const opps = input.opportunities;
   const openOpps = opps.filter(isOpen);
-  const commitOpps = opps.filter(o => o.classification === 'commit');
+  const commitOpps = opps.filter(isCommit);
   const upsideOpps = opps.filter(o => o.classification === 'upside');
   const closedWonMtdOpps = opps.filter(o => o.classification === 'closed_won' && inMonth(o.closeDate, monthKey));
 
@@ -289,7 +294,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const repSummaries = activeReps.map(rep => {
     const repOpps = opps.filter(o => o.repName.toLowerCase().trim() === rep.name.toLowerCase().trim());
     const open = repOpps.filter(isOpen);
-    const commits = repOpps.filter(o => o.classification === 'commit');
+    const commits = repOpps.filter(isCommit);
     const upsides = repOpps.filter(o => o.classification === 'upside');
     const cwMtd = repOpps.filter(o => o.classification === 'closed_won' && inMonth(o.closeDate, monthKey));
 
