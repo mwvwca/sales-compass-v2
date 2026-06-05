@@ -1444,7 +1444,7 @@ export default function DrPipeline() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {dq.mortality.map((m, i) => (
+                                {dqAll.mortality.map((m, i) => (
                                   <tr key={i} className="border-t border-border">
                                     <td className="px-2 py-1.5">{m.from}</td>
                                     <td className="px-2 py-1.5">
