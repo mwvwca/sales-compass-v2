@@ -218,6 +218,9 @@ export default function DrPipeline() {
   // Section D
   const [funnelMonthOffset, setFunnelMonthOffset] = useState(0);
 
+  // Deal Quality Analysis collapsible
+  const [qualityExpanded, setQualityExpanded] = useState(true);
+
   // Section F
   const [showPaddedOnly, setShowPaddedOnly] = useState(false);
 
