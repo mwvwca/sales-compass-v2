@@ -1508,6 +1508,9 @@ export default function DrPipeline() {
             );
           })()}
 
+          {/* Pipeline Cleanup Plan */}
+          <DrCleanupPlanSection dealRegistrations={dealRegistrations} />
+
           {/* Section B: AE Accountability */}
           <section className="border border-border rounded-md">
             <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-3 flex-wrap">
