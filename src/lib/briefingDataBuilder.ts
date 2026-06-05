@@ -423,6 +423,7 @@ Amount changes (${payload.amountChanges.length}): ${JSON.stringify(payload.amoun
 
 CLOSING THIS WEEK (${payload.closingThisWeek.length}): ${JSON.stringify(payload.closingThisWeek)}
 CLOSING NEXT WEEK (${payload.closingNextWeek.length}): ${JSON.stringify(payload.closingNextWeek)}
+PAST DUE COMMITS (${payload.pastDueCommits.length}): ${JSON.stringify(payload.pastDueCommits)}
 
 REP SUMMARIES (${payload.repSummaries.length} active reps):
 ${payload.repSummaries.map(r => JSON.stringify(r)).join('\n')}
