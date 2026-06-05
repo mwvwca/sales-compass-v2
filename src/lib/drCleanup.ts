@@ -184,15 +184,29 @@ export interface CleanupSummary {
   tier2Count: number;
   tier3Count: number;
   topCams: { cam: string; count: number; tier1: number }[];
+  byRep: { rep: string; tier1: number; tier2: number; tier3: number; total: number }[];
 }
 
 export function buildCleanupSummary(deals: CleanupDeal[]): CleanupSummary {
   const groups = groupByCAM(deals);
+  const repMap = new Map<string, { tier1: number; tier2: number; tier3: number; total: number }>();
+  for (const d of deals) {
+    const rep = d.dr.repName?.trim() || '(unassigned)';
+    const cur = repMap.get(rep) || { tier1: 0, tier2: 0, tier3: 0, total: 0 };
+    if (d.tier === 1) cur.tier1++;
+    else if (d.tier === 2) cur.tier2++;
+    else cur.tier3++;
+    cur.total++;
+    repMap.set(rep, cur);
+  }
   return {
     totalDeals: deals.length,
     tier1Count: deals.filter(d => d.tier === 1).length,
     tier2Count: deals.filter(d => d.tier === 2).length,
     tier3Count: deals.filter(d => d.tier === 3).length,
     topCams: groups.slice(0, 5).map(g => ({ cam: g.cam, count: g.deals.length, tier1: g.tier1Count })),
+    byRep: Array.from(repMap.entries())
+      .map(([rep, v]) => ({ rep, ...v }))
+      .sort((a, b) => b.total - a.total),
   };
 }
