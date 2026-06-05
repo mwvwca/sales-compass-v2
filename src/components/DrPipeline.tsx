@@ -218,6 +218,9 @@ export default function DrPipeline() {
   // Section D
   const [funnelMonthOffset, setFunnelMonthOffset] = useState(0);
 
+  // Deal Quality Analysis collapsible
+  const [qualityExpanded, setQualityExpanded] = useState(true);
+
   // Section F
   const [showPaddedOnly, setShowPaddedOnly] = useState(false);
 
@@ -895,8 +898,149 @@ export default function DrPipeline() {
     const resellerSheet = XLSX.utils.json_to_sheet(resellerData, { skipHeader: false });
     XLSX.utils.book_append_sheet(wb, resellerSheet, 'Reseller Performance');
 
+    // Sheet 5 — Deal Quality Analysis
+    const dqAoa: any[][] = [];
+    dqAoa.push(['Deal Quality Analysis']);
+    dqAoa.push([]);
+    dqAoa.push(['Funnel Summary']);
+    dqAoa.push(['Stage', 'Count', '% of Total']);
+    const t = dealQuality.total || 1;
+    dqAoa.push(['DRs Registered', dealQuality.total, '100%']);
+    dqAoa.push(['Reached SQL (25%+)', dealQuality.reachedSQL, fmtPct(dealQuality.reachedSQL / t, 0)]);
+    dqAoa.push(['In Pipeline', dealQuality.convertedToPipeline, fmtPct(dealQuality.convertedToPipeline / t, 0)]);
+    dqAoa.push(['Closed Won', dealQuality.closedWon, fmtPct(dealQuality.closedWon / t, 0)]);
+    dqAoa.push([]);
+    dqAoa.push(['Key Metrics']);
+    dqAoa.push(['Overall Cohort Rate', fmtPct(dealQuality.overallCohortRate, 1), 'All DRs → Closed Won']);
+    dqAoa.push(["Win Rate on SQL'd Deals", fmtPct(dealQuality.winRateOnSQL, 1), "SQL'd DRs → Closed Won"]);
+    dqAoa.push(['Lead Quality Gap (pp)', (dealQuality.qualityGap * 100).toFixed(1), 'Difference explained by lead quality']);
+    dqAoa.push([]);
+    dqAoa.push(['Insight']);
+    dqAoa.push([dealQuality.insightText]);
+    dqAoa.push([]);
+    dqAoa.push(['Stage Mortality']);
+    dqAoa.push(['From Stage', 'To Stage', 'Deals', 'Drop-off', 'Avg Days at Stage']);
+    for (const m of dealQuality.mortality) {
+      dqAoa.push([m.from, m.to, `${m.fromCount} → ${m.toCount}`, m.isTerminal ? '—' : fmtPct(m.dropOff, 0), `${m.avgDays.toFixed(0)}d`]);
+    }
+    dqAoa.push([]);
+    dqAoa.push(['By-CAM Quality Breakdown (min 5 DRs)']);
+    dqAoa.push(['CAM', 'DRs', 'SQL Rate', 'Win Rate (on SQL)', 'Quality Gap (pp)', 'Verdict']);
+    for (const r of dealQuality.camRowsDQ) {
+      dqAoa.push([r.cam, r.drs, fmtPct(r.sqlRate, 1), fmtPct(r.winRateOnSQL, 1), (r.qualityGap * 100).toFixed(1), r.verdict]);
+    }
+    const dqSheet = XLSX.utils.aoa_to_sheet(dqAoa);
+    XLSX.utils.book_append_sheet(wb, dqSheet, 'Deal Quality Analysis');
+
     XLSX.writeFile(wb, `DR_Pipeline_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
+
+
+  // ---------- Deal Quality Analysis ----------
+  const MORTALITY_STAGES = ['Unqualified', 'Qualified 5%', 'Discovery 25%', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%', 'Closed Won'] as const;
+  const MORTALITY_LABELS = ['Registered', 'Qualified 5%', 'Discovery 25% (SQL)', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%', 'Closed Won'];
+
+  const dealQuality = useMemo(() => {
+    const drs = scopeNoStatus;
+    const nonRej = drs.filter(d => d.status !== 'rejected');
+    const total = nonRej.length;
+    const reachedSQL = nonRej.filter(d => d.isSql).length;
+    const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
+    const closedWon = drs.filter(d => d.status === 'closed_won').length;
+    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
+
+    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    const overallCohortRate = total > 0 ? closedWon / total : 0;
+    const sqlRate = total > 0 ? reachedSQL / total : 0;
+    const conversionRate = reachedSQL > 0 ? convertedToPipeline / reachedSQL : 0;
+    const closeRate = convertedToPipeline > 0 ? closedWon / convertedToPipeline : 0;
+
+    // Stage mortality
+    const stageEligible = drs.filter(d => d.status !== 'rejected' && d.status !== 'withdrawn');
+    const getRank = (d: DealRegistration): number => {
+      if (d.status === 'closed_won') return 6;
+      const ns = normalizeStage(d.stage);
+      const idx = (MORTALITY_STAGES as readonly string[]).indexOf(ns);
+      return idx >= 0 ? idx : -1;
+    };
+    const cumCounts = MORTALITY_STAGES.map((_, i) => stageEligible.filter(d => getRank(d) >= i).length);
+    // For "Registered" we use total non-rejected (includes withdrawn? — exclude withdrawn for consistency)
+    const registeredCount = stageEligible.length;
+
+    const avgAgeAtStage = (rank: number): number => {
+      const at = stageEligible.filter(d => getRank(d) === rank);
+      if (at.length === 0) return 0;
+      return at.reduce((s, d) => s + (d.ageDays || 0), 0) / at.length;
+    };
+    const avgAgeAll = stageEligible.length
+      ? stageEligible.reduce((s, d) => s + (d.ageDays || 0), 0) / stageEligible.length
+      : 0;
+
+    type MortRow = { from: string; to: string; fromCount: number; toCount: number; dropOff: number; avgDays: number; isGate?: boolean; isTerminal?: boolean };
+    const mortality: MortRow[] = [
+      { from: 'Registered', to: 'Qualified 5%', fromCount: registeredCount, toCount: cumCounts[1], dropOff: registeredCount > 0 ? (registeredCount - cumCounts[1]) / registeredCount : 0, avgDays: avgAgeAll },
+      { from: 'Qualified 5%', to: 'Discovery 25% (SQL)', fromCount: cumCounts[1], toCount: cumCounts[2], dropOff: cumCounts[1] > 0 ? (cumCounts[1] - cumCounts[2]) / cumCounts[1] : 0, avgDays: avgAgeAtStage(1), isGate: true },
+      { from: 'Discovery 25%', to: 'Technical 50%', fromCount: cumCounts[2], toCount: cumCounts[3], dropOff: cumCounts[2] > 0 ? (cumCounts[2] - cumCounts[3]) / cumCounts[2] : 0, avgDays: avgAgeAtStage(2) },
+      { from: 'Technical 50%', to: 'Commercial 75%', fromCount: cumCounts[3], toCount: cumCounts[4], dropOff: cumCounts[3] > 0 ? (cumCounts[3] - cumCounts[4]) / cumCounts[3] : 0, avgDays: avgAgeAtStage(3) },
+      { from: 'Commercial 75%', to: 'Purchasing 90%', fromCount: cumCounts[4], toCount: cumCounts[5], dropOff: cumCounts[4] > 0 ? (cumCounts[4] - cumCounts[5]) / cumCounts[4] : 0, avgDays: avgAgeAtStage(4) },
+      { from: 'Purchasing 90%', to: 'Closed Won', fromCount: cumCounts[5], toCount: cumCounts[6], dropOff: cumCounts[5] > 0 ? (cumCounts[5] - cumCounts[6]) / cumCounts[5] : 0, avgDays: avgAgeAtStage(5), isTerminal: true },
+    ];
+
+    // Insight statement
+    const qualityGap = winRateOnSQL - overallCohortRate;
+    const nonQualifyingPct = total > 0 ? ((total - reachedSQL) / total * 100).toFixed(0) : '0';
+    let insightText: string;
+    if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
+      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals. The overall ${(overallCohortRate * 100).toFixed(0)}% cohort rate reflects that ${nonQualifyingPct}% of registered deals never qualified — a lead quality issue, not a closing issue.`;
+    } else if (winRateOnSQL < 0.15) {
+      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
+    } else {
+      insightText = `Win rate on SQL'd deals is ${(winRateOnSQL * 100).toFixed(0)}% vs ${(overallCohortRate * 100).toFixed(0)}% overall. The ${qualityGap > 0 ? (qualityGap * 100).toFixed(0) + 'pp gap' : 'difference'} is explained by leads that never qualified.`;
+    }
+
+    // By-CAM breakdown
+    type CamQualityRow = {
+      cam: string; drs: number; sqlRate: number; winRateOnSQL: number; qualityGap: number;
+      verdict: 'Lead Quality' | 'Execution' | 'Developing' | 'Performing';
+    };
+    const byCam = new Map<string, DealRegistration[]>();
+    for (const d of scopeNoStatus) {
+      const k = d.channelAccountManager || '(none)';
+      const arr = byCam.get(k) || [];
+      arr.push(d);
+      byCam.set(k, arr);
+    }
+    const camRowsDQ: CamQualityRow[] = [];
+    for (const [cam, deals] of byCam.entries()) {
+      const nr = deals.filter(d => d.status !== 'rejected');
+      const camTotal = nr.length;
+      if (camTotal < 5) continue;
+      const camSql = nr.filter(d => d.isSql).length;
+      const camSqlRate = camTotal > 0 ? camSql / camTotal : 0;
+      const camSqlWon = deals.filter(d => d.isSql && d.status === 'closed_won').length;
+      const camWinOnSql = camSql > 0 ? camSqlWon / camSql : 0;
+      const camWon = deals.filter(d => d.status === 'closed_won').length;
+      const camCohortRate = camTotal > 0 ? camWon / camTotal : 0;
+      const camQualityGap = camWinOnSql - camCohortRate;
+      let verdict: CamQualityRow['verdict'];
+      if (camSqlRate < 0.2) verdict = 'Lead Quality';
+      else if (camWinOnSql < 0.15) verdict = 'Execution';
+      else if (camWinOnSql >= 0.2) verdict = 'Performing';
+      else verdict = 'Developing';
+      camRowsDQ.push({ cam, drs: camTotal, sqlRate: camSqlRate, winRateOnSQL: camWinOnSql, qualityGap: camQualityGap, verdict });
+    }
+    const verdictOrder = { 'Lead Quality': 0, 'Execution': 1, 'Developing': 2, 'Performing': 3 } as const;
+    camRowsDQ.sort((a, b) => {
+      const d = verdictOrder[a.verdict] - verdictOrder[b.verdict];
+      return d !== 0 ? d : b.drs - a.drs;
+    });
+
+    return {
+      total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon,
+      winRateOnSQL, overallCohortRate, sqlRate, conversionRate, closeRate,
+      mortality, insightText, camRowsDQ, qualityGap,
+    };
+  }, [scopeNoStatus]);
 
   // ---------- Render helpers ----------
   const lastBatch = drBatches[drBatches.length - 1];
@@ -1044,6 +1188,190 @@ export default function DrPipeline() {
               })}
             </div>
           </div>
+
+          {/* Deal Quality Analysis */}
+          {(() => {
+            const dq = dealQuality;
+            const cohortColor = dq.overallCohortRate >= 0.2 ? 'text-green-600 dark:text-green-400' : dq.overallCohortRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+            const winColor = dq.winRateOnSQL >= 0.25 ? 'text-green-600 dark:text-green-400' : dq.winRateOnSQL >= 0.15 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+            const dropColor = (d: number) => d > 0.6 ? 'text-red-600 dark:text-red-400' : d >= 0.4 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400';
+            const verdictBadge = (v: string) => {
+              switch (v) {
+                case 'Lead Quality': return 'bg-red-500/15 text-red-700 dark:text-red-400';
+                case 'Execution': return 'bg-amber-500/15 text-amber-700 dark:text-amber-400';
+                case 'Performing': return 'bg-green-500/15 text-green-700 dark:text-green-400';
+                case 'Developing': return 'bg-blue-500/15 text-blue-700 dark:text-blue-400';
+                default: return 'bg-muted text-muted-foreground';
+              }
+            };
+            const t = dq.total || 1;
+            const funnelStages = [
+              { label: 'DRs Registered', count: dq.total, pct: 1, color: 'bg-muted-foreground/40' },
+              { label: 'Reached SQL (25%+)', count: dq.reachedSQL, pct: dq.reachedSQL / t, color: 'bg-blue-500/70' },
+              { label: 'In Pipeline', count: dq.convertedToPipeline, pct: dq.convertedToPipeline / t, color: 'bg-amber-500/70' },
+              { label: 'Closed Won', count: dq.closedWon, pct: dq.closedWon / t, color: 'bg-green-500/70' },
+            ];
+            const dropoffs = [
+              dq.total > 0 ? (dq.total - dq.reachedSQL) / dq.total : 0,
+              dq.reachedSQL > 0 ? (dq.reachedSQL - dq.convertedToPipeline) / dq.reachedSQL : 0,
+              dq.convertedToPipeline > 0 ? (dq.convertedToPipeline - dq.closedWon) / dq.convertedToPipeline : 0,
+            ];
+            const dropLabels = [
+              'did not qualify',
+              'did not convert',
+              'did not close',
+            ];
+            return (
+              <section className="border border-border rounded-md">
+                <button
+                  onClick={() => setQualityExpanded(v => !v)}
+                  className="w-full px-3 py-2 border-b border-border flex items-center justify-between gap-3 hover:bg-secondary/30 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {qualityExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <div className="text-left">
+                      <h3 className="text-xs font-semibold">Deal Quality Analysis</h3>
+                      <p className="text-[11px] text-muted-foreground">Where deals die — and why it matters.</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">{dq.total} DRs in scope</span>
+                </button>
+
+                {qualityExpanded && (
+                  <div className="p-4 space-y-5">
+                    {dq.total < 10 ? (
+                      <p className="text-xs text-muted-foreground text-center py-6">Not enough data yet — minimum 10 DRs required for this analysis.</p>
+                    ) : (
+                      <>
+                        {/* Funnel */}
+                        <div className="space-y-1">
+                          {funnelStages.map((s, i) => (
+                            <Fragment key={s.label}>
+                              <div className="flex items-center gap-3">
+                                <div className="w-44 text-xs text-muted-foreground shrink-0">{s.label}</div>
+                                <div className="w-12 text-xs font-mono text-right tabular-nums shrink-0">[{s.count}]</div>
+                                <div className="flex-1 relative h-6 bg-secondary/40 rounded-sm overflow-hidden">
+                                  <div
+                                    className={`h-full ${s.color} transition-all`}
+                                    style={{ width: `${Math.max(s.pct * 100, 0.5)}%` }}
+                                  />
+                                </div>
+                                <div className="w-12 text-xs font-mono text-right tabular-nums text-muted-foreground shrink-0">
+                                  {(s.pct * 100).toFixed(0)}%
+                                </div>
+                              </div>
+                              {i < dropoffs.length && (
+                                <div className="flex items-center gap-3 pl-44 ml-3">
+                                  <span className="text-[11px] text-red-600/80 dark:text-red-400/80">
+                                    ↓ {(dropoffs[i] * 100).toFixed(0)}% {dropLabels[i]}
+                                  </span>
+                                </div>
+                              )}
+                            </Fragment>
+                          ))}
+                        </div>
+
+                        {/* Stat cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="border border-border rounded-md p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Overall Cohort Rate</p>
+                            <p className={`text-2xl font-semibold mt-1 ${cohortColor}`}>{fmtPct(dq.overallCohortRate, 1)}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">All DRs → Closed Won</p>
+                          </div>
+                          <div className="border border-border rounded-md p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Win Rate on SQL'd Deals</p>
+                            <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">SQL'd DRs → Closed Won</p>
+                          </div>
+                          <div className="border border-border rounded-md p-3" title="The gap between win rate on qualified deals and overall cohort rate. This represents deals lost before AEs had a real opportunity to close them.">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Quality Gap</p>
+                            <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">{(dq.qualityGap * 100).toFixed(1)}pp</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">Difference explained by lead quality</p>
+                          </div>
+                        </div>
+
+                        {/* Insight line */}
+                        <div className="border-l-2 border-foreground/40 pl-3 py-1">
+                          <p className="text-sm font-medium">{dq.insightText}</p>
+                        </div>
+
+                        {/* Stage mortality table */}
+                        <div>
+                          <h4 className="text-xs font-semibold mb-2">Stage Mortality</h4>
+                          <div className="overflow-x-auto border border-border rounded-md">
+                            <table className="w-full text-xs">
+                              <thead className="bg-secondary/40 text-muted-foreground">
+                                <tr>
+                                  <th className="px-2 py-1.5 text-left font-medium">From Stage</th>
+                                  <th className="px-2 py-1.5 text-left font-medium">To Stage</th>
+                                  <th className="px-2 py-1.5 text-right font-medium">Deals</th>
+                                  <th className="px-2 py-1.5 text-right font-medium">Drop-off</th>
+                                  <th className="px-2 py-1.5 text-right font-medium">Avg Days at Stage</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {dq.mortality.map((m, i) => (
+                                  <tr key={i} className="border-t border-border">
+                                    <td className="px-2 py-1.5">{m.from}</td>
+                                    <td className="px-2 py-1.5">
+                                      {m.to}
+                                      {m.isGate && <span className="ml-2 text-[10px] text-muted-foreground">← Partner quality gate</span>}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{m.fromCount} → {m.toCount}</td>
+                                    <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${m.isTerminal ? 'text-muted-foreground' : dropColor(m.dropOff)}`}>
+                                      {m.isTerminal ? '—' : `${(m.dropOff * 100).toFixed(0)}%`}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{m.avgDays.toFixed(0)}d</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* By-CAM quality breakdown */}
+                        <div>
+                          <h4 className="text-xs font-semibold mb-2">By-CAM Quality Breakdown <span className="text-[11px] font-normal text-muted-foreground">(min 5 DRs)</span></h4>
+                          {dq.camRowsDQ.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No CAMs meet the 5-DR minimum in this scope.</p>
+                          ) : (
+                            <div className="overflow-x-auto border border-border rounded-md">
+                              <table className="w-full text-xs">
+                                <thead className="bg-secondary/40 text-muted-foreground">
+                                  <tr>
+                                    <th className="px-2 py-1.5 text-left font-medium">CAM</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">DRs</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">SQL Rate</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">Win Rate (on SQL)</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">Quality Gap</th>
+                                    <th className="px-2 py-1.5 text-center font-medium">Verdict</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {dq.camRowsDQ.map((r) => (
+                                    <tr key={r.cam} className="border-t border-border">
+                                      <td className="px-2 py-1.5">{r.cam}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{r.drs}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{fmtPct(r.sqlRate, 0)}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{fmtPct(r.winRateOnSQL, 0)}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{(r.qualityGap * 100).toFixed(0)}pp</td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        <span className={`px-2 py-0.5 rounded text-[11px] ${verdictBadge(r.verdict)}`}>{r.verdict}</span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
 
           {/* Section B: AE Accountability */}
           <section className="border border-border rounded-md">

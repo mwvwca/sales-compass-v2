@@ -56,6 +56,15 @@ export interface BriefingPayload {
     lowResellers: { name: string; totalDrs: number; cohortRate: number }[];
     dataFloor: string;
     dataNote: string;
+    dealQualityAnalysis: {
+      totalDrs: number;
+      sqlRate: number;
+      winRateOnSQL: number;
+      overallCohortRate: number;
+      qualityGapPp: number;
+      insightStatement: string;
+      primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
+    };
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
@@ -379,6 +388,31 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       .filter(r => r.totalDrs >= 20 && r.cohortRate < 0.05)
       .map(({ name, totalDrs, cohortRate }) => ({ name, totalDrs, cohortRate }));
 
+    // Deal Quality Analysis
+    const nonRej = drs.filter(d => d.status !== 'rejected');
+    const totalDrsDQ = nonRej.length;
+    const reachedSQL = nonRej.filter(d => d.isSql).length;
+    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
+    const closedWonAll = drs.filter(d => d.status === 'closed_won').length;
+    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    const overallCohortRate = totalDrsDQ > 0 ? closedWonAll / totalDrsDQ : 0;
+    const sqlRateDQ = totalDrsDQ > 0 ? reachedSQL / totalDrsDQ : 0;
+    const qualityGapPp = (winRateOnSQL - overallCohortRate) * 100;
+    const nonQualifyingPct = totalDrsDQ > 0 ? ((totalDrsDQ - reachedSQL) / totalDrsDQ * 100).toFixed(0) : '0';
+    let insightStatement: string;
+    let primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
+    if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
+      insightStatement = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals. The overall ${(overallCohortRate * 100).toFixed(0)}% cohort rate reflects that ${nonQualifyingPct}% of registered deals never qualified — a lead quality issue, not a closing issue.`;
+      primaryProblem = 'lead_quality';
+    } else if (winRateOnSQL < 0.15) {
+      insightStatement = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
+      primaryProblem = sqlRateDQ < 0.2 ? 'both' : 'execution';
+    } else {
+      const gapStr = qualityGapPp > 0 ? `${qualityGapPp.toFixed(0)}pp gap` : 'difference';
+      insightStatement = `Win rate on SQL'd deals is ${(winRateOnSQL * 100).toFixed(0)}% vs ${(overallCohortRate * 100).toFixed(0)}% overall. The ${gapStr} is explained by leads that never qualified.`;
+      primaryProblem = winRateOnSQL >= 0.2 ? 'performing' : 'execution';
+    }
+
     return {
       totalOpenDrs: openDrs.length,
       staleDrCount: stale.length,
@@ -388,6 +422,15 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       lowResellers,
       dataFloor: 'July 15, 2025',
       dataNote: 'Closed won matches reflect formally registered deals only',
+      dealQualityAnalysis: {
+        totalDrs: totalDrsDQ,
+        sqlRate: sqlRateDQ,
+        winRateOnSQL,
+        overallCohortRate,
+        qualityGapPp,
+        insightStatement,
+        primaryProblem,
+      },
     };
   })();
 
