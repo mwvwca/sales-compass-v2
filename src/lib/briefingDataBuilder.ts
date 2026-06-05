@@ -14,6 +14,7 @@ import {
   getDateAtUtcStart,
 } from '@/types/forecast';
 import type { BriefingMode } from './briefingPrompts';
+import { classifyCleanupDeals, buildCleanupSummary, type CleanupSummary } from './drCleanup';
 
 export interface BriefingPayload {
   mode: BriefingMode;
