@@ -992,11 +992,12 @@ export default function DrPipeline() {
     const nonQualifyingPct = total > 0 ? ((total - reachedSQL) / total * 100).toFixed(0) : '0';
     let insightText: string;
     if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
-      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals. The overall ${(overallCohortRate * 100).toFixed(0)}% cohort rate reflects that ${nonQualifyingPct}% of registered deals never qualified — a lead quality issue, not a closing issue.`;
+      const mult = overallCohortRate > 0 ? Math.round(winRateOnSQL / overallCohortRate) : 0;
+      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
     } else if (winRateOnSQL < 0.15) {
       insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
     } else {
-      insightText = `Win rate on SQL'd deals is ${(winRateOnSQL * 100).toFixed(0)}% vs ${(overallCohortRate * 100).toFixed(0)}% overall. The ${qualityGap > 0 ? (qualityGap * 100).toFixed(0) + 'pp gap' : 'difference'} is explained by leads that never qualified.`;
+      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
     }
 
     // By-CAM breakdown
