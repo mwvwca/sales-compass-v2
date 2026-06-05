@@ -55,6 +55,7 @@ export interface BriefingPayload {
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
+  pastDueCommits: { name: string; rep: string; amount: number; closeDate: string }[];
 }
 
 interface BuilderInput {
