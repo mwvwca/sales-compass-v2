@@ -1238,7 +1238,9 @@ export default function DrPipeline() {
 
           {/* Deal Quality Analysis */}
           {(() => {
-            const dq = dealQuality;
+            const dqAll = dealQuality;
+            const dqDef = dealQualityDefensible;
+            const dq = dqView === 'defensible' ? dqDef : dqAll;
             const cohortColor = dq.overallCohortRate >= 0.2 ? 'text-green-600 dark:text-green-400' : dq.overallCohortRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
             const winColor = dq.winRateOnSQL >= 0.25 ? 'text-green-600 dark:text-green-400' : dq.winRateOnSQL >= 0.15 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
             const dropColor = (d: number) => d > 0.6 ? 'text-red-600 dark:text-red-400' : d >= 0.4 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400';
@@ -1252,8 +1254,9 @@ export default function DrPipeline() {
               }
             };
             const t = dq.total || 1;
+            const funnelLabel = dqView === 'defensible' ? 'Defensible DRs' : 'DRs Registered';
             const funnelStages = [
-              { label: 'DRs Registered', count: dq.total, pct: 1, color: 'bg-muted-foreground/40' },
+              { label: funnelLabel, count: dq.total, pct: 1, color: 'bg-muted-foreground/40' },
               { label: 'Reached SQL (25%+)', count: dq.reachedSQL, pct: dq.reachedSQL / t, color: 'bg-blue-500/70' },
               { label: 'In Pipeline', count: dq.convertedToPipeline, pct: dq.convertedToPipeline / t, color: 'bg-amber-500/70' },
               { label: 'Closed Won', count: dq.closedWon, pct: dq.closedWon / t, color: 'bg-green-500/70' },
@@ -1268,6 +1271,11 @@ export default function DrPipeline() {
               'did not convert',
               'did not close',
             ];
+            // Dual-view insight statement
+            const overallAllPct = (dqAll.overallCohortRate * 100).toFixed(0);
+            const overallDefPct = (dqDef.overallCohortRate * 100).toFixed(0);
+            const winDefPct = (dqDef.winRateOnSQL * 100).toFixed(0);
+            const dualInsight = `Overall cohort rate is ${overallAllPct}% across all DRs. On defensible pipeline only — excluding padded and stale registrations — the rate is ${overallDefPct}% with a ${winDefPct}% win rate on SQL'd deals. Partners are diluting results with unqualified volume.`;
             return (
               <section className="border border-border rounded-md">
                 <button
@@ -1286,10 +1294,55 @@ export default function DrPipeline() {
 
                 {qualityExpanded && (
                   <div className="p-4 space-y-5">
-                    {dq.total < 10 ? (
+                    {dqAll.total < 10 ? (
                       <p className="text-xs text-muted-foreground text-center py-6">Not enough data yet — minimum 10 DRs required for this analysis.</p>
                     ) : (
                       <>
+                        {/* View toggle */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-[11px] text-muted-foreground uppercase tracking-wide">Show:</span>
+                          <div className="inline-flex border border-border rounded-md overflow-hidden text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setDqView('all')}
+                              className={`px-3 py-1.5 ${dqView === 'all' ? 'bg-secondary text-foreground' : 'bg-transparent text-muted-foreground hover:bg-secondary/40'}`}
+                            >
+                              All DRs ({dqAll.total})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDqView('defensible')}
+                              className={`px-3 py-1.5 border-l border-border ${dqView === 'defensible' ? 'bg-secondary text-foreground' : 'bg-transparent text-muted-foreground hover:bg-secondary/40'}`}
+                            >
+                              Defensible Only ({dqDef.total})
+                            </button>
+                          </div>
+                          {dqView === 'defensible' && (
+                            <span className="text-[11px] text-muted-foreground">Excludes padded, stale, rejected, withdrawn</span>
+                          )}
+                        </div>
+
+                        {/* Exclusion callout when defensible */}
+                        {dqView === 'defensible' && dqExclusion.total > 0 && (
+                          <div className="border border-amber-500/30 bg-amber-500/5 rounded-md px-3 py-2 text-xs">
+                            <p>
+                              <span className="font-medium">Excluding {dqExclusion.total} non-defensible DRs:</span>{' '}
+                              {[
+                                dqExclusion.paddedOnly > 0 ? `${dqExclusion.paddedOnly} padded accounts` : null,
+                                dqExclusion.staleOnly > 0 ? `${dqExclusion.staleOnly} stale` : null,
+                                dqExclusion.both > 0 ? `${dqExclusion.both} both` : null,
+                                dqExclusion.withdrawn > 0 ? `${dqExclusion.withdrawn} withdrawn` : null,
+                                dqExclusion.rejected > 0 ? `${dqExclusion.rejected} rejected` : null,
+                              ].filter(Boolean).join(', ')}.
+                            </p>
+                            {dqExclusion.topSources.length > 0 && (
+                              <p className="mt-0.5 text-muted-foreground">
+                                Primary sources: {dqExclusion.topSources.map(s => `${s.cam} (${s.count})`).join(', ')}.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         {/* Funnel */}
                         <div className="space-y-1">
                           {funnelStages.map((s, i) => (
@@ -1322,19 +1375,44 @@ export default function DrPipeline() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div className="border border-border rounded-md p-3">
                             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Overall Cohort Rate</p>
-                            <p className={`text-2xl font-semibold mt-1 ${cohortColor}`}>{fmtPct(dq.overallCohortRate, 1)}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">All DRs → Closed Won</p>
+                            {dqView === 'all' ? (
+                              <>
+                                <p className="text-2xl font-semibold mt-1">
+                                  <span className={cohortColor}>{fmtPct(dqAll.overallCohortRate, 0)}</span>
+                                  <span className="text-muted-foreground"> (all) / </span>
+                                  <span className={dqDef.overallCohortRate >= 0.2 ? 'text-green-600 dark:text-green-400' : dqDef.overallCohortRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}>{fmtPct(dqDef.overallCohortRate, 0)}</span>
+                                  <span className="text-muted-foreground text-sm"> (defensible)</span>
+                                </p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">All DRs vs. defensible only</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className={`text-2xl font-semibold mt-1 ${cohortColor}`}>{fmtPct(dq.overallCohortRate, 1)}</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Defensible DRs → Closed Won</p>
+                              </>
+                            )}
                           </div>
                           <div className="border border-border rounded-md p-3">
                             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Win Rate on SQL'd Deals</p>
                             <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">SQL'd DRs → Closed Won</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {dqView === 'all' ? "Unchanged — SQL'd deals are already qualified" : "SQL'd DRs → Closed Won"}
+                            </p>
                           </div>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className="border border-border rounded-md p-3 cursor-help">
                                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Quality Gap</p>
-                                <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">+{(dq.qualityGap * 100).toFixed(1)} pts</p>
+                                {dqView === 'all' ? (
+                                  <p className="text-2xl font-semibold mt-1">
+                                    <span className="text-amber-600 dark:text-amber-400">+{(dqAll.qualityGap * 100).toFixed(0)} pts</span>
+                                    <span className="text-muted-foreground"> (all) / </span>
+                                    <span className="text-amber-600 dark:text-amber-400">+{(dqDef.qualityGap * 100).toFixed(0)} pts</span>
+                                    <span className="text-muted-foreground text-sm"> (defensible)</span>
+                                  </p>
+                                ) : (
+                                  <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">+{(dq.qualityGap * 100).toFixed(1)} pts</p>
+                                )}
                                 <p className="text-[11px] text-muted-foreground mt-0.5">Win rate on qualified deals vs. overall</p>
                               </div>
                             </TooltipTrigger>
@@ -1347,8 +1425,9 @@ export default function DrPipeline() {
 
                         {/* Insight line */}
                         <div className="border-l-2 border-foreground/40 pl-3 py-1">
-                          <p className="text-sm font-medium">{dq.insightText}</p>
+                          <p className="text-sm font-medium">{dualInsight}</p>
                         </div>
+
 
                         {/* Stage mortality table */}
                         <div>
