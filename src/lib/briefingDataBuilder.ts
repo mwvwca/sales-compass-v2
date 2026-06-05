@@ -10,6 +10,8 @@ import type {
 import {
   getMonthKey,
   getCurrentQuarter,
+  getWeeksInMonth,
+  getDateAtUtcStart,
 } from '@/types/forecast';
 import type { BriefingMode } from './briefingPrompts';
 
@@ -39,7 +41,9 @@ export interface BriefingPayload {
     commitPipeline: number;
     closedWonMTD: number;
     staleDealCount: number;
-    commitDeals: { name: string; amount: number; closeDate: string }[];
+    commitDeals: { name: string; amount: number; closeDate: string; weekLabel: string }[];
+    futureCommits: { name: string; amount: number; closeDate: string }[];
+    futureCommitTotal: number;
     upsideDeals?: { name: string; amount: number; closeDate: string }[];
     changesSinceLastImport: { name: string; type: string; detail: string }[];
   }[];
@@ -100,10 +104,14 @@ function parseDateLocal(dateStr: string): Date | null {
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? null : d;
 }
-
-
-
-
+function getWeekLabel(dateStr: string, monthKey: string): string {
+  const weeks = getWeeksInMonth(monthKey);
+  const d = getDateAtUtcStart(dateStr);
+  for (const w of weeks) {
+    if (d >= w.start && d <= w.end) return w.label;
+  }
+  return '';
+}
 
 export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const now = new Date();
@@ -275,6 +283,8 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     })),
   );
 
+  const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
   // Per-rep summaries
   const repSummaries = activeReps.map(rep => {
     const repOpps = opps.filter(o => o.repName.toLowerCase().trim() === rep.name.toLowerCase().trim());
@@ -300,13 +310,21 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       }));
 
     const upsideDeals = topByAmount(upsides.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })), 5);
+
+    const currentMonthCommits = commits.filter(o => o.closeDate?.slice(0, 7) === thisMonthKey);
+    const futureCommitDeals = commits.filter(o => o.closeDate?.slice(0, 7) > thisMonthKey);
+
     return {
       repName: rep.name,
       openPipeline: open.reduce((s, o) => s + o.amount, 0),
       commitPipeline: commits.reduce((s, o) => s + o.amount, 0),
       closedWonMTD: cwMtd.reduce((s, o) => s + o.amount, 0),
       staleDealCount: stale.length,
-      commitDeals: topByAmount(commits.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })), 5),
+      commitDeals: topByAmount(currentMonthCommits.map(o => ({
+        name: o.name, amount: o.amount, closeDate: o.closeDate, weekLabel: getWeekLabel(o.closeDate, thisMonthKey),
+      })), 5),
+      futureCommits: futureCommitDeals.map(o => ({ name: o.name, amount: o.amount, closeDate: o.closeDate })),
+      futureCommitTotal: futureCommitDeals.reduce((s, o) => s + o.amount, 0),
       ...(upsideDeals.length > 0 ? { upsideDeals } : {}),
       changesSinceLastImport: changes,
     };
