@@ -39,6 +39,7 @@ Structure:
    - Action items must be specific: name the deal, state the amount, state the ask
    - If commit accuracy is below 50%, include a suggested coaching question
    - If stale DRs exist, name the CAM and how long they've been idle
+   - If this rep has Tier 3 cleanup items in drSignals.cleanupSummary.byRep (DRs at Discovery 25% or above with 30+ days no activity), call them out by count — e.g. "Wayne has 3 DRs at Discovery 25%+ with no activity in 30+ days — on agenda for today's 1:1."
 3. A "before you go in" line — one thing you need from the whole team today
 
 Tone: direct, specific, zero fluff. You are preparing someone for conversations, not writing a report.
