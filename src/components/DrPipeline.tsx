@@ -1189,6 +1189,190 @@ export default function DrPipeline() {
             </div>
           </div>
 
+          {/* Deal Quality Analysis */}
+          {(() => {
+            const dq = dealQuality;
+            const cohortColor = dq.overallCohortRate >= 0.2 ? 'text-green-600 dark:text-green-400' : dq.overallCohortRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+            const winColor = dq.winRateOnSQL >= 0.25 ? 'text-green-600 dark:text-green-400' : dq.winRateOnSQL >= 0.15 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+            const dropColor = (d: number) => d > 0.6 ? 'text-red-600 dark:text-red-400' : d >= 0.4 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400';
+            const verdictBadge = (v: string) => {
+              switch (v) {
+                case 'Lead Quality': return 'bg-red-500/15 text-red-700 dark:text-red-400';
+                case 'Execution': return 'bg-amber-500/15 text-amber-700 dark:text-amber-400';
+                case 'Performing': return 'bg-green-500/15 text-green-700 dark:text-green-400';
+                case 'Developing': return 'bg-blue-500/15 text-blue-700 dark:text-blue-400';
+                default: return 'bg-muted text-muted-foreground';
+              }
+            };
+            const t = dq.total || 1;
+            const funnelStages = [
+              { label: 'DRs Registered', count: dq.total, pct: 1, color: 'bg-muted-foreground/40' },
+              { label: 'Reached SQL (25%+)', count: dq.reachedSQL, pct: dq.reachedSQL / t, color: 'bg-blue-500/70' },
+              { label: 'In Pipeline', count: dq.convertedToPipeline, pct: dq.convertedToPipeline / t, color: 'bg-amber-500/70' },
+              { label: 'Closed Won', count: dq.closedWon, pct: dq.closedWon / t, color: 'bg-green-500/70' },
+            ];
+            const dropoffs = [
+              dq.total > 0 ? (dq.total - dq.reachedSQL) / dq.total : 0,
+              dq.reachedSQL > 0 ? (dq.reachedSQL - dq.convertedToPipeline) / dq.reachedSQL : 0,
+              dq.convertedToPipeline > 0 ? (dq.convertedToPipeline - dq.closedWon) / dq.convertedToPipeline : 0,
+            ];
+            const dropLabels = [
+              'did not qualify',
+              'did not convert',
+              'did not close',
+            ];
+            return (
+              <section className="border border-border rounded-md">
+                <button
+                  onClick={() => setQualityExpanded(v => !v)}
+                  className="w-full px-3 py-2 border-b border-border flex items-center justify-between gap-3 hover:bg-secondary/30 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {qualityExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <div className="text-left">
+                      <h3 className="text-xs font-semibold">Deal Quality Analysis</h3>
+                      <p className="text-[11px] text-muted-foreground">Where deals die — and why it matters.</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">{dq.total} DRs in scope</span>
+                </button>
+
+                {qualityExpanded && (
+                  <div className="p-4 space-y-5">
+                    {dq.total < 10 ? (
+                      <p className="text-xs text-muted-foreground text-center py-6">Not enough data yet — minimum 10 DRs required for this analysis.</p>
+                    ) : (
+                      <>
+                        {/* Funnel */}
+                        <div className="space-y-1">
+                          {funnelStages.map((s, i) => (
+                            <Fragment key={s.label}>
+                              <div className="flex items-center gap-3">
+                                <div className="w-44 text-xs text-muted-foreground shrink-0">{s.label}</div>
+                                <div className="w-12 text-xs font-mono text-right tabular-nums shrink-0">[{s.count}]</div>
+                                <div className="flex-1 relative h-6 bg-secondary/40 rounded-sm overflow-hidden">
+                                  <div
+                                    className={`h-full ${s.color} transition-all`}
+                                    style={{ width: `${Math.max(s.pct * 100, 0.5)}%` }}
+                                  />
+                                </div>
+                                <div className="w-12 text-xs font-mono text-right tabular-nums text-muted-foreground shrink-0">
+                                  {(s.pct * 100).toFixed(0)}%
+                                </div>
+                              </div>
+                              {i < dropoffs.length && (
+                                <div className="flex items-center gap-3 pl-44 ml-3">
+                                  <span className="text-[11px] text-red-600/80 dark:text-red-400/80">
+                                    ↓ {(dropoffs[i] * 100).toFixed(0)}% {dropLabels[i]}
+                                  </span>
+                                </div>
+                              )}
+                            </Fragment>
+                          ))}
+                        </div>
+
+                        {/* Stat cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="border border-border rounded-md p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Overall Cohort Rate</p>
+                            <p className={`text-2xl font-semibold mt-1 ${cohortColor}`}>{fmtPct(dq.overallCohortRate, 1)}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">All DRs → Closed Won</p>
+                          </div>
+                          <div className="border border-border rounded-md p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Win Rate on SQL'd Deals</p>
+                            <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">SQL'd DRs → Closed Won</p>
+                          </div>
+                          <div className="border border-border rounded-md p-3" title="The gap between win rate on qualified deals and overall cohort rate. This represents deals lost before AEs had a real opportunity to close them.">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Quality Gap</p>
+                            <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">{(dq.qualityGap * 100).toFixed(1)}pp</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">Difference explained by lead quality</p>
+                          </div>
+                        </div>
+
+                        {/* Insight line */}
+                        <div className="border-l-2 border-foreground/40 pl-3 py-1">
+                          <p className="text-sm font-medium">{dq.insightText}</p>
+                        </div>
+
+                        {/* Stage mortality table */}
+                        <div>
+                          <h4 className="text-xs font-semibold mb-2">Stage Mortality</h4>
+                          <div className="overflow-x-auto border border-border rounded-md">
+                            <table className="w-full text-xs">
+                              <thead className="bg-secondary/40 text-muted-foreground">
+                                <tr>
+                                  <th className="px-2 py-1.5 text-left font-medium">From Stage</th>
+                                  <th className="px-2 py-1.5 text-left font-medium">To Stage</th>
+                                  <th className="px-2 py-1.5 text-right font-medium">Deals</th>
+                                  <th className="px-2 py-1.5 text-right font-medium">Drop-off</th>
+                                  <th className="px-2 py-1.5 text-right font-medium">Avg Days at Stage</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {dq.mortality.map((m, i) => (
+                                  <tr key={i} className="border-t border-border">
+                                    <td className="px-2 py-1.5">{m.from}</td>
+                                    <td className="px-2 py-1.5">
+                                      {m.to}
+                                      {m.isGate && <span className="ml-2 text-[10px] text-muted-foreground">← Partner quality gate</span>}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{m.fromCount} → {m.toCount}</td>
+                                    <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${m.isTerminal ? 'text-muted-foreground' : dropColor(m.dropOff)}`}>
+                                      {m.isTerminal ? '—' : `${(m.dropOff * 100).toFixed(0)}%`}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{m.avgDays.toFixed(0)}d</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* By-CAM quality breakdown */}
+                        <div>
+                          <h4 className="text-xs font-semibold mb-2">By-CAM Quality Breakdown <span className="text-[11px] font-normal text-muted-foreground">(min 5 DRs)</span></h4>
+                          {dq.camRowsDQ.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No CAMs meet the 5-DR minimum in this scope.</p>
+                          ) : (
+                            <div className="overflow-x-auto border border-border rounded-md">
+                              <table className="w-full text-xs">
+                                <thead className="bg-secondary/40 text-muted-foreground">
+                                  <tr>
+                                    <th className="px-2 py-1.5 text-left font-medium">CAM</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">DRs</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">SQL Rate</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">Win Rate (on SQL)</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">Quality Gap</th>
+                                    <th className="px-2 py-1.5 text-center font-medium">Verdict</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {dq.camRowsDQ.map((r) => (
+                                    <tr key={r.cam} className="border-t border-border">
+                                      <td className="px-2 py-1.5">{r.cam}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{r.drs}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{fmtPct(r.sqlRate, 0)}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{fmtPct(r.winRateOnSQL, 0)}</td>
+                                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">{(r.qualityGap * 100).toFixed(0)}pp</td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        <span className={`px-2 py-0.5 rounded text-[11px] ${verdictBadge(r.verdict)}`}>{r.verdict}</span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
           {/* Section B: AE Accountability */}
           <section className="border border-border rounded-md">
             <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-3 flex-wrap">
