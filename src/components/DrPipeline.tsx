@@ -1045,6 +1045,50 @@ export default function DrPipeline() {
     };
   }, [scopeNoStatus]);
 
+  // Defensible-only funnel stats (excludes padded, stale, rejected, withdrawn)
+  const NON_DEFENSIBLE_STATUSES = new Set<string>(['padded', 'stale', 'rejected', 'withdrawn']);
+  const dealQualityDefensible = useMemo(() => {
+    const drs = scopeNoStatus.filter(d => !NON_DEFENSIBLE_STATUSES.has(d.status));
+    const total = drs.length;
+    const reachedSQL = drs.filter(d => d.isSql).length;
+    const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
+    const closedWon = drs.filter(d => d.status === 'closed_won').length;
+    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
+    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    const overallCohortRate = total > 0 ? closedWon / total : 0;
+    const sqlRate = total > 0 ? reachedSQL / total : 0;
+    const qualityGap = winRateOnSQL - overallCohortRate;
+    return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
+  }, [scopeNoStatus]);
+
+  // Exclusion summary for the "Defensible Only" callout
+  const dqExclusion = useMemo(() => {
+    const excluded = scopeNoStatus.filter(d => NON_DEFENSIBLE_STATUSES.has(d.status));
+    // Buckets — "padded only", "stale only", "both" (padded AND stale). Withdrawn/rejected counted separately.
+    let paddedOnly = 0, staleOnly = 0, both = 0, withdrawn = 0, rejected = 0;
+    for (const d of excluded) {
+      const isPad = d.status === 'padded';
+      const isStale = d.status === 'stale';
+      if (d.status === 'withdrawn') withdrawn++;
+      else if (d.status === 'rejected') rejected++;
+      else if (isPad && isStale) both++;
+      else if (isPad) paddedOnly++;
+      else if (isStale) staleOnly++;
+    }
+    // Top sources by CAM
+    const camCounts = new Map<string, number>();
+    for (const d of excluded) {
+      const k = (d.channelAccountManager || '').trim();
+      if (!k) continue;
+      camCounts.set(k, (camCounts.get(k) || 0) + 1);
+    }
+    const topSources = [...camCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([cam, count]) => ({ cam, count }));
+    return { total: excluded.length, paddedOnly, staleOnly, both, withdrawn, rejected, topSources };
+  }, [scopeNoStatus]);
+
   // ---------- Render helpers ----------
   const lastBatch = drBatches[drBatches.length - 1];
   const hasData = dealRegistrations.length > 0;
