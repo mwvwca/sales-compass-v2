@@ -10,6 +10,8 @@ import type {
 import {
   getMonthKey,
   getCurrentQuarter,
+  getWeeksInMonth,
+  getDateAtUtcStart,
 } from '@/types/forecast';
 import type { BriefingMode } from './briefingPrompts';
 
