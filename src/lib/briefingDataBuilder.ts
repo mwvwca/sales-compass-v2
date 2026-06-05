@@ -133,7 +133,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
 
   const opps = input.opportunities;
   const openOpps = opps.filter(isOpen);
-  const commitOpps = opps.filter(o => o.classification === 'commit');
+  const commitOpps = opps.filter(isCommit);
   const upsideOpps = opps.filter(o => o.classification === 'upside');
   const closedWonMtdOpps = opps.filter(o => o.classification === 'closed_won' && inMonth(o.closeDate, monthKey));
 
