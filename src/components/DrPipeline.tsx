@@ -1284,11 +1284,19 @@ export default function DrPipeline() {
                             <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
                             <p className="text-[11px] text-muted-foreground mt-0.5">SQL'd DRs → Closed Won</p>
                           </div>
-                          <div className="border border-border rounded-md p-3" title="The gap between win rate on qualified deals and overall cohort rate. This represents deals lost before AEs had a real opportunity to close them.">
-                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Quality Gap</p>
-                            <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">{(dq.qualityGap * 100).toFixed(1)}pp</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Difference explained by lead quality</p>
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="border border-border rounded-md p-3 cursor-help">
+                                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Quality Gap</p>
+                                <p className="text-2xl font-semibold mt-1 text-amber-600 dark:text-amber-400">+{(dq.qualityGap * 100).toFixed(1)} pts</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Win rate on qualified deals vs. overall</p>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>AEs close at {(dq.winRateOnSQL * 100).toFixed(0)}% when given a qualified lead.</p>
+                              <p>The overall {(dq.overallCohortRate * 100).toFixed(0)}% reflects leads that never qualified.</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
 
                         {/* Insight line */}
