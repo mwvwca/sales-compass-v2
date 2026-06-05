@@ -392,6 +392,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     drSignals,
     closingThisWeek,
     closingNextWeek,
+    pastDueCommits,
   };
 }
 
