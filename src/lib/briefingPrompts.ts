@@ -67,7 +67,7 @@ Structure:
 1. THE NUMBER: where we are vs commit, what needs to happen to get there
 2. WEEK BY WEEK (rest of month): deals closing each week, classified as commit or upside, total per week
 3. REP BY REP CALL: for each rep, their commit number and the deals making it up — challenge any commit deal that hasn't had recent activity
-4. AT RISK: deals in commit that have red flags (no activity, past close date, low stage for amount)
+4. AT RISK: flag any commit deals where the close date has already passed and the deal hasn't closed — these are the real forecast risks, not deals closing next month
 5. UPSIDE TO PROMOTE: upside deals worth calling this week based on stage and activity
 6. DR PIPELINE: any channel signals worth raising (stale deals, CAM issues, new SQLs)
 7. ASKS FOR THE CALL: specific questions to ask each rep
