@@ -66,7 +66,7 @@ Your output must be a structured briefing in plain text (no markdown, no bullet 
 Structure:
 1. THE NUMBER: where we are vs commit, what needs to happen to get there
 2. WEEK BY WEEK (rest of month): deals closing each week, classified as commit or upside, total per week
-3. REP BY REP CALL: for each rep, their commit number and the deals making it up — challenge any commit deal that hasn't had recent activity
+3. REP BY REP CALL: for each rep, their commit number and the deals making it up — challenge any commit deal that hasn't had recent activity. Each rep's commit section shows only their current month commit deals. Future month commits are listed separately as context — do not flag these as problems. They represent pipeline building for next month, which is healthy. Only mention future commits if they seem unusually high relative to current month activity.
 4. AT RISK: flag any commit deals where the close date has already passed and the deal hasn't closed — these are the real forecast risks, not deals closing next month
 5. UPSIDE TO PROMOTE: upside deals worth calling this week based on stage and activity
 6. DR PIPELINE: any channel signals worth raising (stale deals, CAM issues, new SQLs)
