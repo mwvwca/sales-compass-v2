@@ -294,7 +294,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const repSummaries = activeReps.map(rep => {
     const repOpps = opps.filter(o => o.repName.toLowerCase().trim() === rep.name.toLowerCase().trim());
     const open = repOpps.filter(isOpen);
-    const commits = repOpps.filter(o => o.classification === 'commit');
+    const commits = repOpps.filter(isCommit);
     const upsides = repOpps.filter(o => o.classification === 'upside');
     const cwMtd = repOpps.filter(o => o.classification === 'closed_won' && inMonth(o.closeDate, monthKey));
 
