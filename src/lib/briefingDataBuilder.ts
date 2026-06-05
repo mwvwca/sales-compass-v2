@@ -55,6 +55,7 @@ export interface BriefingPayload {
   } | null;
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
+  pastDueCommits: { name: string; rep: string; amount: number; closeDate: string }[];
 }
 
 interface BuilderInput {
@@ -89,6 +90,18 @@ function isOpen(o: Opportunity): boolean {
 function inMonth(dateStr: string, monthKey: string): boolean {
   try { return getMonthKey(dateStr) === monthKey; } catch { return false; }
 }
+
+function parseDateLocal(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const iso = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+  const us = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (us) return new Date(+us[3], +us[1] - 1, +us[2]);
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+
 
 
 
@@ -244,6 +257,24 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     })),
   );
 
+  // Past-due commits: classified commit, close date already passed, not closed
+  const todayLocal = new Date();
+  todayLocal.setHours(0, 0, 0, 0);
+  const pastDueCommits = topByAmount(
+    commitOpps.filter(o => {
+      const d = parseDateLocal(o.closeDate);
+      if (!d) return false;
+      return (
+        o.stage !== 'Closed Won' &&
+        o.stage !== 'Closed Lost' &&
+        o.stage !== 'Rejected' &&
+        d < todayLocal
+      );
+    }).map(o => ({
+      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate,
+    })),
+  );
+
   // Per-rep summaries
   const repSummaries = activeReps.map(rep => {
     const repOpps = opps.filter(o => o.repName.toLowerCase().trim() === rep.name.toLowerCase().trim());
@@ -361,6 +392,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     drSignals,
     closingThisWeek,
     closingNextWeek,
+    pastDueCommits,
   };
 }
 
@@ -391,6 +423,7 @@ Amount changes (${payload.amountChanges.length}): ${JSON.stringify(payload.amoun
 
 CLOSING THIS WEEK (${payload.closingThisWeek.length}): ${JSON.stringify(payload.closingThisWeek)}
 CLOSING NEXT WEEK (${payload.closingNextWeek.length}): ${JSON.stringify(payload.closingNextWeek)}
+PAST DUE COMMITS (${payload.pastDueCommits.length}): ${JSON.stringify(payload.pastDueCommits)}
 
 REP SUMMARIES (${payload.repSummaries.length} active reps):
 ${payload.repSummaries.map(r => JSON.stringify(r)).join('\n')}
