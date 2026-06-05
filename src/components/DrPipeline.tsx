@@ -1482,7 +1482,7 @@ export default function DrPipeline() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {dq.camRowsDQ.map((r) => (
+                                  {dqAll.camRowsDQ.map((r) => (
                                     <tr key={r.cam} className="border-t border-border">
                                       <td className="px-2 py-1.5">{r.cam}</td>
                                       <td className="px-2 py-1.5 text-right font-mono tabular-nums">{r.drs}</td>
