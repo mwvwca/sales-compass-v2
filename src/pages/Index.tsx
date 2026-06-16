@@ -12,7 +12,7 @@ import DrCleanupPlanSection from '@/components/DrCleanupPlan';
 import { useForecast } from '@/context/ForecastContext';
 import SlipReport from '@/components/SlipReport';
 import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Broom } from 'lucide-react';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
 
@@ -34,6 +34,7 @@ const Index = () => {
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
     { id: 'dr-pipeline', label: 'DR Pipeline', icon: <Layers size={14} /> },
+    { id: 'dr-cleanup', label: 'Pipeline Cleanup', icon: <Sparkles size={14} /> },
     { id: 'slips', label: 'Slips', icon: <TrendingDown size={14} /> },
     { id: 'graveyard', label: 'Graveyard', icon: <Skull size={14} /> },
   ];
@@ -111,6 +112,7 @@ const Index = () => {
             <DrPipeline />
           </div>
         )}
+        {tab === 'dr-cleanup' && <DrCleanupTab />}
         {tab === 'slips' && (
           <div>
             <div className="mb-4">
