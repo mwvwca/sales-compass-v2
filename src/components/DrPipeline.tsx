@@ -250,15 +250,45 @@ export default function DrPipeline() {
   const periodRange = useMemo(() => getPeriodRange(period), [period]);
   const timelineRange = useMemo(() => getPeriodRange(timelinePeriod), [timelinePeriod]);
 
+  // Padded account membership — opportunityIds belonging to multi-DR accounts
+  // where every DR is pre-SQL with no activity (matches Section F "Padded = Yes")
+  const paddedOpportunityIds = useMemo(() => {
+    const set = new Set<string>();
+    const base = dealRegistrations.filter(d => {
+      if (d.status === 'rejected') return false;
+      if (camFilter !== 'all' && (d.channelAccountManager || '(none)') !== camFilter) return false;
+      if (repFilter !== 'all' && d.repName !== repFilter) return false;
+      if (!inRange(d.createdDate, periodRange)) return false;
+      return true;
+    });
+    const byAcct = new Map<string, DealRegistration[]>();
+    for (const d of base) {
+      const a = d.accountName || '(none)';
+      const arr = byAcct.get(a) || []; arr.push(d); byAcct.set(a, arr);
+    }
+    for (const arr of byAcct.values()) {
+      if (arr.length < 2) continue;
+      if (arr.every(d => !d.isSql && !d.lastActivity)) {
+        for (const d of arr) set.add(d.opportunityId);
+      }
+    }
+    return set;
+  }, [dealRegistrations, camFilter, repFilter, periodRange]);
+
   const filtered = useMemo(() => {
     return dealRegistrations.filter(d => {
       if (camFilter !== 'all' && (d.channelAccountManager || '(none)') !== camFilter) return false;
       if (repFilter !== 'all' && d.repName !== repFilter) return false;
       if (!inRange(d.createdDate, periodRange)) return false;
-      if (statuses.size > 0 && !statuses.has(d.status)) return false;
+      if (statuses.size > 0) {
+        const directMatch = statuses.has(d.status);
+        const paddedMatch = (statuses as Set<string>).has('padded') && paddedOpportunityIds.has(d.opportunityId);
+        if (!directMatch && !paddedMatch) return false;
+      }
       return true;
     });
-  }, [dealRegistrations, camFilter, repFilter, periodRange, statuses]);
+  }, [dealRegistrations, camFilter, repFilter, periodRange, statuses, paddedOpportunityIds]);
+
 
   const timelineFiltered = useMemo(() => {
     return dealRegistrations.filter(d => {
