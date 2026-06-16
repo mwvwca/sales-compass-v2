@@ -89,6 +89,7 @@ export default function WeeklyBriefing() {
         dealRegistrations: ctx.dealRegistrations,
         monthlyManagerCommits: ctx.monthlyManagerCommits,
         managerQuotas: ctx.managerQuotas,
+        weeklySnapshots: ctx.weeklySnapshots,
       });
       const result = await generateBriefing(payload, mode);
       const now = new Date().toISOString();

@@ -4,6 +4,7 @@ import { normalizeRepName } from '@/lib/repUtils';
 import {
   getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter,
   getISOWeekRange, getDateAtUtcStart, addDaysUTC, addMonthsUTC, getYearQuarters,
+  quarterStart, quarterEnd,
   type Quarter,
 } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
@@ -14,7 +15,7 @@ import SalesIntelligence from './SalesIntelligence';
 import CommitAccuracySection from './CommitAccuracySection';
 
 import { Switch } from '@/components/ui/switch';
-import { ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileSpreadsheet, Camera } from 'lucide-react';
 import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentationButtonLabel } from '@/lib/monthlyPresentationExport';
 
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
@@ -45,7 +46,7 @@ function localQuarter(dateStr: string): string | null {
 }
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('monthly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
@@ -165,6 +166,66 @@ export default function ForecastDashboard() {
   }, [selectedRep, allRepNames, reps, scopeQuarters, goalDivisor, managerQuotaProrated]);
 
   const variance = totalWon - totalGoal;
+
+  // Pace-adjusted variance: where you SHOULD be by today given linear pace through the period.
+  const paceData = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let periodStart: Date;
+    let periodEnd: Date;
+
+    if (scope === 'quarterly') {
+      periodStart = quarterStart(anchorQuarter);
+      periodEnd = quarterEnd(anchorQuarter);
+    } else if (scope === 'monthly') {
+      const [y, m] = anchorMonthKey.split('-').map(Number);
+      periodStart = new Date(y, m - 1, 1);
+      periodEnd = new Date(y, m, 0);
+    } else if (scope === 'annual') {
+      const y = anchor.getUTCFullYear();
+      periodStart = new Date(y, 0, 1);
+      periodEnd = new Date(y, 11, 31);
+    } else {
+      periodStart = weekRange.start;
+      periodEnd = weekRange.end;
+    }
+
+    const totalDays = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1);
+    const elapsedDays = Math.min(totalDays, Math.max(0,
+      Math.round((today.getTime() - periodStart.getTime()) / 86400000) + 1));
+    const pctElapsed = Math.min(1, Math.max(0, elapsedDays / totalDays));
+    const expectedByNow = totalGoal * pctElapsed;
+    const paceVariance = totalWon - expectedByNow;
+    const isPast = today > periodEnd;
+    const isFuture = today < periodStart;
+    return { totalDays, elapsedDays, pctElapsed, expectedByNow, paceVariance, isPast, isFuture };
+  }, [scope, anchor, anchorQuarter, anchorMonthKey, weekRange, totalGoal, totalWon]);
+
+  // Defensible coverage: qualified pipeline only (Discovery 25%+ or commit/upside) ÷ goal.
+  const defensibleCoverage = useMemo(() => {
+    const qualifiedStageWords = ['discovery', 'technical', 'commercial', 'purchasing'];
+    const qualifiedPipeline = hudOpps.filter(o => {
+      if (o.classification === 'closed_won') return false;
+      const stageLower = (o.stage || '').toLowerCase().trim();
+      const isQualifiedStage = qualifiedStageWords.some(w => stageLower.includes(w));
+      const isQualifiedClass = o.classification === 'commit' || o.classification === 'upside';
+      return isQualifiedStage || isQualifiedClass;
+    }).reduce((s, o) => s + o.amount, 0);
+    const coverage = totalGoal > 0 ? qualifiedPipeline / totalGoal : 0;
+    return { qualifiedPipeline, coverage };
+  }, [hudOpps, totalGoal]);
+
+  // Week-over-week delta from the two most recent Friday snapshots
+  const wow = useMemo(() => {
+    if (weeklySnapshots.length === 0) return null;
+    const sorted = [...weeklySnapshots].sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
+    if (sorted.length === 1) return { single: sorted[0], current: null, prior: null };
+    const current = sorted[sorted.length - 1];
+    const prior = sorted[sorted.length - 2];
+    return { single: null, current, prior };
+  }, [weeklySnapshots]);
+
 
   // Mgmt Commit: prefer manager override; fall back to rep rollup (only used in monthly scope when selectedRep === all).
   const mgmtCommit = useMemo(() => {
@@ -315,6 +376,14 @@ export default function ForecastDashboard() {
           <ExecutiveReport quarter={anchorQuarter} selectedRep={selectedRep} />
           <ExecutiveReportVisual quarter={anchorQuarter} selectedRep={selectedRep} />
           <button
+            onClick={() => captureWeeklySnapshot()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Capture a weekly snapshot of full-team quarterly metrics for week-over-week tracking"
+          >
+            <Camera size={12} />
+            Snapshot
+          </button>
+          <button
             onClick={() => exportMonthlyPresentation(presentationMonth, { reps, opportunities, monthlyRepCommits })}
             className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             title="Download monthly management presentation"
@@ -324,6 +393,7 @@ export default function ForecastDashboard() {
           </button>
         </div>
       </div>
+
 
       {/* Summary Cards */}
       <div className="space-y-2">
@@ -357,21 +427,108 @@ export default function ForecastDashboard() {
             <p className="text-xl font-mono font-semibold text-positive">{fmt(totalWon)}</p>
             <p className="text-xs font-mono mt-0.5 text-positive">{pct(totalWon, totalGoal)} of goal</p>
           </div>
-          {/* Row 2: Total Pipe, Commit, Upside, Variance */}
+          {/* Row 2: Total Pipe, Commit, Upside, Pace Variance */}
           {[
-            { label: 'Total Pipe', value: fmt(totalPipe), sub: pct(totalPipe, totalGoal), color: 'text-foreground' },
-            { label: 'Commit', value: fmt(totalCommit), sub: pct(totalCommit, totalGoal), color: 'text-commit' },
-            { label: 'Upside', value: fmt(totalUpside), sub: pct(totalUpside, totalGoal), color: 'text-upside' },
-            { label: 'Variance', value: fmt(variance), sub: pct(totalWon, totalGoal), color: variance >= 0 ? 'text-positive' : 'text-negative' },
+            { label: 'Total Pipe', value: fmt(totalPipe), sub: `${pct(totalPipe, totalGoal)} of goal`, color: 'text-foreground' },
+            { label: 'Commit', value: fmt(totalCommit), sub: `${pct(totalCommit, totalGoal)} of goal`, color: 'text-commit' },
+            { label: 'Upside', value: fmt(totalUpside), sub: `${pct(totalUpside, totalGoal)} of goal`, color: 'text-upside' },
           ].map(c => (
             <div key={c.label} className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
               <p className={`text-xl font-mono font-semibold ${c.color}`}>{c.value}</p>
-              <p className={`text-xs font-mono mt-0.5 ${c.color}`}>{c.sub} of goal</p>
+              <p className={`text-xs font-mono mt-0.5 ${c.color}`}>{c.sub}</p>
             </div>
           ))}
+
+          {/* Pace Variance card */}
+          {(() => {
+            const { paceVariance, expectedByNow, elapsedDays, totalDays, pctElapsed, isPast, isFuture } = paceData;
+            const tolerance = expectedByNow * 0.1;
+            let color = 'text-positive';
+            if (!isPast && !isFuture) {
+              if (paceVariance < -tolerance) color = 'text-negative';
+              else if (paceVariance < 0) color = 'text-upside';
+            } else {
+              color = variance >= 0 ? 'text-positive' : 'text-negative';
+            }
+            const label = isPast ? 'Final Variance' : isFuture ? 'Pace Variance' : 'Pace Variance';
+            const headline = isPast ? fmt(variance) : isFuture ? '—' : `${paceVariance >= 0 ? '+' : ''}${fmt(paceVariance)}`;
+            const subtitle = isFuture
+              ? 'Period not started'
+              : isPast
+              ? `Final: ${fmt(totalWon)} closed vs ${fmt(totalGoal)} goal`
+              : `${paceVariance >= 0 ? '✓ Ahead of pace' : '⚠ Behind pace'} — ${fmt(totalWon)} closed vs ${fmt(expectedByNow)} expected by day ${elapsedDays} of ${totalDays}`;
+            return (
+              <div className="bg-card border border-border rounded-lg p-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+                <p className={`text-xl font-mono font-semibold ${color}`}>{headline}</p>
+                <p className={`text-[11px] mt-0.5 ${color}`}>{subtitle}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Full {scope} goal: {fmt(totalGoal)} · {Math.round(pctElapsed * 100)}% elapsed</p>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Row 3: Defensible Coverage (full width strip with WoW delta) */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {(() => {
+            const cov = defensibleCoverage.coverage;
+            const color = cov >= 3 ? 'text-positive' : cov >= 1.5 ? 'text-upside' : 'text-negative';
+            return (
+              <div
+                className="bg-card border border-border rounded-lg p-4"
+                title="Qualified pipeline (Discovery 25%+ or commit/upside) divided by goal. Excludes pre-SQL and unqualified deals."
+              >
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Defensible Coverage</p>
+                <p className={`text-xl font-mono font-semibold ${color}`}>{cov.toFixed(1)}x</p>
+                <p className={`text-[11px] mt-0.5 ${color}`}>{fmt(defensibleCoverage.qualifiedPipeline)} qualified vs {fmt(totalGoal)} goal</p>
+              </div>
+            );
+          })()}
+
+          {/* Week-over-week delta strip */}
+          {wow && (
+            <div className="md:col-span-3 bg-card border border-border rounded-lg p-4">
+              {wow.current && wow.prior ? (
+                <>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                    Since last snapshot ({wow.prior.snapshotDate} → {wow.current.snapshotDate})
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                    {[
+                      { label: 'Closed Won', prev: wow.prior.closedWon, curr: wow.current.closedWon, mode: 'up-good' as const },
+                      { label: 'Commit', prev: wow.prior.commitPipeline, curr: wow.current.commitPipeline, mode: 'neutral' as const },
+                      { label: 'Pipeline', prev: wow.prior.totalPipeline, curr: wow.current.totalPipeline, mode: 'up-good' as const },
+                      { label: 'Coverage', prev: wow.prior.defensibleCoverage, curr: wow.current.defensibleCoverage, mode: 'up-good' as const, isRatio: true },
+                    ].map(row => {
+                      const delta = row.curr - row.prev;
+                      const up = delta > 0;
+                      const arrow = delta === 0 ? '·' : up ? '↑' : '↓';
+                      const color = row.mode === 'neutral'
+                        ? 'text-muted-foreground'
+                        : delta === 0 ? 'text-muted-foreground' : up ? 'text-positive' : 'text-negative';
+                      const fmtVal = (n: number) => row.isRatio ? `${n.toFixed(1)}x` : fmt(n);
+                      const fmtDelta = (n: number) => row.isRatio ? `${n >= 0 ? '+' : ''}${n.toFixed(1)}x` : `${n >= 0 ? '+' : '-'}${fmt(Math.abs(n))}`;
+                      return (
+                        <div key={row.label}>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{row.label}</div>
+                          <div className="text-foreground">{fmtVal(row.prev)} → {fmtVal(row.curr)}</div>
+                          <div className={color}>{arrow} {fmtDelta(delta)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : wow.single ? (
+                <p className="text-xs text-muted-foreground">
+                  First weekly snapshot captured {wow.single.snapshotDate} — comparison available next Friday.
+                </p>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
+
 
 
       {/* Pipeline Coverage */}

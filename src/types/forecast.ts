@@ -268,6 +268,18 @@ export interface OpportunitySnapshot {
   repName: string;
 }
 
+/** Friday-to-Friday weekly snapshot for week-over-week trend tracking on the forecast dashboard. */
+export interface WeeklySnapshot {
+  id: string;
+  snapshotDate: string;       // 'YYYY-MM-DD' — the Friday this was captured
+  closedWon: number;
+  commitPipeline: number;
+  upsidePipeline: number;
+  totalPipeline: number;
+  defensibleCoverage: number; // ratio (e.g. 2.3 means 2.3x)
+  capturedAt: string;         // ISO timestamp
+}
+
 export type Quarter = `${number}-Q${1 | 2 | 3 | 4}`;
 
 /** Parse a date string into year/month/day using UTC to avoid timezone shifts. */

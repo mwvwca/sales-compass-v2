@@ -223,6 +223,16 @@ const backupSchema = z.object({
     createdAt: z.string(),
     updatedAt: z.string(),
   })).max(20).optional(),
+  weeklySnapshots: z.array(z.object({
+    id: z.string(),
+    snapshotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    closedWon: z.number().finite(),
+    commitPipeline: z.number().finite(),
+    upsidePipeline: z.number().finite(),
+    totalPipeline: z.number().finite(),
+    defensibleCoverage: z.number().finite(),
+    capturedAt: z.string(),
+  })).max(104).optional(),
   exportedAt: z.string().optional(),
 });
 
@@ -241,6 +251,7 @@ export default function DataBackup() {
     forecastPromotions,
     forecastSnapshots,
     managerQuotas,
+    weeklySnapshots,
     restoreFromBackup,
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -261,6 +272,7 @@ export default function DataBackup() {
       forecastPromotions,
       forecastSnapshots,
       managerQuotas,
+      weeklySnapshots,
     });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };

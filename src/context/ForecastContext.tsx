@@ -18,8 +18,9 @@ import type {
   DealRegistration,
   DrBatch,
   RawDrRecord,
+  WeeklySnapshot,
 } from '@/types/forecast';
-import { getMonthKey, getWeeksInMonth, getDateAtUtcStart } from '@/types/forecast';
+import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, quarterStart, quarterEnd } from '@/types/forecast';
 import { mergeDrBatch } from '@/lib/drMerge';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
@@ -41,6 +42,7 @@ const STORAGE_KEYS = {
   dealRegistrations: 'forecast_deal_registrations',
   drBatches: 'forecast_dr_batches',
   managerQuotas: 'forecast_manager_quotas',
+  weeklySnapshots: 'forecast_weekly_snapshots',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -137,6 +139,7 @@ interface ForecastState {
   dealRegistrations: DealRegistration[];
   drBatches: DrBatch[];
   managerQuotas: ManagerQuota[];
+  weeklySnapshots: WeeklySnapshot[];
 
 
   loading: boolean;
@@ -195,7 +198,9 @@ interface ForecastContextValue extends ForecastState {
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
     managerQuotas?: ManagerQuota[];
+    weeklySnapshots?: WeeklySnapshot[];
   }) => void;
+  captureWeeklySnapshot: () => WeeklySnapshot;
 
 
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
@@ -297,6 +302,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       })),
       drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
       managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
+      weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
 
 
       loading: false,
@@ -325,6 +331,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.dealRegistrations, state.dealRegistrations);
     saveToStorage(STORAGE_KEYS.drBatches, state.drBatches);
     saveToStorage(STORAGE_KEYS.managerQuotas, state.managerQuotas);
+    saveToStorage(STORAGE_KEYS.weeklySnapshots, state.weeklySnapshots);
 
 
     const sizeKB = getStorageSizeKB();
@@ -347,6 +354,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.dealRegistrations,
     state.drBatches,
     state.managerQuotas,
+    state.weeklySnapshots,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
@@ -874,6 +882,73 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     return state.managerQuotas.find(q => q.year === year);
   }, [state.managerQuotas]);
 
+  const computeWeeklySnapshotPayload = useCallback((s: ForecastState): Omit<WeeklySnapshot, 'id' | 'snapshotDate' | 'capturedAt'> => {
+    const quarter = getCurrentQuarter();
+    const qStart = quarterStart(quarter);
+    const qEnd = quarterEnd(quarter);
+
+    const inQuarter = s.opportunities.filter(o => {
+      if (!o.closeDate) return false;
+      const d = getDateAtUtcStart(o.closeDate);
+      if (d < qStart || d > qEnd) return false;
+      if (o.classification === 'omitted' || o.classification === 'rejected' || o.classification === 'lost') return false;
+      const stageNorm = (o.stage || '').toLowerCase().trim();
+      if (stageNorm === 'closed lost' || stageNorm === 'rejected') return false;
+      return true;
+    });
+
+    const closedWon = inQuarter.filter(o => o.classification === 'closed_won').reduce((a, o) => a + o.amount, 0);
+    const commitPipeline = inQuarter.filter(o => o.classification === 'commit').reduce((a, o) => a + o.amount, 0);
+    const upsidePipeline = inQuarter.filter(o => o.classification === 'upside').reduce((a, o) => a + o.amount, 0);
+    const totalPipeline = inQuarter.reduce((a, o) => a + o.amount, 0);
+
+    const qualifiedStageWords = ['discovery', 'technical', 'commercial', 'purchasing'];
+    const qualifiedPipe = inQuarter.filter(o => {
+      if (o.classification === 'closed_won') return false;
+      const stageNorm = (o.stage || '').toLowerCase().trim();
+      const isQualifiedStage = qualifiedStageWords.some(w => stageNorm.includes(w));
+      const isQualifiedClass = o.classification === 'commit' || o.classification === 'upside';
+      return isQualifiedStage || isQualifiedClass;
+    }).reduce((a, o) => a + o.amount, 0);
+
+    const year = qStart.getUTCFullYear();
+    const repGoal = s.reps.filter(r => r.isActive !== false).reduce((a, r) => a + (r.quarterlyGoals[quarter] || 0), 0);
+    const mgrAnnual = s.managerQuotas.find(q => q.year === year)?.annualAmount || 0;
+    const totalGoal = repGoal + mgrAnnual / 4;
+
+    const defensibleCoverage = totalGoal > 0 ? qualifiedPipe / totalGoal : 0;
+
+    return { closedWon, commitPipeline, upsidePipeline, totalPipeline, defensibleCoverage };
+  }, []);
+
+  const captureWeeklySnapshot = useCallback((): WeeklySnapshot => {
+    const now = new Date();
+    const snapshotDate = now.toISOString().slice(0, 10);
+    const capturedAt = now.toISOString();
+    let created!: WeeklySnapshot;
+    setState(s => {
+      const existing = s.weeklySnapshots.find(w => w.snapshotDate === snapshotDate);
+      if (existing) { created = existing; return s; }
+      const payload = computeWeeklySnapshotPayload(s);
+      created = { id: crypto.randomUUID(), snapshotDate, capturedAt, ...payload };
+      const next = [...s.weeklySnapshots, created]
+        .sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate))
+        .slice(-104);
+      return { ...s, weeklySnapshots: next };
+    });
+    return created;
+  }, [computeWeeklySnapshotPayload]);
+
+  // Auto-capture on Fridays (once per day)
+  useEffect(() => {
+    const today = new Date();
+    if (today.getDay() !== 5) return;
+    const todayKey = today.toISOString().slice(0, 10);
+    if (state.weeklySnapshots.some(w => w.snapshotDate === todayKey)) return;
+    captureWeeklySnapshot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.opportunities.length, state.imports.length]);
+
   const restoreFromBackup = useCallback((data: {
     reps: Rep[];
     opportunities: Opportunity[];
@@ -890,6 +965,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
     managerQuotas?: ManagerQuota[];
+    weeklySnapshots?: WeeklySnapshot[];
   }) => {
     setState(s => ({
       ...s,
@@ -908,6 +984,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       dealRegistrations: data.dealRegistrations || [],
       drBatches: data.drBatches || [],
       managerQuotas: data.managerQuotas || [],
+      weeklySnapshots: data.weeklySnapshots || [],
     }));
   }, []);
 
@@ -953,6 +1030,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     clearDrData,
     setManagerQuota,
     getManagerQuota,
+    captureWeeklySnapshot,
     restoreFromBackup,
     getOpportunityHistory,
   };
