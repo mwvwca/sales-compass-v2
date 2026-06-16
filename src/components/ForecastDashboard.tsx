@@ -376,6 +376,14 @@ export default function ForecastDashboard() {
           <ExecutiveReport quarter={anchorQuarter} selectedRep={selectedRep} />
           <ExecutiveReportVisual quarter={anchorQuarter} selectedRep={selectedRep} />
           <button
+            onClick={() => captureWeeklySnapshot()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Capture a weekly snapshot of full-team quarterly metrics for week-over-week tracking"
+          >
+            <Camera size={12} />
+            Snapshot
+          </button>
+          <button
             onClick={() => exportMonthlyPresentation(presentationMonth, { reps, opportunities, monthlyRepCommits })}
             className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             title="Download monthly management presentation"
@@ -385,6 +393,7 @@ export default function ForecastDashboard() {
           </button>
         </div>
       </div>
+
 
       {/* Summary Cards */}
       <div className="space-y-2">
