@@ -8,15 +8,12 @@ import {
   analyzeAnchors,
   groupByCAM,
   buildCleanupEmailPrompt,
+  buildCleanupEmail,
   type CamCleanupGroup,
   type CleanupStage,
   type CleanupClassification,
   type AnchorRole,
 } from '@/lib/drCleanup';
-import { callBriefingApi } from '@/lib/briefingApi';
-
-const EMAIL_SYSTEM_PROMPT =
-  'You are an assistant that writes concise, professional pipeline cleanup emails on behalf of a sales manager. Always include a Subject line first. Plain text only, no markdown.';
 
 const STAGE_META: Record<CleanupStage, { label: string; tone: string; short: string }> = {
   monitoring: { label: 'Monitoring', tone: 'bg-secondary/40 text-muted-foreground', short: 'Monitor' },
@@ -132,19 +129,10 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   }, [dealRegistrations]);
 
   const generateForCam = async (group: CamCleanupGroup): Promise<string | null> => {
-    try {
-      const prompt = buildCleanupEmailPrompt(group);
-      const text = await callBriefingApi(EMAIL_SYSTEM_PROMPT, prompt, { maxTokens: 900 });
-      setEmails(prev => ({ ...prev, [group.cam]: text }));
-      return text;
-    } catch (err: any) {
-      toast({
-        title: `Email generation failed for ${group.cam}`,
-        description: err?.message || 'Use the To/CC/Subject fields below to compose manually.',
-        variant: 'destructive',
-      });
-      return null;
-    }
+    const { subject, body } = buildCleanupEmail(group);
+    const text = `Subject: ${subject}\n\n${body}`;
+    setEmails(prev => ({ ...prev, [group.cam]: text }));
+    return text;
   };
 
   const handleGenerate = async (group: CamCleanupGroup) => {
