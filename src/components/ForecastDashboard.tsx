@@ -447,7 +447,7 @@ export default function ForecastDashboard() {
             let color = 'text-positive';
             if (!isPast && !isFuture) {
               if (paceVariance < -tolerance) color = 'text-negative';
-              else if (paceVariance < 0) color = 'text-warning';
+              else if (paceVariance < 0) color = 'text-upside';
             } else {
               color = variance >= 0 ? 'text-positive' : 'text-negative';
             }
@@ -473,7 +473,7 @@ export default function ForecastDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {(() => {
             const cov = defensibleCoverage.coverage;
-            const color = cov >= 3 ? 'text-positive' : cov >= 1.5 ? 'text-warning' : 'text-negative';
+            const color = cov >= 3 ? 'text-positive' : cov >= 1.5 ? 'text-upside' : 'text-negative';
             return (
               <div
                 className="bg-card border border-border rounded-lg p-4"
