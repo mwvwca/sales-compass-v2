@@ -2167,7 +2167,7 @@ export default function DrPipeline() {
                         <td className={`text-right py-1 font-medium ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 0)}</td>
                         <td className="text-right py-1">{r.avgCycle !== null ? `${r.avgCycle.toFixed(0)}d` : '—'}</td>
                         <td className="text-right py-1">{r.active}</td>
-                        <td className={`text-right py-1 ${r.padded > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{r.padded}</td>
+                        <td className={`text-right py-1 ${r.padded > 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>{r.padded}</td>
                         <td className="text-right py-1 text-muted-foreground">{r.rejected}</td>
                         <td className="text-right py-1 text-muted-foreground">{r.withdrawn}</td>
                       </tr>
