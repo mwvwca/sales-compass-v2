@@ -215,7 +215,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
       {expanded && (
         <div className="p-4 space-y-4">
           {totalActionable === 0 && immediateCount === 0 ? (
-            {(() => {
+            (() => {
               const statusCounts = dealRegistrations.reduce((acc, d) => {
                 const key = d.status || '(unset)';
                 acc[key] = (acc[key] || 0) + 1;
@@ -233,7 +233,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                   </p>
                 </div>
               );
-            })()}
+            })()
           ) : (
             <>
               {/* Summary bar */}
