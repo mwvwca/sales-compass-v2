@@ -8,7 +8,7 @@ import * as XLSX from '@e965/xlsx';
 import { parseDrExport } from '@/lib/drParser';
 import { mergeDrBatch } from '@/lib/drMerge';
 import type { DealRegistration, RawDrRecord, DrStatus, Opportunity } from '@/types/forecast';
-import DrCleanupPlanSection from './DrCleanupPlan';
+
 
 // ---------- Constants & helpers ----------
 const STAGE_ORDER = ['Unqualified', 'Qualified 5%', 'Discovery 25%', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%'];
@@ -1538,8 +1538,6 @@ export default function DrPipeline() {
             );
           })()}
 
-          {/* Pipeline Cleanup Plan */}
-          <DrCleanupPlanSection dealRegistrations={dealRegistrations} />
 
           {/* Section B: AE Accountability */}
           <section className="border border-border rounded-md">
