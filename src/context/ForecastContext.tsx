@@ -139,6 +139,7 @@ interface ForecastState {
   dealRegistrations: DealRegistration[];
   drBatches: DrBatch[];
   managerQuotas: ManagerQuota[];
+  weeklySnapshots: WeeklySnapshot[];
 
 
   loading: boolean;
@@ -197,7 +198,9 @@ interface ForecastContextValue extends ForecastState {
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
     managerQuotas?: ManagerQuota[];
+    weeklySnapshots?: WeeklySnapshot[];
   }) => void;
+  captureWeeklySnapshot: () => WeeklySnapshot;
 
 
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
@@ -299,6 +302,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       })),
       drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
       managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
+      weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
 
 
       loading: false,
@@ -327,6 +331,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.dealRegistrations, state.dealRegistrations);
     saveToStorage(STORAGE_KEYS.drBatches, state.drBatches);
     saveToStorage(STORAGE_KEYS.managerQuotas, state.managerQuotas);
+    saveToStorage(STORAGE_KEYS.weeklySnapshots, state.weeklySnapshots);
 
 
     const sizeKB = getStorageSizeKB();
@@ -349,6 +354,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.dealRegistrations,
     state.drBatches,
     state.managerQuotas,
+    state.weeklySnapshots,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
