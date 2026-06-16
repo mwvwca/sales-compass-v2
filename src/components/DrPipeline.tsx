@@ -780,7 +780,6 @@ export default function DrPipeline() {
     ];
   }, [timelineFiltered, opportunities]);
 
-  // Cohort: last 4 months of createdDate
   const cohortRows = useMemo(() => {
     const now = new Date();
     const months: { label: string; year: number; month: number }[] = [];
@@ -798,19 +797,17 @@ export default function DrPipeline() {
       const inPipe = deals.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
       const wonDeals = deals.filter(d => d.status === 'closed_won');
       const won = wonDeals.length;
+      const lost = deals.filter(d => d.status === 'closed_lost').length;
       const cohortRate = deals.length ? won / deals.length : 0;
       const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
       const avgCycle = cycles.length ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
-      const active = deals.filter(d => 
-        d.status === 'active' || 
-        d.status === 'sql' || 
-        d.status === 'stale' || 
-        d.status === 'padded' ||
-        paddedOpportunityIdsAll.has(d.opportunityId)
-      ).length;
       const rejected = deals.filter(d => d.status === 'rejected').length;
       const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
-      return { month: m.label, total: deals.length, sql, inPipe, won, cohortRate, avgCycle, active, rejected, withdrawn };
+      // Active = still in flight: total minus closed/rejected/withdrawn
+      const active = deals.length - won - lost - rejected - withdrawn;
+      // Padded = DRs whose account is padded (Section F definition)
+      const padded = deals.filter(d => paddedOpportunityIdsAll.has(d.opportunityId)).length;
+      return { month: m.label, total: deals.length, sql, inPipe, won, lost, cohortRate, avgCycle, active, rejected, withdrawn, padded };
     });
   }, [dealRegistrations, paddedOpportunityIdsAll]);
 
