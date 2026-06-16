@@ -61,8 +61,20 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
   const [openContext, setOpenContext] = useState<string | null>(null);
 
+  // Exclude DRs in terminal states — they don't need cleanup
+  const eligibleDrs = useMemo(
+    () => dealRegistrations.filter(d =>
+      d.status !== 'closed_won' &&
+      d.status !== 'closed_lost' &&
+      d.status !== 'rejected' &&
+      d.status !== 'withdrawn' &&
+      d.status !== 'converted'
+    ),
+    [dealRegistrations]
+  );
+
   const { items, groups, stageBuckets, anchorsExempt, immediateCount } = useMemo(() => {
-    const cls = classifyCleanup(dealRegistrations);
+    const cls = classifyCleanup(eligibleDrs);
     const gs = groupByCAM(cls);
     const exempt = cls.filter(c => c.cleanupStage === 'exempt').length;
     const immediate = cls.filter(c => c.immediateAction).length;
@@ -111,9 +123,9 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
     ];
 
     return { items: cls, groups: gs, stageBuckets: buckets, anchorsExempt: exempt, immediateCount: immediate };
-  }, [dealRegistrations]);
+  }, [eligibleDrs]);
 
-  const anchorMap = useMemo(() => analyzeAnchors(dealRegistrations), [dealRegistrations]);
+  const anchorMap = useMemo(() => analyzeAnchors(eligibleDrs), [eligibleDrs]);
   const drsById = useMemo(() => {
     const m = new Map<string, DealRegistration>();
     for (const d of dealRegistrations) m.set(d.opportunityId, d);
