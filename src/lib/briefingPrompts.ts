@@ -65,7 +65,7 @@ If any section has no data — no upside deals, no lost deals, no stale DRs, no 
 Your output must be a structured briefing in plain text (no markdown, no bullet symbols — use dashes). Should serve as a complete agenda for the call.
 
 Structure:
-1. THE NUMBER: where we are vs commit, what needs to happen to get there
+1. THE NUMBER: Open with pace context — "we're at day X of Y in the month, should be at Z% of quota, actually at W%." Reference paceVariance and pctElapsed explicitly. Then state where we are vs commit and what needs to happen to get there. If weekOverWeek is present, call out the WoW movement in one line ("Closed Won +$18K, Commit -$57K, Defensible Coverage +0.2x since last Friday").
 2. WEEK BY WEEK (rest of month): deals closing each week, classified as commit or upside, total per week
 3. REP BY REP CALL: for each rep, their commit number and the deals making it up — challenge any commit deal that hasn't had recent activity. Each rep's commit section shows only their current month commit deals. Future month commits are listed separately as context — do not flag these as problems. They represent pipeline building for next month, which is healthy. Only mention future commits if they seem unusually high relative to current month activity.
 4. AT RISK: flag any commit deals where the close date has already passed and the deal hasn't closed — these are the real forecast risks, not deals closing next month
