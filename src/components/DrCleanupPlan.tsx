@@ -215,12 +215,25 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
       {expanded && (
         <div className="p-4 space-y-4">
           {totalActionable === 0 && immediateCount === 0 ? (
-            <div className="text-xs text-muted-foreground text-center py-6 space-y-1">
-              <p>No cleanup actions required — pipeline is healthy.</p>
-              <p className="text-[10px] font-mono opacity-70">
-                Debug: {dealRegistrations.length} DRs received · {eligibleDrs.length} eligible (non-terminal) · {items.length} classified · {anchorsExempt} exempt · {immediateCount} immediate
-              </p>
-            </div>
+            {(() => {
+              const statusCounts = dealRegistrations.reduce((acc, d) => {
+                const key = d.status || '(unset)';
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {} as Record<string, number>);
+              const statusEntries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]);
+              return (
+                <div className="text-xs text-muted-foreground text-center py-6 space-y-1">
+                  <p>No cleanup actions required — pipeline is healthy.</p>
+                  <p className="text-[10px] font-mono opacity-70">
+                    Debug: {dealRegistrations.length} DRs received · {eligibleDrs.length} eligible · {items.length} classified · {anchorsExempt} exempt · {immediateCount} immediate
+                  </p>
+                  <p className="text-[10px] font-mono opacity-70">
+                    Status breakdown: {statusEntries.map(([s, n]) => `${s}=${n}`).join(' · ')}
+                  </p>
+                </div>
+              );
+            })()}
           ) : (
             <>
               {/* Summary bar */}
