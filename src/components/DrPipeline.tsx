@@ -275,6 +275,26 @@ export default function DrPipeline() {
     return set;
   }, [dealRegistrations, camFilter, repFilter, periodRange]);
 
+  // Globally padded opportunityIds (no filter scope) for use in cohort table
+  const paddedOpportunityIdsAll = useMemo(() => {
+    const set = new Set<string>();
+    const base = dealRegistrations.filter(d => d.status !== 'rejected');
+    const byAcct = new Map<string, DealRegistration[]>();
+    for (const d of base) {
+      const a = d.accountName || '(none)';
+      const arr = byAcct.get(a) || [];
+      arr.push(d);
+      byAcct.set(a, arr);
+    }
+    for (const arr of byAcct.values()) {
+      if (arr.length < 2) continue;
+      if (arr.every(d => !d.isSql && !d.lastActivity)) {
+        for (const d of arr) set.add(d.opportunityId);
+      }
+    }
+    return set;
+  }, [dealRegistrations]);
+
   const filtered = useMemo(() => {
     return dealRegistrations.filter(d => {
       if (camFilter !== 'all' && (d.channelAccountManager || '(none)') !== camFilter) return false;
@@ -781,12 +801,18 @@ export default function DrPipeline() {
       const cohortRate = deals.length ? won / deals.length : 0;
       const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
       const avgCycle = cycles.length ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
-      const active = deals.filter(d => d.status === 'active' || d.status === 'sql' || d.status === 'stale' || d.status === 'padded').length;
+      const active = deals.filter(d => 
+        d.status === 'active' || 
+        d.status === 'sql' || 
+        d.status === 'stale' || 
+        d.status === 'padded' ||
+        paddedOpportunityIdsAll.has(d.opportunityId)
+      ).length;
       const rejected = deals.filter(d => d.status === 'rejected').length;
       const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
       return { month: m.label, total: deals.length, sql, inPipe, won, cohortRate, avgCycle, active, rejected, withdrawn };
     });
-  }, [dealRegistrations]);
+  }, [dealRegistrations, paddedOpportunityIdsAll]);
 
   // ---------- Section E: Detail table ----------
 
