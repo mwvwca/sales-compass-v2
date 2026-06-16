@@ -71,6 +71,16 @@ export interface BriefingPayload {
   closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
   pastDueCommits: { name: string; rep: string; amount: number; closeDate: string }[];
+  defensibleCoverage: number;
+  paceVariance: number;
+  pctElapsed: number;
+  weekOverWeek: {
+    comparisonDate: string;
+    closedWonDelta: number;
+    commitDelta: number;
+    pipelineDelta: number;
+    coverageDelta: number;
+  } | null;
 }
 
 interface BuilderInput {
@@ -82,6 +92,7 @@ interface BuilderInput {
   dealRegistrations: DealRegistration[];
   monthlyManagerCommits: MonthlyManagerCommit[];
   managerQuotas: ManagerQuota[];
+  weeklySnapshots?: import('@/types/forecast').WeeklySnapshot[];
 }
 
 const TOP_N = 10;
