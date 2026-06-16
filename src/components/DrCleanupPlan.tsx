@@ -215,9 +215,12 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
       {expanded && (
         <div className="p-4 space-y-4">
           {totalActionable === 0 && immediateCount === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">
-              No cleanup actions required — pipeline is healthy.
-            </p>
+            <div className="text-xs text-muted-foreground text-center py-6 space-y-1">
+              <p>No cleanup actions required — pipeline is healthy.</p>
+              <p className="text-[10px] font-mono opacity-70">
+                Debug: {dealRegistrations.length} DRs received · {eligibleDrs.length} eligible (non-terminal) · {items.length} classified · {anchorsExempt} exempt · {immediateCount} immediate
+              </p>
+            </div>
           ) : (
             <>
               {/* Summary bar */}
