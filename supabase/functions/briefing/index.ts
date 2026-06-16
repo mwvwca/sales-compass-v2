@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const model = body.model || "claude-sonnet-4-20250514";
+    const model = body.model || "claude-sonnet-4-5";
     const maxTokens = body.maxTokens ?? 1000;
 
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
