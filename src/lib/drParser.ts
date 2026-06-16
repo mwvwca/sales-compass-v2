@@ -104,7 +104,7 @@ function parseBool(raw: unknown): boolean {
   return s === 'true' || s === '1' || s === 'yes' || s === 'y';
 }
 
-export function parseDrExport(rawRows: any[][]): {
+export function parseDrExport(rawRows: any[][], ws?: any): {
   records: RawDr[];
   asOfDate: string;
   errors: string[];
