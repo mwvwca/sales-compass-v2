@@ -167,6 +167,66 @@ export default function ForecastDashboard() {
 
   const variance = totalWon - totalGoal;
 
+  // Pace-adjusted variance: where you SHOULD be by today given linear pace through the period.
+  const paceData = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let periodStart: Date;
+    let periodEnd: Date;
+
+    if (scope === 'quarterly') {
+      periodStart = quarterStart(anchorQuarter);
+      periodEnd = quarterEnd(anchorQuarter);
+    } else if (scope === 'monthly') {
+      const [y, m] = anchorMonthKey.split('-').map(Number);
+      periodStart = new Date(y, m - 1, 1);
+      periodEnd = new Date(y, m, 0);
+    } else if (scope === 'annual') {
+      const y = anchor.getUTCFullYear();
+      periodStart = new Date(y, 0, 1);
+      periodEnd = new Date(y, 11, 31);
+    } else {
+      periodStart = weekRange.start;
+      periodEnd = weekRange.end;
+    }
+
+    const totalDays = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1);
+    const elapsedDays = Math.min(totalDays, Math.max(0,
+      Math.round((today.getTime() - periodStart.getTime()) / 86400000) + 1));
+    const pctElapsed = Math.min(1, Math.max(0, elapsedDays / totalDays));
+    const expectedByNow = totalGoal * pctElapsed;
+    const paceVariance = totalWon - expectedByNow;
+    const isPast = today > periodEnd;
+    const isFuture = today < periodStart;
+    return { totalDays, elapsedDays, pctElapsed, expectedByNow, paceVariance, isPast, isFuture };
+  }, [scope, anchor, anchorQuarter, anchorMonthKey, weekRange, totalGoal, totalWon]);
+
+  // Defensible coverage: qualified pipeline only (Discovery 25%+ or commit/upside) ÷ goal.
+  const defensibleCoverage = useMemo(() => {
+    const qualifiedStageWords = ['discovery', 'technical', 'commercial', 'purchasing'];
+    const qualifiedPipeline = hudOpps.filter(o => {
+      if (o.classification === 'closed_won') return false;
+      const stageLower = (o.stage || '').toLowerCase().trim();
+      const isQualifiedStage = qualifiedStageWords.some(w => stageLower.includes(w));
+      const isQualifiedClass = o.classification === 'commit' || o.classification === 'upside';
+      return isQualifiedStage || isQualifiedClass;
+    }).reduce((s, o) => s + o.amount, 0);
+    const coverage = totalGoal > 0 ? qualifiedPipeline / totalGoal : 0;
+    return { qualifiedPipeline, coverage };
+  }, [hudOpps, totalGoal]);
+
+  // Week-over-week delta from the two most recent Friday snapshots
+  const wow = useMemo(() => {
+    if (weeklySnapshots.length === 0) return null;
+    const sorted = [...weeklySnapshots].sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
+    if (sorted.length === 1) return { single: sorted[0], current: null, prior: null };
+    const current = sorted[sorted.length - 1];
+    const prior = sorted[sorted.length - 2];
+    return { single: null, current, prior };
+  }, [weeklySnapshots]);
+
+
   // Mgmt Commit: prefer manager override; fall back to rep rollup (only used in monthly scope when selectedRep === all).
   const mgmtCommit = useMemo(() => {
     const yr = anchor.getUTCFullYear();
