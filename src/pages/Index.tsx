@@ -8,11 +8,13 @@ import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
 import DrPipeline from '@/components/DrPipeline';
+import DrCleanupPlanSection from '@/components/DrCleanupPlan';
+import { useForecast } from '@/context/ForecastContext';
 import SlipReport from '@/components/SlipReport';
 import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown } from 'lucide-react';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Broom } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'slips' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
