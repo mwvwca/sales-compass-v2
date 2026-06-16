@@ -1,41 +1,55 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Mail, Copy, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Mail, Copy, RefreshCw, ExternalLink, Loader2, Anchor, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { DealRegistration } from '@/types/forecast';
 import {
-  classifyCleanupDeals,
+  classifyCleanup,
+  analyzeAnchors,
   groupByCAM,
   buildCleanupEmailPrompt,
   type CamCleanupGroup,
-  type CleanupTier,
+  type CleanupStage,
+  type CleanupClassification,
+  type AnchorRole,
 } from '@/lib/drCleanup';
 import { callBriefingApi } from '@/lib/briefingApi';
 
 const EMAIL_SYSTEM_PROMPT =
   'You are an assistant that writes concise, professional pipeline cleanup emails on behalf of a sales manager. Always include a Subject line first. Plain text only, no markdown.';
 
-function tierBadgeCls(tier: CleanupTier): string {
-  switch (tier) {
-    case 1: return 'bg-red-500/15 text-red-700 dark:text-red-400';
-    case 2: return 'bg-amber-500/15 text-amber-700 dark:text-amber-400';
-    case 3: return 'bg-blue-500/15 text-blue-700 dark:text-blue-400';
-  }
-}
-function tierShort(tier: CleanupTier): string {
-  return tier === 1 ? 'Immediate' : tier === 2 ? 'CAM Response' : 'AE Action';
-}
+const STAGE_META: Record<CleanupStage, { label: string; tone: string; short: string }> = {
+  monitoring: { label: 'Monitoring', tone: 'bg-secondary/40 text-muted-foreground', short: 'Monitor' },
+  partner_outreach: { label: 'Partner Outreach', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400', short: 'Outreach' },
+  final_notice: { label: 'Final Notice', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', short: 'Final Notice' },
+  ready_to_close: { label: 'Ready to Close', tone: 'bg-red-500/15 text-red-700 dark:text-red-400', short: 'Close' },
+  exempt: { label: 'Exempt (Anchor)', tone: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', short: 'Anchor' },
+};
+
+const ROLE_META: Record<AnchorRole, { label: string; tone: string }> = {
+  anchor: { label: 'Anchor', tone: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' },
+  satellite: { label: 'Satellite', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  single: { label: 'Single', tone: 'bg-secondary/40 text-muted-foreground' },
+  orphan_cluster: { label: 'Orphan Cluster', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
+};
 
 function extractSubject(emailText: string): { subject: string; body: string } {
   const m = emailText.match(/^\s*Subject:\s*(.+)\s*\n+/i);
-  if (m) {
-    return { subject: m[1].trim(), body: emailText.slice(m[0].length).trim() };
-  }
+  if (m) return { subject: m[1].trim(), body: emailText.slice(m[0].length).trim() };
   return { subject: 'Pipeline Review — Deal Registration Cleanup', body: emailText.trim() };
 }
 
 interface Props {
   dealRegistrations: DealRegistration[];
+}
+
+interface StageGroup {
+  stage: CleanupStage | 'immediate';
+  title: string;
+  description: string;
+  tone: string;
+  items: CleanupClassification[];
+  defaultOpen: boolean;
 }
 
 export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
@@ -45,25 +59,71 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [loadingCam, setLoadingCam] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+  const [openContext, setOpenContext] = useState<string | null>(null);
 
-  const { deals, groups, tierTotals } = useMemo(() => {
-    const ds = classifyCleanupDeals(dealRegistrations);
-    const gs = groupByCAM(ds);
-    return {
-      deals: ds,
-      groups: gs,
-      tierTotals: {
-        t1: ds.filter(d => d.tier === 1).length,
-        t2: ds.filter(d => d.tier === 2).length,
-        t3: ds.filter(d => d.tier === 3).length,
+  const { items, groups, stageBuckets, anchorsExempt, immediateCount } = useMemo(() => {
+    const cls = classifyCleanup(dealRegistrations);
+    const gs = groupByCAM(cls);
+    const exempt = cls.filter(c => c.cleanupStage === 'exempt').length;
+    const immediate = cls.filter(c => c.immediateAction).length;
+
+    const buckets: StageGroup[] = [
+      {
+        stage: 'immediate',
+        title: 'Immediate AE Action',
+        description: 'Multi-registration accounts with no activity on any deal. AE must engage or close all.',
+        tone: 'text-red-700 dark:text-red-400',
+        items: cls.filter(c => c.immediateAction),
+        defaultOpen: true,
       },
-    };
+      {
+        stage: 'ready_to_close',
+        title: 'Ready to Close',
+        description: '45+ days with no response. Close these registrations.',
+        tone: 'text-red-700 dark:text-red-400',
+        items: cls.filter(c => c.cleanupStage === 'ready_to_close' && !c.immediateAction),
+        defaultOpen: true,
+      },
+      {
+        stage: 'final_notice',
+        title: 'Final Notice',
+        description: '30-44 days. Send final warning email.',
+        tone: 'text-amber-700 dark:text-amber-400',
+        items: cls.filter(c => c.cleanupStage === 'final_notice' && !c.immediateAction),
+        defaultOpen: true,
+      },
+      {
+        stage: 'partner_outreach',
+        title: 'Partner Outreach',
+        description: '15-29 days. Send partner rep email, CC CAM.',
+        tone: 'text-blue-700 dark:text-blue-400',
+        items: cls.filter(c => c.cleanupStage === 'partner_outreach' && !c.immediateAction),
+        defaultOpen: true,
+      },
+      {
+        stage: 'monitoring',
+        title: 'Monitoring',
+        description: 'Within 15-day window. No action yet.',
+        tone: 'text-muted-foreground',
+        items: cls.filter(c => c.cleanupStage === 'monitoring'),
+        defaultOpen: false,
+      },
+    ];
+
+    return { items: cls, groups: gs, stageBuckets: buckets, anchorsExempt: exempt, immediateCount: immediate };
+  }, [dealRegistrations]);
+
+  const anchorMap = useMemo(() => analyzeAnchors(dealRegistrations), [dealRegistrations]);
+  const drsById = useMemo(() => {
+    const m = new Map<string, DealRegistration>();
+    for (const d of dealRegistrations) m.set(d.opportunityId, d);
+    return m;
   }, [dealRegistrations]);
 
   const generateForCam = async (group: CamCleanupGroup): Promise<string | null> => {
     try {
       const prompt = buildCleanupEmailPrompt(group);
-      const text = await callBriefingApi(EMAIL_SYSTEM_PROMPT, prompt, { maxTokens: 800 });
+      const text = await callBriefingApi(EMAIL_SYSTEM_PROMPT, prompt, { maxTokens: 900 });
       setEmails(prev => ({ ...prev, [group.cam]: text }));
       return text;
     } catch (err: any) {
@@ -116,6 +176,14 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
 
   if (dealRegistrations.length === 0) return null;
 
+  const totalActionable = items.filter(i => i.cleanupStage !== 'exempt').length;
+  const counts = {
+    ready_to_close: items.filter(i => i.cleanupStage === 'ready_to_close' && !i.immediateAction).length,
+    final_notice: items.filter(i => i.cleanupStage === 'final_notice' && !i.immediateAction).length,
+    partner_outreach: items.filter(i => i.cleanupStage === 'partner_outreach' && !i.immediateAction).length,
+    monitoring: items.filter(i => i.cleanupStage === 'monitoring').length,
+  };
+
   return (
     <section className="border border-border rounded-md">
       <button
@@ -126,139 +194,130 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <div className="text-left">
             <h3 className="text-xs font-semibold">Pipeline Cleanup Plan</h3>
-            <p className="text-[11px] text-muted-foreground">Stale and padded deal registrations requiring action. Sorted by priority.</p>
+            <p className="text-[11px] text-muted-foreground">15/15/final notice cadence. Anchor registrations on multi-reg accounts are exempt.</p>
           </div>
         </div>
-        <span className="text-[11px] text-muted-foreground">{deals.length} flagged · {groups.length} CAMs</span>
+        <span className="text-[11px] text-muted-foreground">{totalActionable} actionable · {groups.length} CAMs</span>
       </button>
 
       {expanded && (
         <div className="p-4 space-y-4">
-          {deals.length === 0 ? (
+          {totalActionable === 0 && immediateCount === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-6">
               No cleanup actions required — pipeline is healthy.
             </p>
           ) : (
             <>
               {/* Summary bar */}
-              <div className="border border-border rounded-md p-3 flex items-center justify-between gap-3 flex-wrap bg-secondary/20">
-                <div className="space-y-1">
-                  <p className="text-xs font-medium">
-                    ⚠ {deals.length} deals require action across {groups.length} CAM{groups.length === 1 ? '' : 's'}
-                  </p>
-                  <div className="flex items-center gap-3 text-[11px] flex-wrap">
-                    <span className="text-red-700 dark:text-red-400">Tier 1 (Immediate): {tierTotals.t1}</span>
-                    <span className="text-amber-700 dark:text-amber-400">Tier 2 (CAM Response): {tierTotals.t2}</span>
-                    <span className="text-blue-700 dark:text-blue-400">Tier 3 (AE Action): {tierTotals.t3}</span>
-                  </div>
+              <div className="border border-border rounded-md p-3 space-y-2 bg-secondary/20">
+                <p className="text-xs font-medium">
+                  Cleanup Pipeline — {totalActionable} registration{totalActionable === 1 ? '' : 's'} need action
+                </p>
+                <div className="flex items-center gap-3 text-[11px] flex-wrap">
+                  <span className="text-red-700 dark:text-red-400 inline-flex items-center gap-1">
+                    <AlertTriangle size={11} /> Immediate: {immediateCount}
+                  </span>
+                  <span className="text-red-700 dark:text-red-400">Ready to Close: {counts.ready_to_close}</span>
+                  <span className="text-amber-700 dark:text-amber-400">Final Notice: {counts.final_notice}</span>
+                  <span className="text-blue-700 dark:text-blue-400">Partner Outreach: {counts.partner_outreach}</span>
+                  <span className="text-muted-foreground">Monitoring: {counts.monitoring}</span>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleGenerateAll}
-                  disabled={!!bulkProgress || !!loadingCam}
-                  className="h-8 text-xs"
-                >
-                  {bulkProgress ? (
-                    <>
-                      <Loader2 size={12} className="animate-spin" />
-                      Generating {bulkProgress.current} of {bulkProgress.total}…
-                    </>
-                  ) : (
-                    <>
-                      <Mail size={12} />
-                      Generate All Emails
-                    </>
-                  )}
-                </Button>
+                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+                  {anchorsExempt > 0 ? (
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
+                      <Anchor size={11} /> {anchorsExempt} anchor registration{anchorsExempt === 1 ? '' : 's'} exempt — actively-worked deals on multi-registration accounts.
+                    </p>
+                  ) : <span />}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleGenerateAll}
+                    disabled={!!bulkProgress || !!loadingCam || groups.length === 0}
+                    className="h-8 text-xs"
+                  >
+                    {bulkProgress ? (
+                      <><Loader2 size={12} className="animate-spin" />Generating {bulkProgress.current} of {bulkProgress.total}…</>
+                    ) : (
+                      <><Mail size={12} />Generate All Emails</>
+                    )}
+                  </Button>
+                </div>
               </div>
 
-              {/* Per-CAM accordion */}
-              <div className="space-y-2">
-                {groups.map(group => {
-                  const isOpen = openCam === group.cam;
-                  const isLoading = loadingCam === group.cam;
-                  const emailText = emails[group.cam];
-                  const parsed = emailText ? extractSubject(emailText) : null;
-                  return (
-                    <div key={group.cam} className="border border-border rounded-md">
-                      <div className="flex items-center justify-between gap-3 px-3 py-2 flex-wrap">
-                        <button
-                          onClick={() => setOpenCam(isOpen ? null : group.cam)}
-                          className="flex items-center gap-2 text-left flex-1 min-w-0"
-                        >
-                          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                          <div className="min-w-0">
-                            <div className="text-xs font-medium flex items-center gap-3 flex-wrap">
-                              <span>{group.cam}</span>
-                              <span className="text-muted-foreground">·</span>
-                              <span>{group.deals.length} deal{group.deals.length === 1 ? '' : 's'}</span>
-                              <span className="text-muted-foreground">·</span>
-                              <span className="text-red-700 dark:text-red-400">T1: {group.tier1Count}</span>
-                              <span className="text-amber-700 dark:text-amber-400">T2: {group.tier2Count}</span>
-                              <span className="text-blue-700 dark:text-blue-400">T3: {group.tier3Count}</span>
-                            </div>
-                            <div className="text-[11px] text-muted-foreground truncate">
-                              {group.camEmail || '(no CAM email)'} · CC: {group.aeEmails.join(', ') || '(no AE)'}
-                            </div>
-                          </div>
-                        </button>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            onClick={() => handleGenerate(group)}
-                            disabled={isLoading || !!bulkProgress}
+              {/* Stage groups */}
+              <div className="space-y-3">
+                {stageBuckets.filter(b => b.items.length > 0).map(bucket => (
+                  <StageGroupBlock
+                    key={bucket.stage}
+                    bucket={bucket}
+                    anchorMap={anchorMap}
+                    drsById={drsById}
+                    openContext={openContext}
+                    setOpenContext={setOpenContext}
+                  />
+                ))}
+              </div>
+
+              {/* Per-CAM email accordion */}
+              {groups.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Email Drafts by CAM</h4>
+                  {groups.map(group => {
+                    const isOpen = openCam === group.cam;
+                    const isLoading = loadingCam === group.cam;
+                    const emailText = emails[group.cam];
+                    const parsed = emailText ? extractSubject(emailText) : null;
+                    return (
+                      <div key={group.cam} className="border border-border rounded-md">
+                        <div className="flex items-center justify-between gap-3 px-3 py-2 flex-wrap">
+                          <button
+                            onClick={() => setOpenCam(isOpen ? null : group.cam)}
+                            className="flex items-center gap-2 text-left flex-1 min-w-0"
                           >
-                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
-                            {emailText ? 'Regenerate' : 'Generate Email'}
-                          </Button>
-                          {emailText && (
-                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => copyEmail(group)}>
-                              <Copy size={12} /> Copy
+                            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <div className="min-w-0">
+                              <div className="text-xs font-medium flex items-center gap-3 flex-wrap">
+                                <span>{group.cam}</span>
+                                <span className="text-muted-foreground">·</span>
+                                <span>{group.deals.length} deal{group.deals.length === 1 ? '' : 's'}</span>
+                                {group.immediateCount > 0 && (
+                                  <span className="text-red-700 dark:text-red-400">⚠ {group.immediateCount} immediate</span>
+                                )}
+                                {group.stageCounts.ready_to_close > 0 && (
+                                  <span className="text-red-700 dark:text-red-400">Close: {group.stageCounts.ready_to_close}</span>
+                                )}
+                                {group.stageCounts.final_notice > 0 && (
+                                  <span className="text-amber-700 dark:text-amber-400">Final: {group.stageCounts.final_notice}</span>
+                                )}
+                                {group.stageCounts.partner_outreach > 0 && (
+                                  <span className="text-blue-700 dark:text-blue-400">Outreach: {group.stageCounts.partner_outreach}</span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground truncate">
+                                {group.camEmail || '(no CAM email)'} · CC: {group.aeEmails.join(', ') || '(no AE)'}
+                              </div>
+                            </div>
+                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => handleGenerate(group)}
+                              disabled={isLoading || !!bulkProgress}
+                            >
+                              {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+                              {emailText ? 'Regenerate' : 'Generate Email'}
                             </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {isOpen && (
-                        <div className="border-t border-border">
-                          {/* Deal list */}
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                              <thead className="bg-secondary/30 text-muted-foreground">
-                                <tr>
-                                  <th className="text-left px-3 py-1.5 font-medium">Opportunity</th>
-                                  <th className="text-left px-3 py-1.5 font-medium">Account</th>
-                                  <th className="text-left px-3 py-1.5 font-medium">AE</th>
-                                  <th className="text-left px-3 py-1.5 font-medium">Stage</th>
-                                  <th className="text-right px-3 py-1.5 font-medium">Age</th>
-                                  <th className="text-left px-3 py-1.5 font-medium">Reason</th>
-                                  <th className="text-left px-3 py-1.5 font-medium">Tier</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {group.deals.map(d => (
-                                  <tr key={d.dr.opportunityId} className="border-t border-border/60">
-                                    <td className="px-3 py-1.5">{d.dr.opportunityName}</td>
-                                    <td className="px-3 py-1.5">{d.dr.accountName}</td>
-                                    <td className="px-3 py-1.5">{d.dr.repName}</td>
-                                    <td className="px-3 py-1.5">{d.dr.stage}</td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums">{d.dr.ageDays}d</td>
-                                    <td className="px-3 py-1.5 text-muted-foreground">{d.reason}</td>
-                                    <td className="px-3 py-1.5">
-                                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${tierBadgeCls(d.tier)}`}>
-                                        T{d.tier} {tierShort(d.tier)}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            {emailText && (
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => copyEmail(group)}>
+                                <Copy size={12} /> Copy
+                              </Button>
+                            )}
                           </div>
+                        </div>
 
-                          {/* Email panel (always show To/CC/Subject so user can compose manually if API fails) */}
+                        {isOpen && (
                           <div className="border-t border-border bg-secondary/10 p-3 space-y-2">
                             <div className="text-[11px] font-mono space-y-0.5">
                               <div><span className="text-muted-foreground">To:</span> {group.camEmail || '(no CAM email)'}</div>
@@ -286,16 +345,169 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                               </Button>
                             </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </div>
       )}
     </section>
+  );
+}
+
+// ---------- Stage group block ----------
+
+function StageGroupBlock({
+  bucket,
+  anchorMap,
+  drsById,
+  openContext,
+  setOpenContext,
+}: {
+  bucket: StageGroup;
+  anchorMap: Map<string, ReturnType<typeof analyzeAnchors> extends Map<string, infer V> ? V : never>;
+  drsById: Map<string, DealRegistration>;
+  openContext: string | null;
+  setOpenContext: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(bucket.defaultOpen);
+  return (
+    <div className="border border-border rounded-md">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full px-3 py-2 flex items-center justify-between gap-3 hover:bg-secondary/30 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-left">
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <div>
+            <div className={`text-xs font-semibold ${bucket.tone}`}>
+              {bucket.stage === 'immediate' && '⚠ '}{bucket.title} — {bucket.items.length}
+            </div>
+            <div className="text-[11px] text-muted-foreground">{bucket.description}</div>
+          </div>
+        </div>
+      </button>
+      {open && (
+        <div className="border-t border-border overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-secondary/30 text-muted-foreground">
+              <tr>
+                <th className="text-left px-3 py-1.5 font-medium">Opportunity</th>
+                <th className="text-left px-3 py-1.5 font-medium">Account</th>
+                <th className="text-left px-3 py-1.5 font-medium">AE</th>
+                <th className="text-left px-3 py-1.5 font-medium">CAM</th>
+                <th className="text-left px-3 py-1.5 font-medium">Role</th>
+                <th className="text-right px-3 py-1.5 font-medium">Days Since Activity</th>
+                <th className="text-left px-3 py-1.5 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bucket.items.map(item => {
+                const key = `${(item.dr.accountName || '').toLowerCase().trim()}::${item.dr.channelAccountManager || ''}`;
+                const analysis = anchorMap.get(key);
+                const isMulti = !!analysis;
+                const ctxOpen = openContext === item.dr.opportunityId;
+                return (
+                  <Fragment key={item.dr.opportunityId}>
+                    <tr className="border-t border-border/60 align-top">
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-1">
+                          {isMulti && (
+                            <button
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => setOpenContext(ctxOpen ? null : item.dr.opportunityId)}
+                              title="Show other registrations on this account"
+                            >
+                              {ctxOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                            </button>
+                          )}
+                          <span>{item.dr.opportunityName}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">{item.dr.accountName}</td>
+                      <td className="px-3 py-1.5">{item.dr.repName}</td>
+                      <td className="px-3 py-1.5">{item.dr.channelAccountManager || '—'}</td>
+                      <td className="px-3 py-1.5">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${ROLE_META[item.anchorRole].tone}`}>
+                          {ROLE_META[item.anchorRole].label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{item.daysSinceActivity}d</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">{item.recommendedAction}</td>
+                    </tr>
+                    {ctxOpen && analysis && (
+                      <tr className="bg-secondary/20">
+                        <td colSpan={7} className="px-3 py-2">
+                          <MultiRegContext analysis={analysis} drsById={drsById} currentId={item.dr.opportunityId} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Fragment({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+function MultiRegContext({
+  analysis,
+  drsById,
+  currentId,
+}: {
+  analysis: { accountName: string; cam: string; totalRegs: number; anchorId: string | null; satelliteIds: string[]; hasNoActivityAnywhere: boolean };
+  drsById: Map<string, DealRegistration>;
+  currentId: string;
+}) {
+  const anchor = analysis.anchorId ? drsById.get(analysis.anchorId) : null;
+  const satellites = analysis.satelliteIds.map(id => drsById.get(id)).filter(Boolean) as DealRegistration[];
+  const otherSatellites = satellites.filter(s => s.opportunityId !== currentId);
+
+  const daysAgo = (iso?: string) => {
+    if (!iso) return null;
+    const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    return `${d}d ago`;
+  };
+
+  return (
+    <div className="text-[11px] space-y-1 text-foreground/90">
+      <div className="font-medium">
+        Account: {analysis.accountName} / CAM: {analysis.cam || '—'} — {analysis.totalRegs} registrations
+      </div>
+      {analysis.hasNoActivityAnywhere ? (
+        <div className="text-red-700 dark:text-red-400">⚠ No activity on any registration in this cluster.</div>
+      ) : anchor ? (
+        <div>
+          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+            <Anchor size={10} /> Anchor:
+          </span>{' '}
+          "{anchor.opportunityName}"{' '}
+          <span className="text-muted-foreground">
+            (last activity {daysAgo(anchor.lastActivity) ?? 'unknown'})
+          </span>
+        </div>
+      ) : null}
+      <div>
+        • This deal: "{drsById.get(currentId)?.opportunityName}" ({currentId === analysis.anchorId ? 'anchor' : analysis.hasNoActivityAnywhere ? 'orphan' : 'satellite'})
+      </div>
+      {otherSatellites.length > 0 && (
+        <div className="text-muted-foreground">
+          • {otherSatellites.length} other {otherSatellites.length === 1 ? 'satellite' : 'satellites'}:{' '}
+          {otherSatellites.slice(0, 3).map(s => `"${s.opportunityName}"`).join(', ')}
+          {otherSatellites.length > 3 ? `, +${otherSatellites.length - 3} more` : ''}
+        </div>
+      )}
+    </div>
   );
 }
