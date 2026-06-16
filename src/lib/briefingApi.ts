@@ -12,7 +12,7 @@ export async function callBriefingApi(
     body: {
       systemPrompt,
       userMessage,
-      model: opts.model || 'claude-sonnet-4-20250514',
+      model: opts.model || 'claude-sonnet-4-6',
       maxTokens: opts.maxTokens ?? 1000,
     },
   });
