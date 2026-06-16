@@ -119,7 +119,6 @@ export function classifyCleanup(
 
   for (const dr of drs) {
     if (TERMINAL.has(dr.status)) continue;
-    if (dr.isSql) continue;
 
     const role = roleById.get(dr.opportunityId) || 'single';
     const analysis = anchorMap.get(accountKey(dr));
