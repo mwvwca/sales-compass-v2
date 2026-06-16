@@ -253,10 +253,35 @@ export function buildCleanupEmailPrompt(group: CamCleanupGroup): string {
   const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction);
   const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction);
 
-  const fmt = (d: CleanupClassification) =>
-    `- ${d.dr.opportunityName} (${d.dr.accountName}) — ${d.dr.stage}, ${d.daysSinceActivity}d since activity, AE: ${d.dr.repName}${
-      d.anchorRole === 'satellite' ? ` [satellite of multi-reg account, ${d.accountRegCount} regs total]` : ''
-    }${d.anchorRole === 'orphan_cluster' ? ` [orphan cluster, ${d.accountRegCount} regs no activity]` : ''}`;
+  const annotate = (d: CleanupClassification) =>
+    `${d.anchorRole === 'satellite' ? ` [satellite of multi-reg account, ${d.accountRegCount} regs total]` : ''}${
+      d.anchorRole === 'orphan_cluster' ? ` [orphan cluster, ${d.accountRegCount} regs no activity]` : ''
+    }`;
+
+  const renderTier = (deals: CleanupClassification[]): string => {
+    const byAccount = new Map<string, { name: string; url?: string; deals: CleanupClassification[] }>();
+    for (const d of deals) {
+      const name = d.dr.accountName || '(no account)';
+      const key = name.toLowerCase();
+      let entry = byAccount.get(key);
+      if (!entry) {
+        entry = { name, url: d.dr.accountUrl, deals: [] };
+        byAccount.set(key, entry);
+      }
+      if (!entry.url && d.dr.accountUrl) entry.url = d.dr.accountUrl;
+      entry.deals.push(d);
+    }
+    const blocks: string[] = [];
+    for (const entry of byAccount.values()) {
+      const lines: string[] = [entry.name];
+      if (entry.url) lines.push(entry.url);
+      for (const d of entry.deals) {
+        lines.push(`  - "${d.dr.opportunityName}" (${d.dr.stage}, ${d.daysSinceActivity}d since activity, AE: ${d.dr.repName})${annotate(d)}`);
+      }
+      blocks.push(lines.join('\n'));
+    }
+    return blocks.join('\n\n');
+  };
 
   const aeNames = group.aeEmails
     .map(e => e.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' '))
@@ -269,15 +294,18 @@ AEs CC'd: ${aeNames}
 
 ${closing.length > 0 ? `CLOSING NOW (45+ days no activity, or multi-reg accounts with no activity anywhere):
 These registrations are being closed per our deal registration policy. No response needed.
-${closing.map(fmt).join('\n')}` : ''}
+
+${renderTier(closing)}` : ''}
 
 ${finalNotice.length > 0 ? `FINAL NOTICE (30-44 days no activity):
 These need confirmation within 15 days or they will be closed.
-${finalNotice.map(fmt).join('\n')}` : ''}
+
+${renderTier(finalNotice)}` : ''}
 
 ${outreach.length > 0 ? `PARTNER OUTREACH (15-29 days no activity):
 These have been quiet for 15+ days — please confirm status with your rep.
-${outreach.map(fmt).join('\n')}` : ''}
+
+${renderTier(outreach)}` : ''}
 
 Write the email with these requirements:
 - Professional but direct tone — this is a business conversation, not a complaint
@@ -290,7 +318,9 @@ Write the email with these requirements:
 - For PARTNER OUTREACH items: ask the partner rep to confirm status
 - Close by offering to discuss on a call if needed
 - Sign off as Michael Wells
-- Plain text only, no markdown, no bullet symbols — use dashes if needed
+- Plain text only, no markdown.
+- URLs may appear inline as plain text — most email clients will auto-linkify them.
+- Indent each opportunity line under its account with two spaces followed by a dash and a space.
 - Keep it under 350 words`;
 }
 

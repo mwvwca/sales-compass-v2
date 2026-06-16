@@ -142,7 +142,7 @@ function UploadZone({ onParsed }: {
       const wb = XLSX.read(buf, { type: 'array', cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
-      const { records, asOfDate, errors } = parseDrExport(rows);
+      const { records, asOfDate, errors } = parseDrExport(rows, ws);
       if (records.length === 0) {
         toast({ title: 'No records found', description: errors[0] || 'File appears empty.', variant: 'destructive' });
         setParsing(false);

@@ -13,6 +13,7 @@ const FIELD_MAP: Record<string, keyof RawDr> = {
   'reseller name': 'resellerName',
   'distributor - reseller': 'distributorReseller',
   'account name': 'accountName',
+  'account url': 'accountUrl',
   'product': 'product',
   'stage': 'stage',
   'probability (%)': 'probability',
@@ -29,6 +30,17 @@ const FIELD_MAP: Record<string, keyof RawDr> = {
   'type': 'type',
   'registered deal': 'registeredDeal',
 };
+
+function encodeCol(c: number): string {
+  let s = '';
+  let n = c + 1;
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
 
 function normHeader(h: string): string {
   return String(h ?? '').trim().toLowerCase();
@@ -92,7 +104,7 @@ function parseBool(raw: unknown): boolean {
   return s === 'true' || s === '1' || s === 'yes' || s === 'y';
 }
 
-export function parseDrExport(rawRows: any[][]): {
+export function parseDrExport(rawRows: any[][], ws?: any): {
   records: RawDr[];
   asOfDate: string;
   errors: string[];
@@ -146,6 +158,8 @@ export function parseDrExport(rawRows: any[][]): {
     return { records: [], asOfDate, errors };
   }
 
+  const accountNameColIdx = colMap.find(c => c.field === 'accountName')?.idx;
+
   const records: RawDr[] = [];
   for (let r = headerRowIdx + 1; r < rawRows.length; r++) {
     const row = rawRows[r];
@@ -171,10 +185,20 @@ export function parseDrExport(rawRows: any[][]): {
       const ageDays = Math.round(parseNumber(raw.ageDays) ?? 0);
       const createdDate = parseDate(raw.createdDate) || '';
 
+      // Prefer explicit "Account URL" column; otherwise extract hyperlink from Account Name cell
+      let accountUrl: string | undefined =
+        raw.accountUrl ? String(raw.accountUrl).trim() || undefined : undefined;
+      if (!accountUrl && ws && accountNameColIdx !== undefined) {
+        const addr = `${encodeCol(accountNameColIdx)}${r + 1}`;
+        const target = ws[addr]?.l?.Target;
+        if (target) accountUrl = String(target);
+      }
+
       const rec: RawDr = {
         opportunityId,
         opportunityName,
         accountName: String(raw.accountName ?? '').trim(),
+        accountUrl,
         repName: String(raw.repName ?? '').trim(),
         secondOwner: raw.secondOwner ? String(raw.secondOwner).trim() || undefined : undefined,
         channelAccountManager: raw.channelAccountManager ? String(raw.channelAccountManager).trim() || undefined : undefined,
