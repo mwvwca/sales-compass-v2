@@ -1,28 +1,211 @@
 import type { DealRegistration } from '@/types/forecast';
 
-export type CleanupTier = 1 | 2 | 3;
+// ============================================================
+// Anchor analysis — distinguish the real worked deal from padding satellites
+// on multi-registration accounts (same accountName + CAM).
+// ============================================================
 
-export interface CleanupDeal {
-  dr: DealRegistration;
-  tier: CleanupTier;
-  tierLabel: string;
-  reason: string;
-  actionRequired: string;
-  deadlineDays: number;
-}
+export type AnchorRole = 'anchor' | 'satellite' | 'single' | 'orphan_cluster';
+// anchor          = the worked deal on a multi-reg account (exempt from cleanup)
+// satellite       = padding on a multi-reg account (cleanup target)
+// single          = only registration on its account (normal cadence)
+// orphan_cluster  = multi-reg account with NO activity anywhere (immediate AE action)
 
-export interface CamCleanupGroup {
+export interface AnchorAnalysis {
+  accountKey: string;          // accountName::cam
+  accountName: string;
   cam: string;
-  camEmail: string;
-  deals: CleanupDeal[];
-  tier1Count: number;
-  tier2Count: number;
-  tier3Count: number;
-  aeEmails: string[];
+  totalRegs: number;
+  anchorId: string | null;
+  satelliteIds: string[];
+  hasNoActivityAnywhere: boolean;
 }
+
+const TERMINAL: ReadonlySet<string> = new Set(['rejected', 'withdrawn', 'closed_won', 'closed_lost']);
+
+function accountKey(dr: DealRegistration): string {
+  return `${(dr.accountName || '').toLowerCase().trim()}::${dr.channelAccountManager || ''}`;
+}
+
+export function analyzeAnchors(drs: DealRegistration[]): Map<string, AnchorAnalysis> {
+  const groups = new Map<string, DealRegistration[]>();
+
+  for (const dr of drs) {
+    if (TERMINAL.has(dr.status)) continue;
+    const key = accountKey(dr);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(dr);
+  }
+
+  const result = new Map<string, AnchorAnalysis>();
+
+  for (const [key, groupDrs] of groups.entries()) {
+    if (groupDrs.length < 2) continue;
+
+    const withActivity = groupDrs.filter(d => d.lastActivity && d.lastActivity.trim());
+
+    let anchorId: string | null = null;
+    let hasNoActivityAnywhere = false;
+
+    if (withActivity.length > 0) {
+      // Anchor = the DR with the OLDEST lastActivity (first engaged)
+      withActivity.sort(
+        (a, b) => new Date(a.lastActivity!).getTime() - new Date(b.lastActivity!).getTime()
+      );
+      anchorId = withActivity[0].opportunityId;
+    } else {
+      hasNoActivityAnywhere = true;
+    }
+
+    const satelliteIds = groupDrs
+      .filter(d => d.opportunityId !== anchorId)
+      .map(d => d.opportunityId);
+
+    result.set(key, {
+      accountKey: key,
+      accountName: groupDrs[0].accountName || '',
+      cam: groupDrs[0].channelAccountManager || '',
+      totalRegs: groupDrs.length,
+      anchorId,
+      satelliteIds,
+      hasNoActivityAnywhere,
+    });
+  }
+
+  return result;
+}
+
+// ============================================================
+// Cadence-based cleanup stages (15 / 15 / final notice)
+// ============================================================
+
+export type CleanupStage =
+  | 'monitoring'        // < 15 days
+  | 'partner_outreach'  // 15-29 days
+  | 'final_notice'      // 30-44 days
+  | 'ready_to_close'    // 45+ days
+  | 'exempt';           // anchor
+
+export interface CleanupClassification {
+  dr: DealRegistration;
+  anchorRole: AnchorRole;
+  cleanupStage: CleanupStage;
+  daysSinceActivity: number;
+  immediateAction: boolean;
+  recommendedAction: string;
+  /** Total registrations on this account+CAM (for orphan/satellite context). */
+  accountRegCount: number;
+}
+
+export function classifyCleanup(
+  drs: DealRegistration[],
+  today: Date = new Date()
+): CleanupClassification[] {
+  const anchorMap = analyzeAnchors(drs);
+
+  const roleById = new Map<string, AnchorRole>();
+  for (const analysis of anchorMap.values()) {
+    if (analysis.hasNoActivityAnywhere) {
+      for (const id of [analysis.anchorId, ...analysis.satelliteIds].filter(Boolean) as string[]) {
+        roleById.set(id, 'orphan_cluster');
+      }
+    } else {
+      if (analysis.anchorId) roleById.set(analysis.anchorId, 'anchor');
+      for (const id of analysis.satelliteIds) roleById.set(id, 'satellite');
+    }
+  }
+
+  const results: CleanupClassification[] = [];
+
+  for (const dr of drs) {
+    if (TERMINAL.has(dr.status)) continue;
+    if (dr.isSql) continue;
+
+    const role = roleById.get(dr.opportunityId) || 'single';
+    const analysis = anchorMap.get(accountKey(dr));
+    const accountRegCount = analysis?.totalRegs ?? 1;
+
+    const refDateStr = dr.lastActivity?.trim() ? dr.lastActivity : dr.createdDate;
+    const refDate = refDateStr ? new Date(refDateStr) : today;
+    const daysSinceActivity = Math.floor((today.getTime() - refDate.getTime()) / 86400000);
+
+    if (role === 'anchor') {
+      results.push({
+        dr,
+        anchorRole: role,
+        cleanupStage: 'exempt',
+        daysSinceActivity,
+        immediateAction: false,
+        accountRegCount,
+        recommendedAction: 'Anchor opportunity — actively worked. No action needed.',
+      });
+      continue;
+    }
+
+    if (role === 'orphan_cluster') {
+      results.push({
+        dr,
+        anchorRole: role,
+        cleanupStage: 'partner_outreach',
+        daysSinceActivity,
+        immediateAction: true,
+        accountRegCount,
+        recommendedAction: `Account has ${accountRegCount} registrations with NO activity on any. AE must engage or close all.`,
+      });
+      continue;
+    }
+
+    let stage: CleanupStage;
+    let action: string;
+    if (daysSinceActivity < 15) {
+      stage = 'monitoring';
+      action = 'Within initial 15-day follow-up window. AE to continue outreach.';
+    } else if (daysSinceActivity < 30) {
+      stage = 'partner_outreach';
+      action = 'Send partner rep email (CC CAM): 15-day response window before closure.';
+    } else if (daysSinceActivity < 45) {
+      stage = 'final_notice';
+      action = 'Send final notice email: registration will be closed if no response.';
+    } else {
+      stage = 'ready_to_close';
+      action = 'No response after 30+ days. Close the deal registration.';
+    }
+
+    results.push({
+      dr,
+      anchorRole: role,
+      cleanupStage: stage,
+      daysSinceActivity,
+      immediateAction: false,
+      accountRegCount,
+      recommendedAction: action,
+    });
+  }
+
+  const stageOrder: CleanupStage[] = ['partner_outreach', 'ready_to_close', 'final_notice', 'monitoring', 'exempt'];
+  return results.sort((a, b) => {
+    if (a.immediateAction !== b.immediateAction) return a.immediateAction ? -1 : 1;
+    // Ready to close ranks above other non-immediate stages
+    const priority = (c: CleanupClassification): number => {
+      if (c.immediateAction) return 0;
+      if (c.cleanupStage === 'ready_to_close') return 1;
+      if (c.cleanupStage === 'final_notice') return 2;
+      if (c.cleanupStage === 'partner_outreach') return 3;
+      if (c.cleanupStage === 'monitoring') return 4;
+      return 5;
+    };
+    const pa = priority(a);
+    const pb = priority(b);
+    if (pa !== pb) return pa - pb;
+    return b.daysSinceActivity - a.daysSinceActivity;
+  });
+}
+
+// ============================================================
+// Email / grouping helpers
+// ============================================================
 
 // Convert "First Last" -> "first.last@n-able.com"
-// Hyphenated last names preserved: "Wayne Bowe-McLeod" -> "wayne.bowe-mcleod@n-able.com"
 export function nameToEmail(name: string): string {
   if (!name || !name.trim()) return '';
   const parts = name.trim().toLowerCase().split(/\s+/);
@@ -30,181 +213,147 @@ export function nameToEmail(name: string): string {
   return `${parts[0]}.${parts[parts.length - 1]}@n-able.com`;
 }
 
-const TIER3_STAGES = ['Discovery 25%', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%'];
-const TERMINAL: ReadonlySet<string> = new Set(['rejected', 'withdrawn', 'closed_won', 'closed_lost']);
-
-export function classifyCleanupDeals(drs: DealRegistration[]): CleanupDeal[] {
-  const results: CleanupDeal[] = [];
-
-  // Padding detection: 3+ pre-SQL, no-activity registrations on the same account+CAM
-  const accountCamMap = new Map<string, number>();
-  for (const dr of drs) {
-    if (TERMINAL.has(dr.status)) continue;
-    if (dr.isSql) continue;
-    if (dr.lastActivity) continue;
-    const key = `${(dr.accountName || '').toLowerCase()}::${dr.channelAccountManager || ''}`;
-    accountCamMap.set(key, (accountCamMap.get(key) || 0) + 1);
-  }
-
-  for (const dr of drs) {
-    if (TERMINAL.has(dr.status)) continue;
-
-    const stage = (dr.stage || '').trim();
-    const ageDays = dr.ageDays || 0;
-    const hasActivity = !!dr.lastActivity;
-
-    const paddingKey = `${(dr.accountName || '').toLowerCase()}::${dr.channelAccountManager || ''}`;
-    const paddingCount = accountCamMap.get(paddingKey) || 0;
-    const isPadded = paddingCount >= 3 && !dr.isSql && !hasActivity && ageDays >= 30;
-
-    // Tier 1
-    if ((stage === 'Unqualified' && !hasActivity && ageDays > 90) || isPadded) {
-      results.push({
-        dr,
-        tier: 1,
-        tierLabel: 'Immediate Action',
-        reason: isPadded
-          ? `Account has ${paddingCount} unworked registrations from this partner`
-          : `Unqualified for ${ageDays} days with no activity`,
-        actionRequired: 'AE to close in Salesforce. No CAM response needed.',
-        deadlineDays: 5,
-      });
-      continue;
-    }
-
-    // Tier 2
-    if (stage === 'Qualified 5%' && !hasActivity && ageDays > 60) {
-      results.push({
-        dr,
-        tier: 2,
-        tierLabel: 'CAM Response Required',
-        reason: `Qualified ${ageDays} days ago with no activity logged`,
-        actionRequired: 'CAM to confirm deal is still active or AE will withdraw.',
-        deadlineDays: 5,
-      });
-      continue;
-    }
-
-    // Tier 3
-    if (TIER3_STAGES.includes(stage) && !hasActivity && ageDays > 30) {
-      results.push({
-        dr,
-        tier: 3,
-        tierLabel: 'AE Action Required',
-        reason: `At ${stage} for ${ageDays} days with no activity`,
-        actionRequired: 'AE to advance to next stage or withdraw within 30 days.',
-        deadlineDays: 10,
-      });
-    }
-  }
-
-  results.sort((a, b) => (a.tier !== b.tier ? a.tier - b.tier : b.dr.ageDays - a.dr.ageDays));
-  return results;
+export interface CamCleanupGroup {
+  cam: string;
+  camEmail: string;
+  /** Actionable items only — anchors are excluded. */
+  deals: CleanupClassification[];
+  aeEmails: string[];
+  stageCounts: Record<CleanupStage, number>;
+  immediateCount: number;
 }
 
-export function groupByCAM(deals: CleanupDeal[]): CamCleanupGroup[] {
+export function groupByCAM(items: CleanupClassification[]): CamCleanupGroup[] {
   const groups = new Map<string, CamCleanupGroup>();
-  for (const deal of deals) {
-    const cam = deal.dr.channelAccountManager?.trim() || 'No CAM';
+  for (const item of items) {
+    if (item.cleanupStage === 'exempt') continue; // anchors never appear in cleanup
+    const cam = item.dr.channelAccountManager?.trim() || 'No CAM';
     let g = groups.get(cam);
     if (!g) {
       g = {
         cam,
         camEmail: cam === 'No CAM' ? '' : nameToEmail(cam),
         deals: [],
-        tier1Count: 0,
-        tier2Count: 0,
-        tier3Count: 0,
         aeEmails: [],
+        stageCounts: { monitoring: 0, partner_outreach: 0, final_notice: 0, ready_to_close: 0, exempt: 0 },
+        immediateCount: 0,
       };
       groups.set(cam, g);
     }
-    g.deals.push(deal);
-    if (deal.tier === 1) g.tier1Count++;
-    else if (deal.tier === 2) g.tier2Count++;
-    else g.tier3Count++;
-    const aeEmail = nameToEmail(deal.dr.repName || '');
+    g.deals.push(item);
+    g.stageCounts[item.cleanupStage]++;
+    if (item.immediateAction) g.immediateCount++;
+    const aeEmail = nameToEmail(item.dr.repName || '');
     if (aeEmail && !g.aeEmails.includes(aeEmail)) g.aeEmails.push(aeEmail);
   }
   return Array.from(groups.values()).sort((a, b) => b.deals.length - a.deals.length);
 }
 
 export function buildCleanupEmailPrompt(group: CamCleanupGroup): string {
-  const today = new Date();
-  const deadline = new Date(today.getTime() + 5 * 86400000);
-  const deadlineStr = deadline.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' || d.immediateAction);
+  const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction);
+  const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction);
 
-  const tier1 = group.deals.filter(d => d.tier === 1);
-  const tier2 = group.deals.filter(d => d.tier === 2);
-  const tier3 = group.deals.filter(d => d.tier === 3);
-
-  const dealList = (deals: CleanupDeal[]) =>
-    deals.map(d => `- ${d.dr.opportunityName} (${d.dr.accountName}) — ${d.dr.stage}, ${d.dr.ageDays} days, AE: ${d.dr.repName}`).join('\n');
+  const fmt = (d: CleanupClassification) =>
+    `- ${d.dr.opportunityName} (${d.dr.accountName}) — ${d.dr.stage}, ${d.daysSinceActivity}d since activity, AE: ${d.dr.repName}${
+      d.anchorRole === 'satellite' ? ` [satellite of multi-reg account, ${d.accountRegCount} regs total]` : ''
+    }${d.anchorRole === 'orphan_cluster' ? ` [orphan cluster, ${d.accountRegCount} regs no activity]` : ''}`;
 
   const aeNames = group.aeEmails
     .map(e => e.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' '))
     .join(', ');
 
-  return `Write a professional email from a sales manager to a channel partner CAM about stale deal registrations that need attention.
+  return `Write a professional email from a sales manager to a channel partner CAM about deal registrations in our cleanup cadence.
 
 CAM Name: ${group.cam}
-Deadline for response: ${deadlineStr}
 AEs CC'd: ${aeNames}
 
-${tier1.length > 0 ? `TIER 1 — Immediate action (90+ days, no activity or padded accounts):
-These will be withdrawn by the deadline regardless of response.
-${dealList(tier1)}` : ''}
+${closing.length > 0 ? `CLOSING NOW (45+ days no activity, or multi-reg accounts with no activity anywhere):
+These registrations are being closed per our deal registration policy. No response needed.
+${closing.map(fmt).join('\n')}` : ''}
 
-${tier2.length > 0 ? `TIER 2 — CAM response required (60+ days at Qualified 5%, no activity):
-Please confirm these are still active opportunities by the deadline or they will be withdrawn.
-${dealList(tier2)}` : ''}
+${finalNotice.length > 0 ? `FINAL NOTICE (30-44 days no activity):
+These need confirmation within 15 days or they will be closed.
+${finalNotice.map(fmt).join('\n')}` : ''}
 
-${tier3.length > 0 ? `TIER 3 — AE action items (30+ days at Discovery or above, no activity):
-Our AEs are aware and will be advancing or withdrawing these within 30 days.
-These are listed for your awareness.
-${dealList(tier3)}` : ''}
+${outreach.length > 0 ? `PARTNER OUTREACH (15-29 days no activity):
+These have been quiet for 15+ days — please confirm status with your rep.
+${outreach.map(fmt).join('\n')}` : ''}
 
 Write the email with these requirements:
 - Professional but direct tone — this is a business conversation, not a complaint
 - From "Michael Wells, Sales Manager" at N-able
 - Subject line included at the top as "Subject: [subject line here]"
-- Open by acknowledging the partnership and the purpose of the review
-- For Tier 1 deals: state clearly they will be withdrawn by ${deadlineStr} — no response needed, just informing
-- For Tier 2 deals: ask for confirmation of deal status by ${deadlineStr}, otherwise will withdraw
-- For Tier 3 deals: mention briefly that AEs are following up — no action needed from CAM
+- Reference the agreed deal registration policy explicitly (15-day partner outreach window, 15-day final notice, then closure)
+- For accounts with multiple registrations, mention that we are RETAINING the primary opportunity being actively worked (the anchor) and only addressing the satellite registrations that have had no independent activity. This shows we're being surgical, not blunt.
+- For CLOSING NOW items: state clearly they are being closed — no response needed
+- For FINAL NOTICE items: ask for confirmation within 15 days, otherwise will close
+- For PARTNER OUTREACH items: ask the partner rep to confirm status
 - Close by offering to discuss on a call if needed
 - Sign off as Michael Wells
 - Plain text only, no markdown, no bullet symbols — use dashes if needed
-- Keep it under 300 words`;
+- Keep it under 350 words`;
 }
+
+// ============================================================
+// Briefing summary
+// ============================================================
 
 export interface CleanupSummary {
-  totalDeals: number;
-  tier1Count: number;
-  tier2Count: number;
-  tier3Count: number;
-  topCams: { cam: string; count: number; tier1: number }[];
-  byRep: { rep: string; tier1: number; tier2: number; tier3: number; total: number }[];
+  totalActionable: number;
+  immediateAction: number;
+  readyToClose: number;
+  finalNotice: number;
+  partnerOutreach: number;
+  monitoring: number;
+  anchorsExempt: number;
+  topOrphanAccounts: { account: string; cam: string; regCount: number }[];
+  orphansByRep: { rep: string; account: string; cam: string; regCount: number }[];
+  byRep: { rep: string; immediate: number; readyToClose: number; finalNotice: number; partnerOutreach: number; total: number }[];
 }
 
-export function buildCleanupSummary(deals: CleanupDeal[]): CleanupSummary {
-  const groups = groupByCAM(deals);
-  const repMap = new Map<string, { tier1: number; tier2: number; tier3: number; total: number }>();
-  for (const d of deals) {
-    const rep = d.dr.repName?.trim() || '(unassigned)';
-    const cur = repMap.get(rep) || { tier1: 0, tier2: 0, tier3: 0, total: 0 };
-    if (d.tier === 1) cur.tier1++;
-    else if (d.tier === 2) cur.tier2++;
-    else cur.tier3++;
+export function buildCleanupSummary(items: CleanupClassification[]): CleanupSummary {
+  const actionable = items.filter(i => i.cleanupStage !== 'exempt');
+  const anchorsExempt = items.filter(i => i.cleanupStage === 'exempt').length;
+
+  const repMap = new Map<string, { immediate: number; readyToClose: number; finalNotice: number; partnerOutreach: number; total: number }>();
+  for (const item of actionable) {
+    const rep = item.dr.repName?.trim() || '(unassigned)';
+    const cur = repMap.get(rep) || { immediate: 0, readyToClose: 0, finalNotice: 0, partnerOutreach: 0, total: 0 };
+    if (item.immediateAction) cur.immediate++;
+    else if (item.cleanupStage === 'ready_to_close') cur.readyToClose++;
+    else if (item.cleanupStage === 'final_notice') cur.finalNotice++;
+    else if (item.cleanupStage === 'partner_outreach') cur.partnerOutreach++;
     cur.total++;
     repMap.set(rep, cur);
   }
+
+  // Dedupe orphan clusters by account+cam
+  const orphanSeen = new Map<string, { account: string; cam: string; regCount: number; rep: string }>();
+  for (const item of items) {
+    if (item.anchorRole !== 'orphan_cluster') continue;
+    const key = `${(item.dr.accountName || '').toLowerCase()}::${item.dr.channelAccountManager || ''}`;
+    if (!orphanSeen.has(key)) {
+      orphanSeen.set(key, {
+        account: item.dr.accountName || '',
+        cam: item.dr.channelAccountManager || '',
+        regCount: item.accountRegCount,
+        rep: item.dr.repName || '',
+      });
+    }
+  }
+  const orphanList = Array.from(orphanSeen.values()).sort((a, b) => b.regCount - a.regCount);
+
   return {
-    totalDeals: deals.length,
-    tier1Count: deals.filter(d => d.tier === 1).length,
-    tier2Count: deals.filter(d => d.tier === 2).length,
-    tier3Count: deals.filter(d => d.tier === 3).length,
-    topCams: groups.slice(0, 5).map(g => ({ cam: g.cam, count: g.deals.length, tier1: g.tier1Count })),
+    totalActionable: actionable.length,
+    immediateAction: actionable.filter(i => i.immediateAction).length,
+    readyToClose: actionable.filter(i => i.cleanupStage === 'ready_to_close').length,
+    finalNotice: actionable.filter(i => i.cleanupStage === 'final_notice').length,
+    partnerOutreach: actionable.filter(i => i.cleanupStage === 'partner_outreach' && !i.immediateAction).length,
+    monitoring: actionable.filter(i => i.cleanupStage === 'monitoring').length,
+    anchorsExempt,
+    topOrphanAccounts: orphanList.slice(0, 5).map(o => ({ account: o.account, cam: o.cam, regCount: o.regCount })),
+    orphansByRep: orphanList.map(o => ({ rep: o.rep, account: o.account, cam: o.cam, regCount: o.regCount })),
     byRep: Array.from(repMap.entries())
       .map(([rep, v]) => ({ rep, ...v }))
       .sort((a, b) => b.total - a.total),

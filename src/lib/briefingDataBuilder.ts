@@ -14,7 +14,7 @@ import {
   getDateAtUtcStart,
 } from '@/types/forecast';
 import type { BriefingMode } from './briefingPrompts';
-import { classifyCleanupDeals, buildCleanupSummary, type CleanupSummary } from './drCleanup';
+import { classifyCleanup, buildCleanupSummary, type CleanupSummary } from './drCleanup';
 
 export interface BriefingPayload {
   mode: BriefingMode;
@@ -477,7 +477,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         insightStatement,
         primaryProblem,
       },
-      cleanupSummary: buildCleanupSummary(classifyCleanupDeals(drs)),
+      cleanupSummary: buildCleanupSummary(classifyCleanup(drs)),
     };
   })();
 

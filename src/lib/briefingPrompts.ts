@@ -39,7 +39,7 @@ Structure:
    - Action items must be specific: name the deal, state the amount, state the ask
    - If commit accuracy is below 50%, include a suggested coaching question
    - If stale DRs exist, name the CAM and how long they've been idle
-   - If this rep has Tier 3 cleanup items in drSignals.cleanupSummary.byRep (DRs at Discovery 25% or above with 30+ days no activity), call them out by count — e.g. "Wayne has 3 DRs at Discovery 25%+ with no activity in 30+ days — on agenda for today's 1:1."
+   - If drSignals.cleanupSummary.orphansByRep includes this rep, call out the orphan cluster by name — e.g. "Wayne has a multi-registration account (ePlus/Customers Bank, 5 regs) with no activity on any — needs immediate engagement or closure." If byRep shows readyToClose or finalNotice items for this rep, name the count — e.g. "3 DRs ready to close (45+ days no activity)."
 3. A "before you go in" line — one thing you need from the whole team today
 
 Tone: direct, specific, zero fluff. You are preparing someone for conversations, not writing a report.
@@ -70,7 +70,7 @@ Structure:
 3. REP BY REP CALL: for each rep, their commit number and the deals making it up — challenge any commit deal that hasn't had recent activity. Each rep's commit section shows only their current month commit deals. Future month commits are listed separately as context — do not flag these as problems. They represent pipeline building for next month, which is healthy. Only mention future commits if they seem unusually high relative to current month activity.
 4. AT RISK: flag any commit deals where the close date has already passed and the deal hasn't closed — these are the real forecast risks, not deals closing next month
 5. UPSIDE TO PROMOTE: upside deals worth calling this week based on stage and activity
-6. DR PIPELINE: any channel signals worth raising (stale deals, CAM issues, new SQLs). If drSignals.cleanupSummary.totalDeals > 0, include a one-liner like "88 stale DRs identified across 6 CAMs — cleanup emails ready to send from DR Pipeline tab."
+6. DR PIPELINE: any channel signals worth raising (stale deals, CAM issues, new SQLs). If drSignals.cleanupSummary.totalActionable > 0, include a one-liner like "X DRs in cleanup cadence (Y immediate, Z ready to close) across N CAMs — emails ready to send from DR Pipeline tab." If immediateAction > 0, name the top orphan accounts from topOrphanAccounts.
 7. ASKS FOR THE CALL: specific questions to ask each rep
 
 Tone: this is a pre-call briefing. Be direct about risks. Name the deals. State the amounts. If something looks wrong, say so plainly.
