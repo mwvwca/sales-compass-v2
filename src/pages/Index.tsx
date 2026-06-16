@@ -136,4 +136,17 @@ const Index = () => {
   );
 };
 
+const DrCleanupTab = () => {
+  const { dealRegistrations } = useForecast();
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold">Pipeline Cleanup</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">Anchor-aware partner outreach cadence for stale and padded deal registrations.</p>
+      </div>
+      <DrCleanupPlanSection dealRegistrations={dealRegistrations} />
+    </div>
+  );
+};
+
 export default Index;
