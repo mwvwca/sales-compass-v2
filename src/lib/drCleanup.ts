@@ -327,8 +327,84 @@ Write the email with these requirements:
   const urlCount = (prompt.match(/https?:\/\//g) || []).length;
   console.log(`[buildCleanupEmailPrompt] for CAM ${group.cam}: prompt length ${prompt.length}, URL count ${urlCount}`);
   return prompt;
+}
 
+// ============================================================
+// Deterministic email builder — replaces AI-generated drafts.
+// ============================================================
 
+function groupAndFormatTier(deals: CleanupClassification[]): string {
+  const annotate = (d: CleanupClassification) =>
+    `${d.anchorRole === 'satellite' ? ` [satellite of multi-reg account, ${d.accountRegCount} regs total]` : ''}${
+      d.anchorRole === 'orphan_cluster' ? ` [orphan cluster, ${d.accountRegCount} regs no activity]` : ''
+    }`;
+
+  const byAccount = new Map<string, { name: string; url?: string; deals: CleanupClassification[] }>();
+  for (const d of deals) {
+    const name = d.dr.accountName || '(no account)';
+    const key = name.toLowerCase();
+    let entry = byAccount.get(key);
+    if (!entry) {
+      entry = { name, url: d.dr.accountUrl, deals: [] };
+      byAccount.set(key, entry);
+    }
+    if (!entry.url && d.dr.accountUrl) entry.url = d.dr.accountUrl;
+    entry.deals.push(d);
+  }
+  const blocks: string[] = [];
+  for (const entry of byAccount.values()) {
+    const lines: string[] = [entry.name];
+    if (entry.url) lines.push(entry.url);
+    for (const d of entry.deals) {
+      lines.push(`  - "${d.dr.opportunityName}" (${d.dr.stage}, ${d.daysSinceActivity}d since activity, AE: ${d.dr.repName})${annotate(d)}`);
+    }
+    blocks.push(lines.join('\n'));
+  }
+  return blocks.join('\n\n');
+}
+
+export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; body: string } {
+  const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' || d.immediateAction);
+  const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction);
+  const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction);
+
+  const camFirstName = (group.cam.split(/\s+/)[0] || group.cam).trim();
+
+  const sections: string[] = [];
+  if (closing.length > 0) {
+    sections.push(
+      `CLOSING NOW\nThese registrations are being closed per our deal registration policy. No response needed.\n\n${groupAndFormatTier(closing)}`
+    );
+  }
+  if (finalNotice.length > 0) {
+    sections.push(
+      `FINAL NOTICE\nThese need confirmation within 15 days or they will be closed.\n\n${groupAndFormatTier(finalNotice)}`
+    );
+  }
+  if (outreach.length > 0) {
+    sections.push(
+      `PARTNER OUTREACH\nThese have been quiet for 15+ days. Please confirm status with your rep.\n\n${groupAndFormatTier(outreach)}`
+    );
+  }
+
+  const body =
+`Hi ${camFirstName},
+
+I am reaching out as part of our standard deal registration cleanup cadence. Per our agreed policy, registrations move through three phases: partner outreach at 15 days of inactivity, final notice at 30 days requiring confirmation within 15 days, and closure at 45 days if no activity has been recorded.
+
+Where an account has multiple registrations and one is actively being worked, we are retaining that anchor opportunity and only addressing the satellite registrations that have had no independent activity. The goal is a clean and accurate pipeline, not disruption of active deals.
+
+${sections.join('\n\n---\n\n')}
+
+Happy to discuss any of these on a call if useful.
+
+Best,
+Michael Wells
+Sales Manager, N-able`;
+
+  const subject = `Deal Registration Cleanup Cadence — Action Required (${group.deals.length} registrations)`;
+
+  return { subject, body };
 }
 
 // ============================================================
