@@ -18,8 +18,9 @@ import type {
   DealRegistration,
   DrBatch,
   RawDrRecord,
+  WeeklySnapshot,
 } from '@/types/forecast';
-import { getMonthKey, getWeeksInMonth, getDateAtUtcStart } from '@/types/forecast';
+import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, quarterStart, quarterEnd } from '@/types/forecast';
 import { mergeDrBatch } from '@/lib/drMerge';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
@@ -41,6 +42,7 @@ const STORAGE_KEYS = {
   dealRegistrations: 'forecast_deal_registrations',
   drBatches: 'forecast_dr_batches',
   managerQuotas: 'forecast_manager_quotas',
+  weeklySnapshots: 'forecast_weekly_snapshots',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
