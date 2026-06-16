@@ -13,6 +13,7 @@ const FIELD_MAP: Record<string, keyof RawDr> = {
   'reseller name': 'resellerName',
   'distributor - reseller': 'distributorReseller',
   'account name': 'accountName',
+  'account url': 'accountUrl',
   'product': 'product',
   'stage': 'stage',
   'probability (%)': 'probability',
@@ -29,6 +30,17 @@ const FIELD_MAP: Record<string, keyof RawDr> = {
   'type': 'type',
   'registered deal': 'registeredDeal',
 };
+
+function encodeCol(c: number): string {
+  let s = '';
+  let n = c + 1;
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
 
 function normHeader(h: string): string {
   return String(h ?? '').trim().toLowerCase();
