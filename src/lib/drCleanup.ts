@@ -287,7 +287,7 @@ export function buildCleanupEmailPrompt(group: CamCleanupGroup): string {
     .map(e => e.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' '))
     .join(', ');
 
-  return `Write a professional email from a sales manager to a channel partner CAM about deal registrations in our cleanup cadence.
+  const prompt = `Write a professional email from a sales manager to a channel partner CAM about deal registrations in our cleanup cadence.
 
 CAM Name: ${group.cam}
 AEs CC'd: ${aeNames}
@@ -323,6 +323,11 @@ Write the email with these requirements:
 - URLs in the blocks must remain inline as plain text. Do not remove them. Mail clients will auto-linkify them.
 - Do not add commentary or annotations around the deal blocks. The blocks are complete as written.
 - Keep the surrounding prose under 400 words (the deal blocks themselves do not count toward this limit).`;
+
+  const urlCount = (prompt.match(/https?:\/\//g) || []).length;
+  console.log(`[buildCleanupEmailPrompt] for CAM ${group.cam}: prompt length ${prompt.length}, URL count ${urlCount}`);
+  return prompt;
+
 
 }
 
