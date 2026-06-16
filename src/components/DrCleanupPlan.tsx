@@ -51,7 +51,7 @@ interface StageGroup {
 
 export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   const { toast } = useToast();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [openCam, setOpenCam] = useState<string | null>(null);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [loadingCam, setLoadingCam] = useState<string | null>(null);
