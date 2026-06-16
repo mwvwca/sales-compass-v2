@@ -506,6 +506,10 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     closingThisWeek,
     closingNextWeek,
     pastDueCommits,
+    defensibleCoverage,
+    paceVariance,
+    pctElapsed,
+    weekOverWeek,
   };
 }
 
@@ -526,6 +530,9 @@ Open pipeline: ${fmt(payload.totalOpenPipeline)}
 Commit pipeline: ${fmt(payload.commitPipeline)}
 Upside pipeline: ${fmt(payload.upsidePipeline)}
 Coverage: ${(payload.pipelineCoverage * 100).toFixed(0)}%
+Defensible coverage (qualified pipeline only): ${payload.defensibleCoverage.toFixed(2)}x
+Pace variance (MTD vs linear): ${payload.paceVariance >= 0 ? '+' : ''}$${Math.round(payload.paceVariance).toLocaleString()} (${Math.round(payload.pctElapsed * 100)}% of month elapsed)
+Week-over-week: ${payload.weekOverWeek ? JSON.stringify(payload.weekOverWeek) : '(no prior snapshot)'}
 
 CHANGES SINCE LAST IMPORT
 New deals (${payload.newDeals.length}): ${JSON.stringify(payload.newDeals)}
