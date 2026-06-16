@@ -801,12 +801,18 @@ export default function DrPipeline() {
       const cohortRate = deals.length ? won / deals.length : 0;
       const cycles = wonDeals.map(d => d.cycleDays).filter((n): n is number => typeof n === 'number');
       const avgCycle = cycles.length ? cycles.reduce((s, n) => s + n, 0) / cycles.length : null;
-      const active = deals.filter(d => d.status === 'active' || d.status === 'sql' || d.status === 'stale' || d.status === 'padded').length;
+      const active = deals.filter(d => 
+        d.status === 'active' || 
+        d.status === 'sql' || 
+        d.status === 'stale' || 
+        d.status === 'padded' ||
+        paddedOpportunityIdsAll.has(d.opportunityId)
+      ).length;
       const rejected = deals.filter(d => d.status === 'rejected').length;
       const withdrawn = deals.filter(d => d.status === 'withdrawn').length;
       return { month: m.label, total: deals.length, sql, inPipe, won, cohortRate, avgCycle, active, rejected, withdrawn };
     });
-  }, [dealRegistrations]);
+  }, [dealRegistrations, paddedOpportunityIdsAll]);
 
   // ---------- Section E: Detail table ----------
 
