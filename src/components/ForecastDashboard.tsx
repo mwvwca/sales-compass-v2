@@ -47,7 +47,7 @@ function localQuarter(dateStr: string): string | null {
 export default function ForecastDashboard() {
   const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
-  const [scope, setScope] = useState<Scope>('quarterly');
+  const [scope, setScope] = useState<Scope>('monthly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
   const [showGoals, setShowGoals] = useState(false);
