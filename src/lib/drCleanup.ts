@@ -317,11 +317,13 @@ Write the email with these requirements:
 - For FINAL NOTICE items: ask for confirmation within 15 days, otherwise will close
 - For PARTNER OUTREACH items: ask the partner rep to confirm status
 - Close by offering to discuss on a call if needed
-- Sign off as Michael Wells
+- Sign off as "Michael Wells, Sales Manager"
 - Plain text only, no markdown.
-- URLs may appear inline as plain text — most email clients will auto-linkify them.
-- Indent each opportunity line under its account with two spaces followed by a dash and a space.
-- Keep it under 350 words`;
+- The deal blocks below are already formatted. Insert them VERBATIM into the email body in their respective sections. Do not reformat, summarize, consolidate, condense, or collapse them. If a section has many accounts, list them all individually — do not produce comma-separated lists.
+- URLs in the blocks must remain inline as plain text. Do not remove them. Mail clients will auto-linkify them.
+- Do not add commentary or annotations around the deal blocks. The blocks are complete as written.
+- Keep the surrounding prose under 400 words (the deal blocks themselves do not count toward this limit).`;
+
 }
 
 // ============================================================
