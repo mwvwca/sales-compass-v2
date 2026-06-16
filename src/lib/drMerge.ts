@@ -286,5 +286,6 @@ export function mergeDrBatch(
     merged[i] = { ...r, status: 'active' };
   }
 
+  console.log(`[drMerge] After merge: ${merged.filter(d => d.accountUrl).length} of ${merged.length} records have accountUrl`);
   return { merged, stats: { newCount, updatedCount, rejectedCount, withdrawnCount, convertedCount } };
 }
