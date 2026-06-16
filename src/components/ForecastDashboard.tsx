@@ -4,6 +4,7 @@ import { normalizeRepName } from '@/lib/repUtils';
 import {
   getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter,
   getISOWeekRange, getDateAtUtcStart, addDaysUTC, addMonthsUTC, getYearQuarters,
+  quarterStart, quarterEnd,
   type Quarter,
 } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
@@ -14,7 +15,7 @@ import SalesIntelligence from './SalesIntelligence';
 import CommitAccuracySection from './CommitAccuracySection';
 
 import { Switch } from '@/components/ui/switch';
-import { ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileSpreadsheet, Camera } from 'lucide-react';
 import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentationButtonLabel } from '@/lib/monthlyPresentationExport';
 
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
@@ -45,7 +46,7 @@ function localQuarter(dateStr: string): string | null {
 }
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('monthly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
