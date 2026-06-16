@@ -230,5 +230,7 @@ export function parseDrExport(rawRows: any[][], ws?: any): {
     asOfDate = new Date().toISOString().slice(0, 10);
   }
 
+  console.log(`[drParser] accountUrl populated for ${records.filter(r => r.accountUrl).length} of ${records.length} records`);
+
   return { records, asOfDate, errors };
 }
