@@ -67,8 +67,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
       d.status !== 'closed_won' &&
       d.status !== 'closed_lost' &&
       d.status !== 'rejected' &&
-      d.status !== 'withdrawn' &&
-      d.status !== 'converted'
+      d.status !== 'withdrawn'
     ),
     [dealRegistrations]
   );
