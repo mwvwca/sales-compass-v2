@@ -178,6 +178,7 @@ export interface DealRegistration {
   opportunityId: string;
   opportunityName: string;
   accountName: string;
+  accountUrl?: string;
   createdDate: string;
   batchIdFirstSeen: string;
 
