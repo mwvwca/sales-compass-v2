@@ -179,6 +179,7 @@ export function mergeDrBatch(
         registeredDeal: inc.registeredDeal,
         lastActivity: inc.lastActivity,
         ageDays: inc.ageDays,
+        accountUrl: inc.accountUrl ?? prev.accountUrl,
         lastSeenAt: importedAt,
         lastUpdatedAt: changed ? importedAt : prev.lastUpdatedAt,
         stageHistory,
