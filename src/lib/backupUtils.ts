@@ -11,6 +11,7 @@ import type {
   ManagerQuota,
   CommissionSettingsMap,
   CommissionReviewsMap,
+  WeeklySnapshot,
 } from '@/types/forecast';
 
 export interface BackupPayload {
@@ -27,6 +28,7 @@ export interface BackupPayload {
   commissionPinHash: string | null;
   snapshots?: OpportunitySnapshot[];
   managerQuotas?: ManagerQuota[];
+  weeklySnapshots?: WeeklySnapshot[];
 }
 
 export function downloadBackupNow(data: BackupPayload, fileNamePrefix = 'forecast-backup'): void {
