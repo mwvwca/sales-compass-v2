@@ -180,6 +180,39 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const managerCommit = managerCommitRec?.commitAmount || teamQuota;
   const pipelineCoverage = managerCommit > 0 ? totalOpenPipeline / managerCommit : 0;
 
+  // Defensible coverage: only qualified pipeline (Discovery 25%+ or commit/upside) ÷ team quota
+  const qualifiedStageWords = ['discovery', 'technical', 'commercial', 'purchasing'];
+  const qualifiedPipe = openOpps.filter(o => {
+    const stageLower = (o.stage || '').toLowerCase().trim();
+    const isQualifiedStage = qualifiedStageWords.some(w => stageLower.includes(w));
+    const isQualifiedClass = o.classification === 'commit' || o.classification === 'upside';
+    return isQualifiedStage || isQualifiedClass;
+  }).reduce((s, o) => s + o.amount, 0);
+  const defensibleCoverage = teamQuota > 0 ? qualifiedPipe / teamQuota : 0;
+
+  // Pace through current month
+  const periodStart = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const periodEnd = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0);
+  const totalDays = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1);
+  const elapsedDays = Math.min(totalDays, Math.max(0, Math.round((now.getTime() - periodStart.getTime()) / 86400000) + 1));
+  const pctElapsed = Math.min(1, elapsedDays / totalDays);
+  const paceVariance = closedWonMTD - (teamQuota * pctElapsed);
+
+  // Week-over-week from last two Friday snapshots
+  let weekOverWeek: BriefingPayload['weekOverWeek'] = null;
+  const wSnaps = input.weeklySnapshots ? [...input.weeklySnapshots].sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate)) : [];
+  if (wSnaps.length >= 2) {
+    const curr = wSnaps[wSnaps.length - 1];
+    const prev = wSnaps[wSnaps.length - 2];
+    weekOverWeek = {
+      comparisonDate: prev.snapshotDate,
+      closedWonDelta: curr.closedWon - prev.closedWon,
+      commitDelta: curr.commitPipeline - prev.commitPipeline,
+      pipelineDelta: curr.totalPipeline - prev.totalPipeline,
+      coverageDelta: curr.defensibleCoverage - prev.defensibleCoverage,
+    };
+  }
+
   // Changes since last import
   const lastImportEntries = lastImport
     ? input.changelog.filter(c => c.fileName === lastImport.fileName && c.importDate === lastImport.date)
