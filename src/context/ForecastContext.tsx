@@ -965,6 +965,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     dealRegistrations?: DealRegistration[];
     drBatches?: DrBatch[];
     managerQuotas?: ManagerQuota[];
+    weeklySnapshots?: WeeklySnapshot[];
   }) => {
     setState(s => ({
       ...s,
@@ -983,6 +984,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       dealRegistrations: data.dealRegistrations || [],
       drBatches: data.drBatches || [],
       managerQuotas: data.managerQuotas || [],
+      weeklySnapshots: data.weeklySnapshots || [],
     }));
   }, []);
 
@@ -1028,7 +1030,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     clearDrData,
     setManagerQuota,
     getManagerQuota,
+    captureWeeklySnapshot,
     restoreFromBackup,
+    getOpportunityHistory,
+  };
     getOpportunityHistory,
   };
 
