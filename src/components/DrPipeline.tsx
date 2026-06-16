@@ -2146,9 +2146,11 @@ export default function DrPipeline() {
                       <th className="text-right py-1 font-medium">SQL'd</th>
                       <th className="text-right py-1 font-medium">In Pipe</th>
                       <th className="text-right py-1 font-medium">Won</th>
+                      <th className="text-right py-1 font-medium">Lost</th>
                       <th className="text-right py-1 font-medium">Cohort Rate</th>
                       <th className="text-right py-1 font-medium">Avg Cycle</th>
                       <th className="text-right py-1 font-medium">Active</th>
+                      <th className="text-right py-1 font-medium">Padded</th>
                       <th className="text-right py-1 font-medium">Rejected</th>
                       <th className="text-right py-1 font-medium">Withdrawn</th>
                     </tr>
@@ -2161,9 +2163,11 @@ export default function DrPipeline() {
                         <td className="text-right py-1">{r.sql}</td>
                         <td className="text-right py-1">{r.inPipe}</td>
                         <td className="text-right py-1 text-emerald-700 dark:text-emerald-400 font-medium">{r.won}</td>
+                        <td className="text-right py-1 text-muted-foreground">{r.lost}</td>
                         <td className={`text-right py-1 font-medium ${colorConvRate(r.cohortRate)}`}>{fmtPct(r.cohortRate, 0)}</td>
                         <td className="text-right py-1">{r.avgCycle !== null ? `${r.avgCycle.toFixed(0)}d` : '—'}</td>
                         <td className="text-right py-1">{r.active}</td>
+                        <td className={`text-right py-1 ${r.padded > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{r.padded}</td>
                         <td className="text-right py-1 text-muted-foreground">{r.rejected}</td>
                         <td className="text-right py-1 text-muted-foreground">{r.withdrawn}</td>
                       </tr>
