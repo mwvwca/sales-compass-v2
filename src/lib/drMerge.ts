@@ -179,6 +179,7 @@ export function mergeDrBatch(
         registeredDeal: inc.registeredDeal,
         lastActivity: inc.lastActivity,
         ageDays: inc.ageDays,
+        accountUrl: inc.accountUrl ?? prev.accountUrl,
         lastSeenAt: importedAt,
         lastUpdatedAt: changed ? importedAt : prev.lastUpdatedAt,
         stageHistory,
@@ -285,5 +286,6 @@ export function mergeDrBatch(
     merged[i] = { ...r, status: 'active' };
   }
 
+  console.log(`[drMerge] After merge: ${merged.filter(d => d.accountUrl).length} of ${merged.length} records have accountUrl`);
   return { merged, stats: { newCount, updatedCount, rejectedCount, withdrawnCount, convertedCount } };
 }
