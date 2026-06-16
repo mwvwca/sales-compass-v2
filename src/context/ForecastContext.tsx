@@ -1034,8 +1034,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     restoreFromBackup,
     getOpportunityHistory,
   };
-    getOpportunityHistory,
-  };
 
   if (typeof window !== 'undefined') {
     (window as ForecastContextWindow).__forecastContextValue__ = contextValue;
