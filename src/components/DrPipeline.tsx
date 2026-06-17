@@ -1621,6 +1621,7 @@ export default function DrPipeline() {
                     <th className="text-right px-2 py-1.5 font-medium">Avg Cycle</th>
                     <th className="text-right px-2 py-1.5 font-medium">Stale</th>
                     <th className="text-right px-2 py-1.5 font-medium">No Activity</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Non-terminal, not currently SQL, no activity, created > 15d ago — partner has not been engaged">Unworked</th>
                   </tr>
                 </thead>
                 <tbody>
