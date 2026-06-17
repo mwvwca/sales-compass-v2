@@ -1459,8 +1459,9 @@ export default function DrPipeline() {
                             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Win Rate on SQL'd Deals</p>
                             <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
                             <p className="text-[11px] text-muted-foreground mt-0.5">
-                              {dqView === 'all' ? "Unchanged — SQL'd deals are already qualified" : "SQL'd DRs → Closed Won"}
+                              {('sqlResolved' in dq) ? `${(dq as any).sqlClosedWon}/${(dq as any).sqlResolved} resolved (won + lost)` : 'Resolved SQL deals → Closed Won'}
                             </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 italic">Based on registrations observed reaching SQL across imports — floor, not absolute.</p>
                           </div>
                           <Tooltip>
                             <TooltipTrigger asChild>
