@@ -1716,6 +1716,7 @@ export default function DrPipeline() {
                     <td className="text-right px-2 py-1.5">—</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.noActivity}</td>
+                    <td className="text-right px-2 py-1.5">{aeRows.reduce((s, r) => s + r.unworked, 0)}</td>
                   </tr>
                 </tbody>
               </table>
