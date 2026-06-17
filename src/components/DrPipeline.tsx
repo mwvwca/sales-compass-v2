@@ -1644,6 +1644,9 @@ export default function DrPipeline() {
                         </td>
                         <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
                         <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.unworkedPct >= 0.3 ? 'text-red-600 dark:text-red-400 font-medium' : r.unworkedPct >= 0.15 ? 'text-amber-600 dark:text-amber-400' : ''}`} title="Unworked / non-terminal book">
+                          {r.unworked} <span className="text-[10px] text-muted-foreground">({fmtPct(r.unworkedPct, 0)})</span>
+                        </td>
                       </tr>
                       {expandedRep === r.rep && (
                         <tr className="bg-muted/20 border-t border-border">
