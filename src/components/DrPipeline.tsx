@@ -2243,7 +2243,13 @@ export default function DrPipeline() {
                           <td className="px-2 py-1.5">{d.stage}</td>
                           <td className={`text-right px-2 py-1.5 ${colorAge(d.ageDays)}`}>{d.ageDays}d</td>
                           <td className="px-2 py-1.5">{d.lastActivity || <span className="text-muted-foreground">—</span>}</td>
-                          <td className="text-right px-2 py-1.5">{d.amount ? fmtMoney(d.amount) : '—'}</td>
+                          <td className="text-right px-2 py-1.5">
+                            {d.amount ? (
+                              currentlySql(d)
+                                ? fmtMoney(d.amount)
+                                : <span className="text-muted-foreground italic" title="Not counted in defensible value">{fmtMoney(d.amount)} <span className="text-[10px]">pre-discovery</span></span>
+                            ) : '—'}
+                          </td>
                           <td className="px-2 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${statusBadgeCls(d.status)}`}>{statusLabel(d.status)}</span></td>
                           <td className="px-2 py-1.5">{d.resellerName || '—'}</td>
                           <td className="text-right px-2 py-1.5">{d.status === 'closed_won' && typeof d.cycleDays === 'number' ? `${d.cycleDays} days` : <span className="text-muted-foreground">—</span>}</td>
