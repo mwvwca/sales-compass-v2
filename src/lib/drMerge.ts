@@ -273,7 +273,7 @@ export function mergeDrBatch(
     }
 
     // 5) Stale
-    if (isStaleFor(r)) {
+    if (isStaleFor(r, new Date(importedAt))) {
       merged[i] = { ...r, status: 'stale' };
       continue;
     }
