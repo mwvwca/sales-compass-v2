@@ -1001,12 +1001,17 @@ export default function DrPipeline() {
     const drs = scopeNoStatus;
     const nonRej = drs.filter(d => d.status !== 'rejected');
     const total = nonRej.length;
-    const reachedSQL = nonRej.filter(d => d.isSql).length;
+    // SQL rate: any DR that ever qualified (includes lost-after-qualifying).
+    const reachedSQL = nonRej.filter(everReachedSql).length;
     const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
     const closedWon = drs.filter(d => d.status === 'closed_won').length;
-    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
 
-    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    // Win rate on SQL'd deals: resolved-only (won vs lost) among everReachedSql.
+    const resolvedQualified = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
+    const sqlClosedWon = resolvedQualified.filter(d => d.status === 'closed_won').length;
+    const sqlResolved = resolvedQualified.length;
+    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
+
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
     const conversionRate = reachedSQL > 0 ? convertedToPipeline / reachedSQL : 0;
@@ -1021,7 +1026,6 @@ export default function DrPipeline() {
       return idx >= 0 ? idx : -1;
     };
     const cumCounts = MORTALITY_STAGES.map((_, i) => stageEligible.filter(d => getRank(d) >= i).length);
-    // For "Registered" we use total non-rejected (includes withdrawn? — exclude withdrawn for consistency)
     const registeredCount = stageEligible.length;
 
     const avgAgeAtStage = (rank: number): number => {
@@ -1045,9 +1049,10 @@ export default function DrPipeline() {
 
     // Insight statement
     const qualityGap = winRateOnSQL - overallCohortRate;
-    const nonQualifyingPct = total > 0 ? ((total - reachedSQL) / total * 100).toFixed(0) : '0';
     let insightText: string;
-    if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
+    if (sqlResolved < 5) {
+      insightText = `Win rate on SQL'd deals is based on only ${sqlResolved} resolved registrations — interpret as a directional floor, not a stable rate.`;
+    } else if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
       const mult = overallCohortRate > 0 ? Math.round(winRateOnSQL / overallCohortRate) : 0;
       insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
     } else if (winRateOnSQL < 0.15) {
@@ -1073,10 +1078,11 @@ export default function DrPipeline() {
       const nr = deals.filter(d => d.status !== 'rejected');
       const camTotal = nr.length;
       if (camTotal < 5) continue;
-      const camSql = nr.filter(d => d.isSql).length;
+      const camSql = nr.filter(everReachedSql).length;
       const camSqlRate = camTotal > 0 ? camSql / camTotal : 0;
-      const camSqlWon = deals.filter(d => d.isSql && d.status === 'closed_won').length;
-      const camWinOnSql = camSql > 0 ? camSqlWon / camSql : 0;
+      const camResolved = deals.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
+      const camSqlWon = camResolved.filter(d => d.status === 'closed_won').length;
+      const camWinOnSql = camResolved.length > 0 ? camSqlWon / camResolved.length : 0;
       const camWon = deals.filter(d => d.status === 'closed_won').length;
       const camCohortRate = camTotal > 0 ? camWon / camTotal : 0;
       const camQualityGap = camWinOnSql - camCohortRate;
@@ -1094,7 +1100,7 @@ export default function DrPipeline() {
     });
 
     return {
-      total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon,
+      total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, sqlResolved,
       winRateOnSQL, overallCohortRate, sqlRate, conversionRate, closeRate,
       mortality, insightText, camRowsDQ, qualityGap,
     };
