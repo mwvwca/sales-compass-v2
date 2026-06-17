@@ -8,6 +8,7 @@ import * as XLSX from '@e965/xlsx';
 import { parseDrExport } from '@/lib/drParser';
 import { mergeDrBatch } from '@/lib/drMerge';
 import type { DealRegistration, RawDrRecord, DrStatus, Opportunity } from '@/types/forecast';
+import { currentlySql, everReachedSql, daysSinceActivity } from '@/lib/drSql';
 
 
 // ---------- Constants & helpers ----------
