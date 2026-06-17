@@ -51,7 +51,7 @@ interface StageGroup {
 
 export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   const { toast } = useToast();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [openCam, setOpenCam] = useState<string | null>(null);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [loadingCam, setLoadingCam] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
         description: 'Multi-registration accounts with no activity on any deal. AE must engage or close all.',
         tone: 'text-red-700 dark:text-red-400',
         items: cls.filter(c => c.immediateAction),
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         stage: 'ready_to_close',
@@ -90,7 +90,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
         description: '45+ days with no response. Close these registrations.',
         tone: 'text-red-700 dark:text-red-400',
         items: cls.filter(c => c.cleanupStage === 'ready_to_close' && !c.immediateAction),
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         stage: 'final_notice',
@@ -98,7 +98,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
         description: '30-44 days. Send final warning email.',
         tone: 'text-amber-700 dark:text-amber-400',
         items: cls.filter(c => c.cleanupStage === 'final_notice' && !c.immediateAction),
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         stage: 'partner_outreach',
@@ -106,7 +106,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
         description: '15-29 days. Send partner rep email, CC CAM.',
         tone: 'text-blue-700 dark:text-blue-400',
         items: cls.filter(c => c.cleanupStage === 'partner_outreach' && !c.immediateAction),
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         stage: 'monitoring',
