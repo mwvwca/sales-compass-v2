@@ -8,6 +8,7 @@ import * as XLSX from '@e965/xlsx';
 import { parseDrExport } from '@/lib/drParser';
 import { mergeDrBatch } from '@/lib/drMerge';
 import type { DealRegistration, RawDrRecord, DrStatus, Opportunity } from '@/types/forecast';
+import { currentlySql, everReachedSql, daysSinceActivity } from '@/lib/drSql';
 
 
 // ---------- Constants & helpers ----------
@@ -369,7 +370,7 @@ export default function DrPipeline() {
   // ---------- Section B: AE Accountability ----------
   type AeRow = {
     rep: string; assigned: number; rejected: number; sqls: number; sqlRate: number;
-    stale: number; noActivity: number; avgAge: number;
+    stale: number; noActivity: number; unworked: number; unworkedPct: number; avgAge: number;
     converted: number; closedWon: number; convRate: number;
     cohortRate: number; avgCycle: number | null;
     pipelineAmount: number; closedWonAmount: number;
@@ -390,10 +391,19 @@ export default function DrPipeline() {
       const rejected = deals.filter(d => d.status === 'rejected').length;
       const nonRejected = deals.filter(d => d.status !== 'rejected');
       const denom = nonRejected.length;
-      const sqls = nonRejected.filter(d => d.isSql).length;
+      const sqls = nonRejected.filter(everReachedSql).length;
       const sqlRate = denom ? sqls / denom : 0;
       const stale = nonRejected.filter(d => d.status === 'stale').length;
       const noActivity = nonRejected.filter(d => !d.lastActivity && (d.status === 'active' || d.status === 'stale')).length;
+      // Unworked = non-terminal, not currentlySql, no lastActivity, createdDate > 15 days ago.
+      const today = new Date();
+      const nonTerminal = deals.filter(d =>
+        d.status !== 'rejected' && d.status !== 'closed_won' && d.status !== 'closed_lost' && d.status !== 'withdrawn'
+      );
+      const unworked = nonTerminal.filter(d =>
+        !currentlySql(d) && !d.lastActivity && daysSinceActivity(d, today) > 15
+      ).length;
+      const unworkedPct = nonTerminal.length ? unworked / nonTerminal.length : 0;
       const avgAge = denom ? nonRejected.reduce((s, d) => s + d.ageDays, 0) / denom : 0;
       const converted = nonRejected.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
       const wonDeals = nonRejected.filter(d => d.status === 'closed_won');
@@ -414,7 +424,7 @@ export default function DrPipeline() {
       const cohort = buildCohortRows(nonRejected);
       const pipelineAmount = pipelineSum(nonRejected);
       const closedWonAmount = closedWonSum(nonRejected, oppMap);
-      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, pipelineAmount, closedWonAmount, rejectedByCam, cohort };
+      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, unworked, unworkedPct, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, pipelineAmount, closedWonAmount, rejectedByCam, cohort };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
     if (!showInactiveReps) {
@@ -1000,12 +1010,17 @@ export default function DrPipeline() {
     const drs = scopeNoStatus;
     const nonRej = drs.filter(d => d.status !== 'rejected');
     const total = nonRej.length;
-    const reachedSQL = nonRej.filter(d => d.isSql).length;
+    // SQL rate: any DR that ever qualified (includes lost-after-qualifying).
+    const reachedSQL = nonRej.filter(everReachedSql).length;
     const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
     const closedWon = drs.filter(d => d.status === 'closed_won').length;
-    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
 
-    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    // Win rate on SQL'd deals: resolved-only (won vs lost) among everReachedSql.
+    const resolvedQualified = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
+    const sqlClosedWon = resolvedQualified.filter(d => d.status === 'closed_won').length;
+    const sqlResolved = resolvedQualified.length;
+    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
+
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
     const conversionRate = reachedSQL > 0 ? convertedToPipeline / reachedSQL : 0;
@@ -1020,7 +1035,6 @@ export default function DrPipeline() {
       return idx >= 0 ? idx : -1;
     };
     const cumCounts = MORTALITY_STAGES.map((_, i) => stageEligible.filter(d => getRank(d) >= i).length);
-    // For "Registered" we use total non-rejected (includes withdrawn? — exclude withdrawn for consistency)
     const registeredCount = stageEligible.length;
 
     const avgAgeAtStage = (rank: number): number => {
@@ -1044,9 +1058,10 @@ export default function DrPipeline() {
 
     // Insight statement
     const qualityGap = winRateOnSQL - overallCohortRate;
-    const nonQualifyingPct = total > 0 ? ((total - reachedSQL) / total * 100).toFixed(0) : '0';
     let insightText: string;
-    if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
+    if (sqlResolved < 5) {
+      insightText = `Win rate on SQL'd deals is based on only ${sqlResolved} resolved registrations — interpret as a directional floor, not a stable rate.`;
+    } else if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
       const mult = overallCohortRate > 0 ? Math.round(winRateOnSQL / overallCohortRate) : 0;
       insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
     } else if (winRateOnSQL < 0.15) {
@@ -1072,10 +1087,11 @@ export default function DrPipeline() {
       const nr = deals.filter(d => d.status !== 'rejected');
       const camTotal = nr.length;
       if (camTotal < 5) continue;
-      const camSql = nr.filter(d => d.isSql).length;
+      const camSql = nr.filter(everReachedSql).length;
       const camSqlRate = camTotal > 0 ? camSql / camTotal : 0;
-      const camSqlWon = deals.filter(d => d.isSql && d.status === 'closed_won').length;
-      const camWinOnSql = camSql > 0 ? camSqlWon / camSql : 0;
+      const camResolved = deals.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
+      const camSqlWon = camResolved.filter(d => d.status === 'closed_won').length;
+      const camWinOnSql = camResolved.length > 0 ? camSqlWon / camResolved.length : 0;
       const camWon = deals.filter(d => d.status === 'closed_won').length;
       const camCohortRate = camTotal > 0 ? camWon / camTotal : 0;
       const camQualityGap = camWinOnSql - camCohortRate;
@@ -1093,7 +1109,7 @@ export default function DrPipeline() {
     });
 
     return {
-      total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon,
+      total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, sqlResolved,
       winRateOnSQL, overallCohortRate, sqlRate, conversionRate, closeRate,
       mortality, insightText, camRowsDQ, qualityGap,
     };
@@ -1104,16 +1120,36 @@ export default function DrPipeline() {
   const dealQualityDefensible = useMemo(() => {
     const drs = scopeNoStatus.filter(d => !NON_DEFENSIBLE_STATUSES.has(d.status));
     const total = drs.length;
-    const reachedSQL = drs.filter(d => d.isSql).length;
+    const reachedSQL = drs.filter(everReachedSql).length;
     const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
     const closedWon = drs.filter(d => d.status === 'closed_won').length;
-    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
-    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    const resolved = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
+    const sqlClosedWon = resolved.filter(d => d.status === 'closed_won').length;
+    const sqlResolved = resolved.length;
+    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
     const qualityGap = winRateOnSQL - overallCohortRate;
-    return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
+    return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, sqlResolved, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
   }, [scopeNoStatus]);
+
+  // Headline defensible pipeline value
+  const defensiblePipelineValue = useMemo(() => {
+    return filtered
+      .filter(d => currentlySql(d) && (d.amount ?? 0) > 0 &&
+        d.status !== 'closed_won' && d.status !== 'closed_lost' &&
+        d.status !== 'rejected' && d.status !== 'withdrawn')
+      .reduce((s, d) => s + (d.amount || 0), 0);
+  }, [filtered]);
+
+  // No-reseller hygiene list
+  const noResellerRows = useMemo(() => {
+    return filtered
+      .filter(d => !(d.resolvedReseller && d.resolvedReseller.trim()) &&
+        d.status !== 'closed_won' && d.status !== 'closed_lost' &&
+        d.status !== 'rejected' && d.status !== 'withdrawn')
+      .sort((a, b) => (b.amount || 0) - (a.amount || 0));
+  }, [filtered]);
 
   // Exclusion summary for the "Defensible Only" callout
   const dqExclusion = useMemo(() => {
@@ -1241,6 +1277,17 @@ export default function DrPipeline() {
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <Info size={14} className="mt-0.5 shrink-0" />
             <span>DR data reflects registrations from July 15, 2025 onwards. Closed won matches reflect formally registered deals only — unregistered channel-sourced deals are not included.</span>
+          </div>
+
+          {/* Headline: Defensible Pipeline Value */}
+          <div className="border border-border rounded-md p-4 bg-secondary/30 flex items-baseline gap-4 flex-wrap">
+            <div>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Defensible Pipeline Value</p>
+              <p className="text-3xl font-semibold tabular-nums">{fmtDollar(defensiblePipelineValue)}</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground max-w-md">
+              Sum of amount where probability ≥ 25% and the registration is still open. Pre-discovery dollars are excluded.
+            </p>
           </div>
 
           {/* Global filter bar */}
@@ -1450,8 +1497,9 @@ export default function DrPipeline() {
                             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Win Rate on SQL'd Deals</p>
                             <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
                             <p className="text-[11px] text-muted-foreground mt-0.5">
-                              {dqView === 'all' ? "Unchanged — SQL'd deals are already qualified" : "SQL'd DRs → Closed Won"}
+                              {('sqlResolved' in dq) ? `${(dq as any).sqlClosedWon}/${(dq as any).sqlResolved} resolved (won + lost)` : 'Resolved SQL deals → Closed Won'}
                             </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 italic">Based on registrations observed reaching SQL across imports — floor, not absolute.</p>
                           </div>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1602,6 +1650,7 @@ export default function DrPipeline() {
                     <th className="text-right px-2 py-1.5 font-medium">Avg Cycle</th>
                     <th className="text-right px-2 py-1.5 font-medium">Stale</th>
                     <th className="text-right px-2 py-1.5 font-medium">No Activity</th>
+                    <th className="text-right px-2 py-1.5 font-medium" title="Non-terminal, not currently SQL, no activity, created > 15d ago — partner has not been engaged">Unworked</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1624,10 +1673,13 @@ export default function DrPipeline() {
                         </td>
                         <td className={`text-right px-2 py-1.5 ${r.stale > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}>{r.stale}</td>
                         <td className={`text-right px-2 py-1.5 ${r.noActivity > 3 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>{r.noActivity}</td>
+                        <td className={`text-right px-2 py-1.5 ${r.unworkedPct >= 0.3 ? 'text-red-600 dark:text-red-400 font-medium' : r.unworkedPct >= 0.15 ? 'text-amber-600 dark:text-amber-400' : ''}`} title="Unworked / non-terminal book">
+                          {r.unworked} <span className="text-[10px] text-muted-foreground">({fmtPct(r.unworkedPct, 0)})</span>
+                        </td>
                       </tr>
                       {expandedRep === r.rep && (
                         <tr className="bg-muted/20 border-t border-border">
-                          <td colSpan={12} className="px-3 py-2 space-y-3">
+                          <td colSpan={13} className="px-3 py-2 space-y-3">
                             {r.rejected > 0 && (
                               <div>
                                 <p className="text-[11px] font-semibold text-muted-foreground mb-1">Rejected DRs by CAM (coaching context)</p>
@@ -1693,6 +1745,7 @@ export default function DrPipeline() {
                     <td className="text-right px-2 py-1.5">—</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.stale}</td>
                     <td className="text-right px-2 py-1.5">{aeTotals.noActivity}</td>
+                    <td className="text-right px-2 py-1.5">{aeRows.reduce((s, r) => s + r.unworked, 0)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -2219,7 +2272,13 @@ export default function DrPipeline() {
                           <td className="px-2 py-1.5">{d.stage}</td>
                           <td className={`text-right px-2 py-1.5 ${colorAge(d.ageDays)}`}>{d.ageDays}d</td>
                           <td className="px-2 py-1.5">{d.lastActivity || <span className="text-muted-foreground">—</span>}</td>
-                          <td className="text-right px-2 py-1.5">{d.amount ? fmtMoney(d.amount) : '—'}</td>
+                          <td className="text-right px-2 py-1.5">
+                            {d.amount ? (
+                              currentlySql(d)
+                                ? fmtMoney(d.amount)
+                                : <span className="text-muted-foreground italic" title="Not counted in defensible value">{fmtMoney(d.amount)} <span className="text-[10px]">pre-discovery</span></span>
+                            ) : '—'}
+                          </td>
                           <td className="px-2 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${statusBadgeCls(d.status)}`}>{statusLabel(d.status)}</span></td>
                           <td className="px-2 py-1.5">{d.resellerName || '—'}</td>
                           <td className="text-right px-2 py-1.5">{d.status === 'closed_won' && typeof d.cycleDays === 'number' ? `${d.cycleDays} days` : <span className="text-muted-foreground">—</span>}</td>
@@ -2322,6 +2381,40 @@ export default function DrPipeline() {
                 </tbody>
               </table>
               {accountRows.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No multi-DR accounts.</p>}
+            </div>
+          </section>
+
+          {/* Data Hygiene: No Reseller */}
+          <section className="border border-border rounded-md">
+            <div className="px-3 py-2 border-b border-border flex items-center gap-3">
+              <h3 className="text-xs font-semibold">Data Hygiene — Missing Reseller</h3>
+              <span className="text-xs text-muted-foreground ml-auto">{noResellerRows.length} open registrations</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground px-3 pt-2">Add reseller or distributor on these opportunities in Salesforce.</p>
+            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-secondary/40 text-muted-foreground sticky top-0">
+                  <tr>
+                    <th className="text-left px-2 py-1.5 font-medium">Account</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Opportunity</th>
+                    <th className="text-left px-2 py-1.5 font-medium">CAM</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Stage</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Opportunity ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {noResellerRows.map(d => (
+                    <tr key={d.opportunityId} className="border-t border-border">
+                      <td className="px-2 py-1.5">{d.accountName || '—'}</td>
+                      <td className="px-2 py-1.5">{d.opportunityName}</td>
+                      <td className="px-2 py-1.5">{d.channelAccountManager || '—'}</td>
+                      <td className="px-2 py-1.5">{d.stage}</td>
+                      <td className="px-2 py-1.5 font-mono text-[10px]">{d.opportunityId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {noResellerRows.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">All open registrations have a reseller assigned. ✓</p>}
             </div>
           </section>
         </>

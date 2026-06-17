@@ -6,6 +6,7 @@ import type {
 } from '@/types/forecast';
 import { getQuarter } from '@/types/forecast';
 import { parseExcelDate } from './drParser';
+import { currentlySql, daysSinceActivity } from './drSql';
 
 export interface DrBatchStats {
   newCount: number;
@@ -16,22 +17,17 @@ export interface DrBatchStats {
 }
 
 const PRE_SQL_PROB = 0.25;
-
-function stalenessThreshold(stage: string): number {
-  const s = (stage || '').toLowerCase().trim();
-  if (s === 'unqualified') return 21;
-  if (s === 'qualified 5%' || s === 'qualified' || s.startsWith('qualified')) return 30;
-  return 45;
-}
+const STALE_DAYS = 15;
 
 function isRejectedStage(stage: string): boolean {
   return (stage || '').toLowerCase().trim() === 'rejected';
 }
 
-function isStaleFor(d: { stage: string; isSql: boolean; ageDays: number }): boolean {
+/** Stale = not rejected, not currently SQL, no activity for STALE_DAYS+. */
+function isStaleFor(d: DealRegistration, today: Date): boolean {
   if (isRejectedStage(d.stage)) return false;
-  if (d.isSql) return false;
-  return d.ageDays > stalenessThreshold(d.stage);
+  if (currentlySql(d)) return false;
+  return daysSinceActivity(d, today) >= STALE_DAYS;
 }
 
 function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus } | null {
@@ -154,8 +150,8 @@ export function mergeDrBatch(
         ? [...(prev.stageHistory ?? []), { stage: inc.stage, probability: inc.probability, date: importedAt.slice(0, 10), batchId }]
         : (prev.stageHistory ?? []);
 
-      const wasSql = prev.isSql;
-      const sqlDate = wasSql ? prev.sqlDate : (isSql ? importedAt.slice(0, 10) : undefined);
+      // sqlDate is PERMANENT once set — never wipe it (the deal qualified at least once).
+      const sqlDate = prev.sqlDate ?? (isSql ? importedAt.slice(0, 10) : undefined);
 
       const rec: DealRegistration = {
         ...prev,
@@ -277,7 +273,7 @@ export function mergeDrBatch(
     }
 
     // 5) Stale
-    if (isStaleFor(r)) {
+    if (isStaleFor(r, new Date(importedAt))) {
       merged[i] = { ...r, status: 'stale' };
       continue;
     }
