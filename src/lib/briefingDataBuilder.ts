@@ -438,10 +438,11 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     // Deal Quality Analysis
     const nonRej = drs.filter(d => d.status !== 'rejected');
     const totalDrsDQ = nonRej.length;
-    const reachedSQL = nonRej.filter(d => d.isSql).length;
-    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
+    const reachedSQL = nonRej.filter(everReachedSql).length;
+    const resolvedQ = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
+    const sqlClosedWon = resolvedQ.filter(d => d.status === 'closed_won').length;
     const closedWonAll = drs.filter(d => d.status === 'closed_won').length;
-    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    const winRateOnSQL = resolvedQ.length > 0 ? sqlClosedWon / resolvedQ.length : 0;
     const overallCohortRate = totalDrsDQ > 0 ? closedWonAll / totalDrsDQ : 0;
     const sqlRateDQ = totalDrsDQ > 0 ? reachedSQL / totalDrsDQ : 0;
     const qualityGapPp = (winRateOnSQL - overallCohortRate) * 100;
