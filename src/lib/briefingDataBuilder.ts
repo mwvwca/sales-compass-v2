@@ -15,6 +15,7 @@ import {
 } from '@/types/forecast';
 import type { BriefingMode } from './briefingPrompts';
 import { classifyCleanup, buildCleanupSummary, type CleanupSummary } from './drCleanup';
+import { everReachedSql } from './drSql';
 
 export interface BriefingPayload {
   mode: BriefingMode;
