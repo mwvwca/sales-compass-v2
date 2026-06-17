@@ -150,8 +150,8 @@ export function mergeDrBatch(
         ? [...(prev.stageHistory ?? []), { stage: inc.stage, probability: inc.probability, date: importedAt.slice(0, 10), batchId }]
         : (prev.stageHistory ?? []);
 
-      const wasSql = prev.isSql;
-      const sqlDate = wasSql ? prev.sqlDate : (isSql ? importedAt.slice(0, 10) : undefined);
+      // sqlDate is PERMANENT once set — never wipe it (the deal qualified at least once).
+      const sqlDate = prev.sqlDate ?? (isSql ? importedAt.slice(0, 10) : undefined);
 
       const rec: DealRegistration = {
         ...prev,
