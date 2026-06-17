@@ -2383,6 +2383,40 @@ export default function DrPipeline() {
               {accountRows.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No multi-DR accounts.</p>}
             </div>
           </section>
+
+          {/* Data Hygiene: No Reseller */}
+          <section className="border border-border rounded-md">
+            <div className="px-3 py-2 border-b border-border flex items-center gap-3">
+              <h3 className="text-xs font-semibold">Data Hygiene — Missing Reseller</h3>
+              <span className="text-xs text-muted-foreground ml-auto">{noResellerRows.length} open registrations</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground px-3 pt-2">Add reseller or distributor on these opportunities in Salesforce.</p>
+            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-secondary/40 text-muted-foreground sticky top-0">
+                  <tr>
+                    <th className="text-left px-2 py-1.5 font-medium">Account</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Opportunity</th>
+                    <th className="text-left px-2 py-1.5 font-medium">CAM</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Stage</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Opportunity ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {noResellerRows.map(d => (
+                    <tr key={d.opportunityId} className="border-t border-border">
+                      <td className="px-2 py-1.5">{d.accountName || '—'}</td>
+                      <td className="px-2 py-1.5">{d.opportunityName}</td>
+                      <td className="px-2 py-1.5">{d.channelAccountManager || '—'}</td>
+                      <td className="px-2 py-1.5">{d.stage}</td>
+                      <td className="px-2 py-1.5 font-mono text-[10px]">{d.opportunityId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {noResellerRows.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">All open registrations have a reseller assigned. ✓</p>}
+            </div>
+          </section>
         </>
       )}
     </div>
