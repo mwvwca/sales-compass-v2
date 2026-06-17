@@ -370,7 +370,7 @@ export default function DrPipeline() {
   // ---------- Section B: AE Accountability ----------
   type AeRow = {
     rep: string; assigned: number; rejected: number; sqls: number; sqlRate: number;
-    stale: number; noActivity: number; avgAge: number;
+    stale: number; noActivity: number; unworked: number; unworkedPct: number; avgAge: number;
     converted: number; closedWon: number; convRate: number;
     cohortRate: number; avgCycle: number | null;
     pipelineAmount: number; closedWonAmount: number;
