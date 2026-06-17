@@ -1133,6 +1133,24 @@ export default function DrPipeline() {
     return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, sqlResolved, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
   }, [scopeNoStatus]);
 
+  // Headline defensible pipeline value
+  const defensiblePipelineValue = useMemo(() => {
+    return filtered
+      .filter(d => currentlySql(d) && (d.amount ?? 0) > 0 &&
+        d.status !== 'closed_won' && d.status !== 'closed_lost' &&
+        d.status !== 'rejected' && d.status !== 'withdrawn')
+      .reduce((s, d) => s + (d.amount || 0), 0);
+  }, [filtered]);
+
+  // No-reseller hygiene list
+  const noResellerRows = useMemo(() => {
+    return filtered
+      .filter(d => !(d.resolvedReseller && d.resolvedReseller.trim()) &&
+        d.status !== 'closed_won' && d.status !== 'closed_lost' &&
+        d.status !== 'rejected' && d.status !== 'withdrawn')
+      .sort((a, b) => (b.amount || 0) - (a.amount || 0));
+  }, [filtered]);
+
   // Exclusion summary for the "Defensible Only" callout
   const dqExclusion = useMemo(() => {
     const excluded = scopeNoStatus.filter(d => NON_DEFENSIBLE_STATUSES.has(d.status));
