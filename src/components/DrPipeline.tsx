@@ -1111,15 +1111,17 @@ export default function DrPipeline() {
   const dealQualityDefensible = useMemo(() => {
     const drs = scopeNoStatus.filter(d => !NON_DEFENSIBLE_STATUSES.has(d.status));
     const total = drs.length;
-    const reachedSQL = drs.filter(d => d.isSql).length;
+    const reachedSQL = drs.filter(everReachedSql).length;
     const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
     const closedWon = drs.filter(d => d.status === 'closed_won').length;
-    const sqlClosedWon = drs.filter(d => d.isSql && d.status === 'closed_won').length;
-    const winRateOnSQL = reachedSQL > 0 ? sqlClosedWon / reachedSQL : 0;
+    const resolved = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
+    const sqlClosedWon = resolved.filter(d => d.status === 'closed_won').length;
+    const sqlResolved = resolved.length;
+    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
     const qualityGap = winRateOnSQL - overallCohortRate;
-    return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
+    return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, sqlResolved, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
   }, [scopeNoStatus]);
 
   // Exclusion summary for the "Defensible Only" callout
