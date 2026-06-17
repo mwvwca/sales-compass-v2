@@ -391,10 +391,19 @@ export default function DrPipeline() {
       const rejected = deals.filter(d => d.status === 'rejected').length;
       const nonRejected = deals.filter(d => d.status !== 'rejected');
       const denom = nonRejected.length;
-      const sqls = nonRejected.filter(d => d.isSql).length;
+      const sqls = nonRejected.filter(everReachedSql).length;
       const sqlRate = denom ? sqls / denom : 0;
       const stale = nonRejected.filter(d => d.status === 'stale').length;
       const noActivity = nonRejected.filter(d => !d.lastActivity && (d.status === 'active' || d.status === 'stale')).length;
+      // Unworked = non-terminal, not currentlySql, no lastActivity, createdDate > 15 days ago.
+      const today = new Date();
+      const nonTerminal = deals.filter(d =>
+        d.status !== 'rejected' && d.status !== 'closed_won' && d.status !== 'closed_lost' && d.status !== 'withdrawn'
+      );
+      const unworked = nonTerminal.filter(d =>
+        !currentlySql(d) && !d.lastActivity && daysSinceActivity(d, today) > 15
+      ).length;
+      const unworkedPct = nonTerminal.length ? unworked / nonTerminal.length : 0;
       const avgAge = denom ? nonRejected.reduce((s, d) => s + d.ageDays, 0) / denom : 0;
       const converted = nonRejected.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
       const wonDeals = nonRejected.filter(d => d.status === 'closed_won');
@@ -415,7 +424,7 @@ export default function DrPipeline() {
       const cohort = buildCohortRows(nonRejected);
       const pipelineAmount = pipelineSum(nonRejected);
       const closedWonAmount = closedWonSum(nonRejected, oppMap);
-      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, pipelineAmount, closedWonAmount, rejectedByCam, cohort };
+      return { rep, assigned, rejected, sqls, sqlRate, stale, noActivity, unworked, unworkedPct, avgAge, converted, closedWon, convRate, cohortRate, avgCycle, pipelineAmount, closedWonAmount, rejectedByCam, cohort };
     });
     rows.sort((a, b) => b.assigned - a.assigned);
     if (!showInactiveReps) {
