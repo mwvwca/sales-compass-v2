@@ -1279,6 +1279,17 @@ export default function DrPipeline() {
             <span>DR data reflects registrations from July 15, 2025 onwards. Closed won matches reflect formally registered deals only — unregistered channel-sourced deals are not included.</span>
           </div>
 
+          {/* Headline: Defensible Pipeline Value */}
+          <div className="border border-border rounded-md p-4 bg-secondary/30 flex items-baseline gap-4 flex-wrap">
+            <div>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Defensible Pipeline Value</p>
+              <p className="text-3xl font-semibold tabular-nums">{fmtDollar(defensiblePipelineValue)}</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground max-w-md">
+              Sum of amount where probability ≥ 25% and the registration is still open. Pre-discovery dollars are excluded.
+            </p>
+          </div>
+
           {/* Global filter bar */}
           <div className="p-3 border border-border rounded-md bg-secondary/20 space-y-2">
             <div className="flex flex-wrap items-center gap-3">
