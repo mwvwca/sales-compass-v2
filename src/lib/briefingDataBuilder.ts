@@ -61,11 +61,12 @@ export interface BriefingPayload {
     dealQualityAnalysis: {
       totalDrs: number;
       sqlRate: number;
-      winRateOnSQL: number;
+      winRateOnSQL: number | null;
+      sqlResolved: number;
       overallCohortRate: number;
       qualityGapPp: number;
       insightStatement: string;
-      primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
+      primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing' | 'building';
     };
     cleanupSummary: CleanupSummary;
   } | null;
