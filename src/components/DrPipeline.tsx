@@ -1537,7 +1537,11 @@ export default function DrPipeline() {
                               </div>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-xs">
-                              <p>AEs close at {(dq.winRateOnSQL * 100).toFixed(0)}% when given a qualified lead.</p>
+                              {dq.winRateOnSQL == null ? (
+                                <p>Win rate on SQL'd deals is still building history (n={dq.sqlResolved} resolved).</p>
+                              ) : (
+                                <p>AEs close at {(dq.winRateOnSQL * 100).toFixed(0)}% when given a qualified lead.</p>
+                              )}
                               <p>The overall {(dq.overallCohortRate * 100).toFixed(0)}% reflects leads that never qualified.</p>
                             </TooltipContent>
                           </Tooltip>
