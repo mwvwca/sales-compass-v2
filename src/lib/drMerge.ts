@@ -6,7 +6,7 @@ import type {
 } from '@/types/forecast';
 import { getQuarter } from '@/types/forecast';
 import { parseExcelDate } from './drParser';
-import { currentlySql, daysSinceActivity } from './drSql';
+import { currentlySql, daysSinceActivity, isTerminalStage } from './drSql';
 
 export interface DrBatchStats {
   newCount: number;
