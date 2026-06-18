@@ -1,4 +1,6 @@
 import type { DealRegistration } from '@/types/forecast';
+import { sfdcAccountUrl } from './sfdc';
+import { escapeHtml } from './richClipboard';
 
 // ============================================================
 // Anchor analysis — distinguish the real worked deal from padding satellites
@@ -333,78 +335,117 @@ Write the email with these requirements:
 // Deterministic email builder — replaces AI-generated drafts.
 // ============================================================
 
-function groupAndFormatTier(deals: CleanupClassification[]): string {
-  const annotate = (d: CleanupClassification) =>
-    `${d.anchorRole === 'satellite' ? ` [satellite of multi-reg account, ${d.accountRegCount} regs total]` : ''}${
-      d.anchorRole === 'orphan_cluster' ? ` [orphan cluster, ${d.accountRegCount} regs no activity]` : ''
-    }`;
-
-  const byAccount = new Map<string, { name: string; url?: string; deals: CleanupClassification[] }>();
-  for (const d of deals) {
-    const name = d.dr.accountName || '(no account)';
-    const key = name.toLowerCase();
-    let entry = byAccount.get(key);
-    if (!entry) {
-      entry = { name, url: d.dr.accountUrl, deals: [] };
-      byAccount.set(key, entry);
-    }
-    if (!entry.url && d.dr.accountUrl) entry.url = d.dr.accountUrl;
-    entry.deals.push(d);
-  }
-  const blocks: string[] = [];
-  for (const entry of byAccount.values()) {
-    const lines: string[] = [entry.name];
-    if (entry.url) lines.push(entry.url);
-    for (const d of entry.deals) {
-      lines.push(`  - "${d.dr.opportunityName}" (${d.dr.stage}, ${d.daysSinceActivity}d since activity, AE: ${d.dr.repName})${annotate(d)}`);
-    }
-    blocks.push(lines.join('\n'));
-  }
-  return blocks.join('\n\n');
+/** Stage label with probability %, avoiding a doubled % when the stage already has one. */
+function stagePct(d: CleanupClassification): string {
+  const s = (d.dr.stage || '').trim();
+  if (/\d+\s*%/.test(s)) return s;
+  const pct = Math.round((d.dr.probability ?? 0) * 100);
+  return pct ? `${s} ${pct}%` : s;
 }
 
-export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; body: string } {
-  const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' || d.immediateAction);
+type AeBuckets = {
+  closing: CleanupClassification[];
+  finalNotice: CleanupClassification[];
+  outreach: CleanupClassification[];
+  needsAttention: CleanupClassification[];
+};
+
+export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; body: string; html: string } {
+  // Orphan clusters (immediateAction) no longer fall into "Closing" by virtue of
+  // being immediate — Closing is strictly the 45+ day ready_to_close tier. Orphan
+  // clusters get their own "Needs attention" bucket, deduped to one row per account.
+  const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' && !d.immediateAction);
   const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction);
   const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction);
+  const needsAttention: CleanupClassification[] = [];
+  {
+    const seen = new Set<string>();
+    for (const d of group.deals) {
+      if (!d.immediateAction) continue;
+      const key = (d.dr.accountName || '(no account)').toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      needsAttention.push(d);
+    }
+  }
+
+  // Group every bucket's items by the AE (rep) on the registration.
+  const byAe = new Map<string, AeBuckets>();
+  const ensure = (ae: string): AeBuckets => {
+    let b = byAe.get(ae);
+    if (!b) { b = { closing: [], finalNotice: [], outreach: [], needsAttention: [] }; byAe.set(ae, b); }
+    return b;
+  };
+  const aeOf = (d: CleanupClassification) => d.dr.repName?.trim() || '(unassigned AE)';
+  for (const d of closing) ensure(aeOf(d)).closing.push(d);
+  for (const d of finalNotice) ensure(aeOf(d)).finalNotice.push(d);
+  for (const d of outreach) ensure(aeOf(d)).outreach.push(d);
+  for (const d of needsAttention) ensure(aeOf(d)).needsAttention.push(d);
+  const aes = Array.from(byAe.entries()).sort((a, b) => {
+    const total = (x: AeBuckets) => x.closing.length + x.finalNotice.length + x.outreach.length + x.needsAttention.length;
+    return total(b[1]) - total(a[1]) || a[0].localeCompare(b[0]);
+  });
 
   const camFirstName = (group.cam.split(/\s+/)[0] || group.cam).trim();
+  const linkAccount = (name: string, url?: string): string => {
+    const href = sfdcAccountUrl(url);
+    return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(name)}</a>` : escapeHtml(name);
+  };
 
-  const sections: string[] = [];
-  if (closing.length > 0) {
-    sections.push(
-      `CLOSING NOW\nThese registrations are being closed per our deal registration policy. No response needed.\n\n${groupAndFormatTier(closing)}`
-    );
+  // Build plain and HTML in lockstep so they never diverge.
+  const P: string[] = [];
+  const H: string[] = [];
+  const line = (plain: string, html?: string) => { P.push(plain); H.push(html ?? escapeHtml(plain)); };
+  const blank = () => { P.push(''); H.push(''); };
+
+  line(`Hi ${camFirstName},`);
+  blank();
+  line('I am reaching out as part of our standard deal registration cleanup cadence. Per our agreed policy, registrations move through three phases: partner outreach at 15 days of inactivity, final notice at 30 days requiring confirmation within 15 days, and closure at 45 days if no activity has been recorded.');
+  blank();
+  line('Where an account has multiple registrations and one is actively being worked, we are retaining that anchor opportunity and only addressing the satellite registrations that have had no independent activity. The goal is a clean and accurate pipeline, not disruption of active deals.');
+  blank();
+  line(`${closing.length} closing · ${finalNotice.length} final notice · ${outreach.length} outreach · ${needsAttention.length} need attention`);
+  blank();
+
+  const renderBucket = (title: string, deals: CleanupClassification[], attention: boolean) => {
+    if (deals.length === 0) return;
+    line(`  ${title}`);
+    for (const d of deals) {
+      const acct = d.dr.accountName || '(no account)';
+      const days = `${d.daysSinceActivity}d`;
+      if (attention) {
+        const tail = `${d.accountRegCount} regs, no activity · ${days}`;
+        line(`    ${acct} — ${tail}`, `    ${linkAccount(acct, d.dr.accountUrl)} — ${escapeHtml(tail)}`);
+      } else {
+        const desc = d.dr.opportunityName || d.dr.product || '(deal)';
+        const tail = `${desc} · ${stagePct(d)} · ${days}`;
+        line(`    ${acct} — ${tail}`, `    ${linkAccount(acct, d.dr.accountUrl)} — ${escapeHtml(tail)}`);
+      }
+    }
+  };
+
+  for (const [ae, b] of aes) {
+    const counts: string[] = [];
+    if (b.closing.length) counts.push(`${b.closing.length} closing`);
+    if (b.finalNotice.length) counts.push(`${b.finalNotice.length} final notice`);
+    if (b.outreach.length) counts.push(`${b.outreach.length} outreach`);
+    if (b.needsAttention.length) counts.push(`${b.needsAttention.length} need attention`);
+    line(`AE: ${ae} — ${counts.join(' · ')}`);
+    renderBucket('Closing — being closed, no response needed (45+ days)', b.closing, false);
+    renderBucket('Final notice — confirm within 15 days or it will be closed', b.finalNotice, false);
+    renderBucket('Outreach — quiet 15+ days, please confirm status', b.outreach, false);
+    renderBucket('Needs attention — no activity on any registration; engage or close', b.needsAttention, true);
+    blank();
   }
-  if (finalNotice.length > 0) {
-    sections.push(
-      `FINAL NOTICE\nThese need confirmation within 15 days or they will be closed.\n\n${groupAndFormatTier(finalNotice)}`
-    );
-  }
-  if (outreach.length > 0) {
-    sections.push(
-      `PARTNER OUTREACH\nThese have been quiet for 15+ days. Please confirm status with your rep.\n\n${groupAndFormatTier(outreach)}`
-    );
-  }
 
-  const body =
-`Hi ${camFirstName},
-
-I am reaching out as part of our standard deal registration cleanup cadence. Per our agreed policy, registrations move through three phases: partner outreach at 15 days of inactivity, final notice at 30 days requiring confirmation within 15 days, and closure at 45 days if no activity has been recorded.
-
-Where an account has multiple registrations and one is actively being worked, we are retaining that anchor opportunity and only addressing the satellite registrations that have had no independent activity. The goal is a clean and accurate pipeline, not disruption of active deals.
-
-${sections.join('\n\n---\n\n')}
-
-Happy to discuss any of these on a call if useful.
-
-Best,
-Michael Wells
-Sales Manager, N-able`;
+  line('Happy to discuss any of these on a call if useful.');
+  blank();
+  line('Best,');
+  line('Michael Wells');
+  line('Sales Manager, N-able');
 
   const subject = `Deal Registration Cleanup Cadence — Action Required (${group.deals.length} registrations)`;
-
-  return { subject, body };
+  return { subject, body: P.join('\n'), html: H.join('<br>') };
 }
 
 // ============================================================

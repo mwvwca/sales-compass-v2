@@ -1,0 +1,73 @@
+import { describe, it, expect } from 'vitest';
+import { buildCleanupEmail, type CamCleanupGroup, type CleanupClassification } from '@/lib/drCleanup';
+import type { DealRegistration } from '@/types/forecast';
+
+function dr(over: Partial<DealRegistration> = {}): DealRegistration {
+  return {
+    accountName: 'Acme',
+    accountUrl: 'https://logicnow.my.salesforce.com/001Vy00001duKY9IAM',
+    repName: 'Jane Doe',
+    opportunityName: 'Acme — Deal',
+    product: 'RMM',
+    stage: 'Discovery',
+    probability: 0.25,
+    ...over,
+  } as DealRegistration;
+}
+
+function cls(over: Partial<CleanupClassification> & { dr?: Partial<DealRegistration> } = {}): CleanupClassification {
+  const { dr: drOver, ...rest } = over;
+  return {
+    dr: dr(drOver),
+    anchorRole: 'single',
+    cleanupStage: 'ready_to_close',
+    daysSinceActivity: 50,
+    immediateAction: false,
+    recommendedAction: '',
+    accountRegCount: 1,
+    ...rest,
+  } as CleanupClassification;
+}
+
+function group(deals: CleanupClassification[]): CamCleanupGroup {
+  return {
+    cam: 'Bob Smith',
+    camEmail: 'bob.smith@n-able.com',
+    deals,
+    aeEmails: ['jane.doe@n-able.com'],
+    stageCounts: { monitoring: 0, partner_outreach: 0, final_notice: 0, ready_to_close: 0, exempt: 0 },
+    immediateCount: 0,
+  };
+}
+
+describe('buildCleanupEmail re-bucketing', () => {
+  it('keeps orphan clusters (immediateAction) out of Closing — even when not 45+ days', () => {
+    const close = cls({ cleanupStage: 'ready_to_close', daysSinceActivity: 50, dr: { accountName: 'CloseCo', opportunityName: 'CloseCo Deal' } });
+    const orphan = cls({ cleanupStage: 'partner_outreach', daysSinceActivity: 17, immediateAction: true, anchorRole: 'orphan_cluster', accountRegCount: 3, dr: { accountName: 'OrphanCo' } });
+
+    const { body, html } = buildCleanupEmail(group([close, orphan]));
+
+    // Totals line proves the split: orphan is "need attention", not closing/outreach.
+    expect(body).toContain('1 closing · 0 final notice · 0 outreach · 1 need attention');
+    // Closing section is genuinely 45+ days and excludes the 17-day orphan.
+    expect(body).toContain('Closing — being closed, no response needed (45+ days)');
+    expect(body).toContain('CloseCo');
+    expect(body).toContain('Needs attention — no activity on any registration; engage or close');
+    expect(body).toContain('OrphanCo — 3 regs, no activity · 17d');
+    // The orphan must not be listed under Closing.
+    const closingChunk = body.slice(body.indexOf('Closing —'), body.indexOf('Needs attention —'));
+    expect(closingChunk).not.toContain('OrphanCo');
+
+    // HTML links the account name via the Lightning account URL; plain has no URL.
+    expect(html).toContain('<a href="https://logicnow.lightning.force.com/lightning/r/Account/001Vy00001duKY9IAM/view" target="_blank" rel="noopener">CloseCo</a>');
+    expect(body).not.toContain('http');
+  });
+
+  it('dedupes Needs attention to one row per account', () => {
+    const a1 = cls({ immediateAction: true, anchorRole: 'orphan_cluster', accountRegCount: 4, dr: { accountName: 'DupCo', opportunityName: 'DupCo Deal 1' } });
+    const a2 = cls({ immediateAction: true, anchorRole: 'orphan_cluster', accountRegCount: 4, dr: { accountName: 'DupCo', opportunityName: 'DupCo Deal 2' } });
+    const { body } = buildCleanupEmail(group([a1, a2]));
+    expect((body.match(/DupCo/g) || []).length).toBe(1);
+    expect(body).toContain('0 closing · 0 final notice · 0 outreach · 1 need attention');
+  });
+});

@@ -14,6 +14,7 @@ import {
   type CleanupClassification,
   type AnchorRole,
 } from '@/lib/drCleanup';
+import { copyRich, escapeHtml } from '@/lib/richClipboard';
 
 const STAGE_META: Record<CleanupStage, { label: string; tone: string; short: string }> = {
   monitoring: { label: 'Monitoring', tone: 'bg-secondary/40 text-muted-foreground', short: 'Monitor' },
@@ -153,16 +154,13 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   };
 
   const copyEmail = async (group: CamCleanupGroup) => {
-    const raw = emails[group.cam];
-    if (!raw) return;
-    const { subject, body } = extractSubject(raw);
-    const payload = `To: ${group.camEmail}\nCC: ${group.aeEmails.join(', ')}\nSubject: ${subject}\n\n${body}`;
-    try {
-      await navigator.clipboard.writeText(payload);
-      toast({ title: 'Copied to clipboard' });
-    } catch {
-      toast({ title: 'Copy failed', variant: 'destructive' });
-    }
+    // Re-derive deterministically so we get the HTML alongside the plain text.
+    const { subject, body, html } = buildCleanupEmail(group);
+    const header = `To: ${group.camEmail}\nCC: ${group.aeEmails.join(', ')}\nSubject: ${subject}`;
+    const plain = `${header}\n\n${body}`;
+    const htmlPayload = `${escapeHtml(header).replace(/\n/g, '<br>')}<br><br>${html}`;
+    const ok = await copyRich(plain, htmlPayload);
+    toast(ok ? { title: 'Copied (formatted)' } : { title: 'Copy failed', variant: 'destructive' });
   };
 
   const openInMail = (group: CamCleanupGroup) => {
@@ -310,7 +308,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                             </Button>
                             {emailText && (
                               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => copyEmail(group)}>
-                                <Copy size={12} /> Copy
+                                <Copy size={12} /> Copy (formatted)
                               </Button>
                             )}
                           </div>
@@ -334,7 +332,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                             )}
                             <div className="flex items-center gap-2 flex-wrap">
                               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => copyEmail(group)} disabled={!emailText}>
-                                <Copy size={12} /> Copy to Clipboard
+                                <Copy size={12} /> Copy (formatted)
                               </Button>
                               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleGenerate(group)} disabled={isLoading || !!bulkProgress}>
                                 <RefreshCw size={12} /> Regenerate
