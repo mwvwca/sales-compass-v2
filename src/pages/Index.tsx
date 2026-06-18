@@ -12,6 +12,7 @@ import DrCleanupPlanSection from '@/components/DrCleanupPlan';
 import { useForecast } from '@/context/ForecastContext';
 import SlipReport from '@/components/SlipReport';
 import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
+import SignOutButton from '@/components/SignOutButton';
 import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
@@ -48,22 +49,25 @@ const Index = () => {
           <DataBackup />
           <WeeklyBriefing />
         </div>
-        <nav className="flex gap-0.5 bg-secondary rounded-md p-0.5">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                tab === t.id
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        <div className="flex items-center gap-3">
+          <nav className="flex gap-0.5 bg-secondary rounded-md p-0.5">
+            {tabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  tab === t.id
+                    ? 'bg-foreground text-background'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </nav>
+          <SignOutButton />
+        </div>
       </header>
 
       <PostImportBriefingBanner />

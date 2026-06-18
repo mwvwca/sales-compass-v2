@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ForecastProvider } from "@/context/ForecastContext";
+import AuthGate from "@/components/AuthGate";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -15,12 +16,14 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <ForecastProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </ForecastProvider>
+        <AuthGate>
+          <ForecastProvider>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ForecastProvider>
+        </AuthGate>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
