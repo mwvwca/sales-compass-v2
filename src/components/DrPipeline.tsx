@@ -38,7 +38,7 @@ function fmtMoney(n: number): string {
 function fmtDollar(n: number): string {
   return `$${Math.round(n || 0).toLocaleString()}`;
 }
-function fmtPct(n: number, digits = 0): string { return `${(n * 100).toFixed(digits)}%`; }
+function fmtPct(n: number | null | undefined, digits = 0): string { return n == null ? '—' : `${(n * 100).toFixed(digits)}%`; }
 
 // Pipeline DR = SQL'd, amount > 0, still open
 function isPipelineDr(d: DealRegistration): boolean {
@@ -1016,10 +1016,11 @@ export default function DrPipeline() {
     const closedWon = drs.filter(d => d.status === 'closed_won').length;
 
     // Win rate on SQL'd deals: resolved-only (won vs lost) among everReachedSql.
+    // null when there are no resolved qualified deals — display layer must guard.
     const resolvedQualified = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
     const sqlClosedWon = resolvedQualified.filter(d => d.status === 'closed_won').length;
     const sqlResolved = resolvedQualified.length;
-    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
+    const winRateOnSQL: number | null = sqlResolved > 0 ? sqlClosedWon / sqlResolved : null;
 
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
@@ -1057,22 +1058,28 @@ export default function DrPipeline() {
     ];
 
     // Insight statement
-    const qualityGap = winRateOnSQL - overallCohortRate;
+    const MIN_RESOLVED = 10;
+    const hasWinRate = winRateOnSQL !== null && sqlResolved >= MIN_RESOLVED;
+    const wr = winRateOnSQL ?? 0;
+    const qualityGap = hasWinRate ? wr - overallCohortRate : 0;
     let insightText: string;
-    if (sqlResolved < 5) {
-      insightText = `Win rate on SQL'd deals is based on only ${sqlResolved} resolved registrations — interpret as a directional floor, not a stable rate.`;
-    } else if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
-      const mult = overallCohortRate > 0 ? Math.round(winRateOnSQL / overallCohortRate) : 0;
-      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
-    } else if (winRateOnSQL < 0.15) {
-      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
+    if (winRateOnSQL === null) {
+      insightText = `Building history (n=0 resolved) — no SQL'd deals have closed yet. Win rate on SQL'd deals needs more import cycles before it is reliable.`;
+    } else if (sqlResolved < MIN_RESOLVED) {
+      insightText = `Building history (n=${sqlResolved} resolved) — win rate on SQL'd deals needs at least ${MIN_RESOLVED} resolved registrations before it is reliable.`;
+    } else if (wr > overallCohortRate * 2 && wr >= 0.2) {
+      const mult = overallCohortRate > 0 ? Math.round(wr / overallCohortRate) : 0;
+      insightText = `AEs are closing ${(wr * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
+    } else if (wr < 0.15) {
+      insightText = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
     } else {
-      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
+      insightText = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
     }
 
     // By-CAM breakdown
     type CamQualityRow = {
-      cam: string; drs: number; sqlRate: number; winRateOnSQL: number; qualityGap: number;
+      cam: string; drs: number; sqlRate: number; winRateOnSQL: number | null; qualityGap: number;
+      sqlResolved: number;
       verdict: 'Lead Quality' | 'Execution' | 'Developing' | 'Performing';
     };
     const byCam = new Map<string, DealRegistration[]>();
@@ -1091,16 +1098,17 @@ export default function DrPipeline() {
       const camSqlRate = camTotal > 0 ? camSql / camTotal : 0;
       const camResolved = deals.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
       const camSqlWon = camResolved.filter(d => d.status === 'closed_won').length;
-      const camWinOnSql = camResolved.length > 0 ? camSqlWon / camResolved.length : 0;
+      const camWinOnSql: number | null = camResolved.length > 0 ? camSqlWon / camResolved.length : null;
       const camWon = deals.filter(d => d.status === 'closed_won').length;
       const camCohortRate = camTotal > 0 ? camWon / camTotal : 0;
-      const camQualityGap = camWinOnSql - camCohortRate;
+      const camQualityGap = camWinOnSql !== null ? camWinOnSql - camCohortRate : 0;
       let verdict: CamQualityRow['verdict'];
       if (camSqlRate < 0.2) verdict = 'Lead Quality';
+      else if (camWinOnSql === null || camResolved.length < 10) verdict = 'Developing';
       else if (camWinOnSql < 0.15) verdict = 'Execution';
       else if (camWinOnSql >= 0.2) verdict = 'Performing';
       else verdict = 'Developing';
-      camRowsDQ.push({ cam, drs: camTotal, sqlRate: camSqlRate, winRateOnSQL: camWinOnSql, qualityGap: camQualityGap, verdict });
+      camRowsDQ.push({ cam, drs: camTotal, sqlRate: camSqlRate, winRateOnSQL: camWinOnSql, qualityGap: camQualityGap, verdict, sqlResolved: camResolved.length });
     }
     const verdictOrder = { 'Lead Quality': 0, 'Execution': 1, 'Developing': 2, 'Performing': 3 } as const;
     camRowsDQ.sort((a, b) => {
@@ -1126,10 +1134,10 @@ export default function DrPipeline() {
     const resolved = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
     const sqlClosedWon = resolved.filter(d => d.status === 'closed_won').length;
     const sqlResolved = resolved.length;
-    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
+    const winRateOnSQL: number | null = sqlResolved > 0 ? sqlClosedWon / sqlResolved : null;
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
-    const qualityGap = winRateOnSQL - overallCohortRate;
+    const qualityGap = winRateOnSQL !== null ? winRateOnSQL - overallCohortRate : 0;
     return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, sqlResolved, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
   }, [scopeNoStatus]);
 
@@ -1343,7 +1351,7 @@ export default function DrPipeline() {
             const dqDef = dealQualityDefensible;
             const dq = dqView === 'defensible' ? dqDef : dqAll;
             const cohortColor = dq.overallCohortRate >= 0.2 ? 'text-green-600 dark:text-green-400' : dq.overallCohortRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
-            const winColor = dq.winRateOnSQL >= 0.25 ? 'text-green-600 dark:text-green-400' : dq.winRateOnSQL >= 0.15 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+            const winColor = dq.winRateOnSQL == null ? 'text-muted-foreground' : dq.winRateOnSQL >= 0.25 ? 'text-green-600 dark:text-green-400' : dq.winRateOnSQL >= 0.15 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
             const dropColor = (d: number) => d > 0.6 ? 'text-red-600 dark:text-red-400' : d >= 0.4 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400';
             const verdictBadge = (v: string) => {
               switch (v) {
@@ -1375,8 +1383,10 @@ export default function DrPipeline() {
             // Dual-view insight statement
             const overallAllPct = (dqAll.overallCohortRate * 100).toFixed(0);
             const overallDefPct = (dqDef.overallCohortRate * 100).toFixed(0);
-            const winDefPct = (dqDef.winRateOnSQL * 100).toFixed(0);
-            const dualInsight = `Overall cohort rate is ${overallAllPct}% across all DRs. On defensible pipeline only — excluding padded and stale registrations — the rate is ${overallDefPct}% with a ${winDefPct}% win rate on SQL'd deals. Partners are diluting results with unqualified volume.`;
+            const winDefPct = dqDef.winRateOnSQL == null ? '—' : `${(dqDef.winRateOnSQL * 100).toFixed(0)}%`;
+            const dualInsight = (dqDef.winRateOnSQL == null || dqDef.sqlResolved < 10)
+              ? `Overall cohort rate is ${overallAllPct}% across all DRs. On defensible pipeline only — excluding padded and stale registrations — the rate is ${overallDefPct}%. Win rate on SQL'd deals is still building history (n=${dqDef.sqlResolved} resolved).`
+              : `Overall cohort rate is ${overallAllPct}% across all DRs. On defensible pipeline only — excluding padded and stale registrations — the rate is ${overallDefPct}% with a ${winDefPct} win rate on SQL'd deals. Partners are diluting results with unqualified volume.`;
             return (
               <section className="border border-border rounded-md">
                 <button
@@ -1495,11 +1505,19 @@ export default function DrPipeline() {
                           </div>
                           <div className="border border-border rounded-md p-3">
                             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Win Rate on SQL'd Deals</p>
-                            <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                              {('sqlResolved' in dq) ? `${(dq as any).sqlClosedWon}/${(dq as any).sqlResolved} resolved (won + lost)` : 'Resolved SQL deals → Closed Won'}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 italic">Based on registrations observed reaching SQL across imports — floor, not absolute.</p>
+                            {dq.winRateOnSQL == null || dq.sqlResolved < 10 ? (
+                              <>
+                                <p className="text-2xl font-semibold mt-1 text-muted-foreground">Building history</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">n={dq.sqlResolved} resolved (needs ≥10)</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 italic">This metric needs more import cycles before it is reliable.</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)} <span className="text-xs font-normal text-muted-foreground">(n={dq.sqlResolved} resolved)</span></p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">{dq.sqlClosedWon}/{dq.sqlResolved} resolved (won + lost)</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 italic">Based on registrations observed reaching SQL across imports — floor, not absolute.</p>
+                              </>
+                            )}
                           </div>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1519,7 +1537,11 @@ export default function DrPipeline() {
                               </div>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-xs">
-                              <p>AEs close at {(dq.winRateOnSQL * 100).toFixed(0)}% when given a qualified lead.</p>
+                              {dq.winRateOnSQL == null ? (
+                                <p>Win rate on SQL'd deals is still building history (n={dq.sqlResolved} resolved).</p>
+                              ) : (
+                                <p>AEs close at {(dq.winRateOnSQL * 100).toFixed(0)}% when given a qualified lead.</p>
+                              )}
                               <p>The overall {(dq.overallCohortRate * 100).toFixed(0)}% reflects leads that never qualified.</p>
                             </TooltipContent>
                           </Tooltip>

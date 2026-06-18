@@ -61,11 +61,12 @@ export interface BriefingPayload {
     dealQualityAnalysis: {
       totalDrs: number;
       sqlRate: number;
-      winRateOnSQL: number;
+      winRateOnSQL: number | null;
+      sqlResolved: number;
       overallCohortRate: number;
       qualityGapPp: number;
       insightStatement: string;
-      primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
+      primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing' | 'building';
     };
     cleanupSummary: CleanupSummary;
   } | null;
@@ -442,23 +443,28 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     const resolvedQ = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
     const sqlClosedWon = resolvedQ.filter(d => d.status === 'closed_won').length;
     const closedWonAll = drs.filter(d => d.status === 'closed_won').length;
-    const winRateOnSQL = resolvedQ.length > 0 ? sqlClosedWon / resolvedQ.length : 0;
+    const sqlResolved = resolvedQ.length;
+    const winRateOnSQL: number | null = sqlResolved > 0 ? sqlClosedWon / sqlResolved : null;
     const overallCohortRate = totalDrsDQ > 0 ? closedWonAll / totalDrsDQ : 0;
     const sqlRateDQ = totalDrsDQ > 0 ? reachedSQL / totalDrsDQ : 0;
-    const qualityGapPp = (winRateOnSQL - overallCohortRate) * 100;
+    const wr = winRateOnSQL ?? 0;
+    const qualityGapPp = winRateOnSQL !== null ? (wr - overallCohortRate) * 100 : 0;
     const nonQualifyingPct = totalDrsDQ > 0 ? ((totalDrsDQ - reachedSQL) / totalDrsDQ * 100).toFixed(0) : '0';
     let insightStatement: string;
-    let primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing';
-    if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
-      const mult = overallCohortRate > 0 ? Math.round(winRateOnSQL / overallCohortRate) : 0;
-      insightStatement = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
+    let primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing' | 'building';
+    if (winRateOnSQL === null || sqlResolved < 10) {
+      insightStatement = `Building history (n=${sqlResolved} resolved) — win rate on SQL'd deals needs at least 10 resolved registrations before it is reliable.`;
+      primaryProblem = 'building';
+    } else if (wr > overallCohortRate * 2 && wr >= 0.2) {
+      const mult = overallCohortRate > 0 ? Math.round(wr / overallCohortRate) : 0;
+      insightStatement = `AEs are closing ${(wr * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
       primaryProblem = 'lead_quality';
-    } else if (winRateOnSQL < 0.15) {
-      insightStatement = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
+    } else if (wr < 0.15) {
+      insightStatement = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
       primaryProblem = sqlRateDQ < 0.2 ? 'both' : 'execution';
     } else {
-      insightStatement = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
-      primaryProblem = winRateOnSQL >= 0.2 ? 'performing' : 'execution';
+      insightStatement = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
+      primaryProblem = wr >= 0.2 ? 'performing' : 'execution';
     }
 
     return {
@@ -474,6 +480,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         totalDrs: totalDrsDQ,
         sqlRate: sqlRateDQ,
         winRateOnSQL,
+        sqlResolved,
         overallCohortRate,
         qualityGapPp,
         insightStatement,

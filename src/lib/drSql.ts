@@ -1,5 +1,21 @@
 import type { DealRegistration } from '@/types/forecast';
 
+/** Normalize a stage string: lowercase, collapse separators/whitespace. */
+function normStage(stage: string | undefined | null): string {
+  return (stage || '').toLowerCase().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Terminal stages whose probability is structural, not earned. */
+export function isTerminalStage(stage: string | undefined | null): boolean {
+  const s = normStage(stage);
+  return s === 'closed won' || s === 'closed lost' || s === 'rejected';
+}
+
+/** Open (non-terminal) and at-or-above 25% probability. */
+export function isOpenSqlStage(stage: string | undefined | null, prob: number | undefined | null): boolean {
+  return (prob ?? 0) >= 0.25 && !isTerminalStage(stage);
+}
+
 /**
  * Is this registration qualified RIGHT NOW (current snapshot)?
  * Use for "open qualified pipeline value" type metrics.
@@ -9,14 +25,13 @@ export function currentlySql(d: Pick<DealRegistration, 'probability'>): boolean 
 }
 
 /**
- * Did this registration EVER reach SQL (probability >= 25%) at any point?
- * Use for cohort conversion, SQL rate, win-rate-on-SQL'd deals.
- * Closed Lost zeroes out probability, so we must consult the permanent markers.
+ * Did this registration EVER reach SQL at any point?
+ * Only counts observed open qualified stages (>=25% AND non-terminal) or a sqlDate stamp.
+ * Closed Won/Lost/Rejected probability is structural and must NOT qualify a deal here.
  */
-export function everReachedSql(d: Pick<DealRegistration, 'probability' | 'sqlDate' | 'stageHistory'>): boolean {
+export function everReachedSql(d: Pick<DealRegistration, 'sqlDate' | 'stageHistory'>): boolean {
   if (d.sqlDate) return true;
-  if ((d.probability ?? 0) >= 0.25) return true;
-  return (d.stageHistory?.some(h => (h.probability ?? 0) >= 0.25)) ?? false;
+  return (d.stageHistory?.some(h => isOpenSqlStage(h.stage, h.probability))) ?? false;
 }
 
 /**

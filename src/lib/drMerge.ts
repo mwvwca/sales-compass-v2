@@ -6,7 +6,7 @@ import type {
 } from '@/types/forecast';
 import { getQuarter } from '@/types/forecast';
 import { parseExcelDate } from './drParser';
-import { currentlySql, daysSinceActivity } from './drSql';
+import { currentlySql, daysSinceActivity, isTerminalStage } from './drSql';
 
 export interface DrBatchStats {
   newCount: number;
@@ -121,6 +121,10 @@ export function mergeDrBatch(
   for (const inc of incoming) {
     const prev = existingMap.get(inc.opportunityId);
     const isSql = inc.probability >= PRE_SQL_PROB;
+    // sqlDate must only be stamped from an OPEN qualified stage.
+    // Terminal stages (Closed Won/Lost/Rejected) carry structural probability and
+    // must not retroactively brand a never-qualified deal as ever-SQL'd.
+    const isOpenSql = isSql && !isTerminalStage(inc.stage);
 
     if (!prev) {
       newCount++;
@@ -137,7 +141,7 @@ export function mergeDrBatch(
           batchId,
         }],
         isSql,
-        sqlDate: isSql ? importedAt.slice(0, 10) : undefined,
+        sqlDate: isOpenSql ? importedAt.slice(0, 10) : undefined,
         status: 'active',
       };
       merged.push(rec);
@@ -151,7 +155,8 @@ export function mergeDrBatch(
         : (prev.stageHistory ?? []);
 
       // sqlDate is PERMANENT once set — never wipe it (the deal qualified at least once).
-      const sqlDate = prev.sqlDate ?? (isSql ? importedAt.slice(0, 10) : undefined);
+      // Only stamp from an OPEN qualified stage.
+      const sqlDate = prev.sqlDate ?? (isOpenSql ? importedAt.slice(0, 10) : undefined);
 
       const rec: DealRegistration = {
         ...prev,
