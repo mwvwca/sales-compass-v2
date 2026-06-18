@@ -973,7 +973,6 @@ export default function DrPipeline() {
     const t = dealQuality.total || 1;
     dqAoa.push(['DRs Registered', dealQuality.total, '100%']);
     dqAoa.push(['Reached SQL (25%+)', dealQuality.reachedSQL, fmtPct(dealQuality.reachedSQL / t, 0)]);
-    dqAoa.push(['In Pipeline', dealQuality.convertedToPipeline, fmtPct(dealQuality.convertedToPipeline / t, 0)]);
     dqAoa.push(['Closed Won', dealQuality.closedWon, fmtPct(dealQuality.closedWon / t, 0)]);
     dqAoa.push([]);
     dqAoa.push(['Key Metrics']);
@@ -1364,20 +1363,24 @@ export default function DrPipeline() {
             };
             const t = dq.total || 1;
             const funnelLabel = dqView === 'defensible' ? 'Defensible DRs' : 'DRs Registered';
+            // Strictly-monotonic funnel: each rung is (intended to be) a subset of the one above.
+            // The old 'In Pipeline' rung used convertedToPipeline (= converted + closed_won +
+            // closed_lost), which is NOT a subset of reachedSQL, so its dropoff could go negative.
+            // We drop it: Registered -> Reached SQL -> Closed Won.
+            const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
             const funnelStages = [
               { label: funnelLabel, count: dq.total, pct: 1, color: 'bg-muted-foreground/40' },
-              { label: 'Reached SQL (25%+)', count: dq.reachedSQL, pct: dq.reachedSQL / t, color: 'bg-blue-500/70' },
-              { label: 'In Pipeline', count: dq.convertedToPipeline, pct: dq.convertedToPipeline / t, color: 'bg-amber-500/70' },
-              { label: 'Closed Won', count: dq.closedWon, pct: dq.closedWon / t, color: 'bg-green-500/70' },
+              { label: 'Reached SQL (25%+)', count: dq.reachedSQL, pct: clamp01(dq.reachedSQL / t), color: 'bg-blue-500/70' },
+              { label: 'Closed Won', count: dq.closedWon, pct: clamp01(dq.closedWon / t), color: 'bg-green-500/70' },
             ];
+            // Clamp to [0,1]: closedWon is not guaranteed a subset of reachedSQL (closed-stage
+            // probability is structural and excluded by everReachedSql), so guard against negatives.
             const dropoffs = [
-              dq.total > 0 ? (dq.total - dq.reachedSQL) / dq.total : 0,
-              dq.reachedSQL > 0 ? (dq.reachedSQL - dq.convertedToPipeline) / dq.reachedSQL : 0,
-              dq.convertedToPipeline > 0 ? (dq.convertedToPipeline - dq.closedWon) / dq.convertedToPipeline : 0,
+              clamp01(dq.total > 0 ? (dq.total - dq.reachedSQL) / dq.total : 0),
+              clamp01(dq.reachedSQL > 0 ? (dq.reachedSQL - dq.closedWon) / dq.reachedSQL : 0),
             ];
             const dropLabels = [
               'did not qualify',
-              'did not convert',
               'did not close',
             ];
             // Dual-view insight statement
