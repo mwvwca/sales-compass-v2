@@ -1078,7 +1078,8 @@ export default function DrPipeline() {
 
     // By-CAM breakdown
     type CamQualityRow = {
-      cam: string; drs: number; sqlRate: number; winRateOnSQL: number; qualityGap: number;
+      cam: string; drs: number; sqlRate: number; winRateOnSQL: number | null; qualityGap: number;
+      sqlResolved: number;
       verdict: 'Lead Quality' | 'Execution' | 'Developing' | 'Performing';
     };
     const byCam = new Map<string, DealRegistration[]>();
