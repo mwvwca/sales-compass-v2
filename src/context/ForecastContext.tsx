@@ -1,4 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
+import { useToast } from '@/hooks/use-toast';
 import type {
   Rep,
   Opportunity,
@@ -56,6 +60,70 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 
 function saveToStorage<T>(key: string, data: T) {
   localStorage.setItem(key, JSON.stringify(data));
+}
+
+// ---- Slice cleanup/migration, shared by the localStorage initializer and the
+// ---- Supabase hydration path so both apply identical normalization. ----
+const SF_ID = /^006[A-Za-z0-9]{12,15}$/;
+
+/** Migrate an opportunity's classification when its Salesforce stage is terminal. */
+function migrateOppClassification(o: Opportunity): Opportunity {
+  const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
+  const terminal = o.classification === 'closed_won' || o.classification === 'omitted' || o.classification === 'lost' || o.classification === 'rejected';
+  if (stageNorm === 'closed won' && !terminal) {
+    return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
+  }
+  if (stageNorm === 'closed lost' && o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'rejected') {
+    return { ...o, previousClassification: o.classification, classification: 'lost' as const, lostDate: o.lostDate || new Date().toISOString(), lostReason: o.lostReason || 'Closed Lost in Salesforce', movedAt: new Date().toISOString() };
+  }
+  if (stageNorm === 'rejected' && o.classification !== 'rejected' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'lost') {
+    return { ...o, previousClassification: o.classification, classification: 'rejected' as const, lostDate: o.lostDate || new Date().toISOString(), lostReason: o.lostReason || 'Rejected in Salesforce', movedAt: new Date().toISOString() };
+  }
+  return o;
+}
+
+/** Purge corrupted Salesforce footer rows, backfill salesforceId, migrate stages. */
+function cleanOpportunities(raw: unknown): Opportunity[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr
+    .filter((o: any) => SF_ID.test(o?.salesforceId || '') || SF_ID.test(o?.id || ''))
+    .map((o: any) => ({
+      ...o,
+      salesforceId: o.salesforceId ?? (typeof o.id === 'string' && /^[0-9a-zA-Z]{15,18}$/.test(o.id) ? o.id : undefined),
+    }) as Opportunity)
+    .map(migrateOppClassification);
+}
+
+function cleanChangelog(raw: unknown): ChangeLogEntry[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr.filter((e: any) => SF_ID.test(e?.opportunityId || ''));
+}
+
+function cleanSnapshots(raw: unknown): OpportunitySnapshot[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr.filter((s: any) => SF_ID.test(s?.opportunityId || ''));
+}
+
+function cleanReps(raw: unknown): Rep[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr.map((r: any) => ({ ...r, isActive: r.isActive === undefined ? true : !!r.isActive }));
+}
+
+function cleanDealRegistrations(raw: unknown): DealRegistration[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr.map((dr: any) => ({ ...dr, stageHistory: dr.stageHistory ?? [] }));
+}
+
+/** Apply the slice-specific cleanup to a value hydrated from Supabase. */
+function normalizeHydratedField(field: string, value: unknown): unknown {
+  switch (field) {
+    case 'reps': return cleanReps(value);
+    case 'opportunities': return cleanOpportunities(value);
+    case 'changelog': return cleanChangelog(value);
+    case 'snapshots': return cleanSnapshots(value);
+    case 'dealRegistrations': return cleanDealRegistrations(value);
+    default: return value;
+  }
 }
 
 const MAX_SNAPSHOTS = 5000;
@@ -218,96 +286,84 @@ function getWindowForecastContext(): ForecastContextValue | null {
 const ForecastContext = createContext<ForecastContextValue | null>(null);
 
 export function ForecastProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<ForecastState>(() => {
-    const sfIdPattern = /^006[A-Za-z0-9]{12,15}$/;
+  const { toast } = useToast();
+  const [hydrated, setHydrated] = useState(false);
+  const userIdRef = useRef<string | null>(null);
+  const settledRef = useRef(false);
+  const lastSavedRef = useRef<Record<string, string>>({});
 
-    const rawOpps = loadFromStorage<Opportunity[]>(STORAGE_KEYS.opportunities, []);
-    // One-time cleanup: purge corrupted Salesforce footer rows ("Total", "Confidential", copyright)
-    // that lack a valid Salesforce Opportunity ID.
-    const cleanedOpps = rawOpps.filter((o: any) =>
-      sfIdPattern.test(o.salesforceId || '') || sfIdPattern.test(o.id || '')
-    );
-    if (cleanedOpps.length !== rawOpps.length) {
-      try { localStorage.setItem(STORAGE_KEYS.opportunities, JSON.stringify(cleanedOpps)); } catch { /* noop */ }
-    }
-    // Backward-compat: ensure salesforceId field exists on every record.
-    // Legacy records used the Salesforce Opportunity ID as their internal `id`,
-    // so use that as the salesforceId fallback. New imports populate it explicitly.
-    const opportunities = cleanedOpps.map((o: any) => ({
-      ...o,
-      salesforceId: o.salesforceId ?? (typeof o.id === 'string' && /^[0-9a-zA-Z]{15,18}$/.test(o.id) ? o.id : undefined),
-    })) as Opportunity[];
+  const [state, setState] = useState<ForecastState>(() => ({
+    reps: cleanReps(loadFromStorage<Rep[]>(STORAGE_KEYS.reps, [])),
+    opportunities: cleanOpportunities(loadFromStorage<Opportunity[]>(STORAGE_KEYS.opportunities, [])),
+    imports: loadFromStorage(STORAGE_KEYS.imports, []),
+    changelog: cleanChangelog(loadFromStorage<ChangeLogEntry[]>(STORAGE_KEYS.changelog, [])),
+    snapshots: cleanSnapshots(loadFromStorage<OpportunitySnapshot[]>(STORAGE_KEYS.snapshots, [])),
+    commissionSettings: loadFromStorage(STORAGE_KEYS.commissionSettings, {}),
+    commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
+    commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
+    monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
+    monthlyManagerCommits: loadFromStorage<MonthlyManagerCommit[]>(STORAGE_KEYS.monthlyManagerCommits, []),
+    forecastPromotions: loadFromStorage<ForecastPromotion[]>(STORAGE_KEYS.forecastPromotions, []),
+    forecastSnapshots: loadFromStorage<ForecastSnapshot[]>(STORAGE_KEYS.forecastSnapshots, []),
+    dealRegistrations: cleanDealRegistrations(loadFromStorage<DealRegistration[]>(STORAGE_KEYS.dealRegistrations, [])),
+    drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
+    managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
+    weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
 
-    const rawChangelog = loadFromStorage<any[]>(STORAGE_KEYS.changelog, []);
-    const cleanedChangelog = rawChangelog.filter(e => sfIdPattern.test(e?.opportunityId || ''));
-    if (cleanedChangelog.length !== rawChangelog.length) {
-      try { localStorage.setItem(STORAGE_KEYS.changelog, JSON.stringify(cleanedChangelog)); } catch { /* noop */ }
-    }
+    loading: false,
+  }));
 
-    const rawSnapshots = loadFromStorage<OpportunitySnapshot[]>(STORAGE_KEYS.snapshots, []);
-    const cleanedSnapshots = rawSnapshots.filter(s => sfIdPattern.test(s?.opportunityId || ''));
-    if (cleanedSnapshots.length !== rawSnapshots.length) {
-      try { localStorage.setItem(STORAGE_KEYS.snapshots, JSON.stringify(cleanedSnapshots)); } catch { /* noop */ }
-    }
-
-
-    const migrated = opportunities.map(o => {
-      const stageNorm = (o.stage || '').toLowerCase().trim().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
-      const terminal = o.classification === 'closed_won' || o.classification === 'omitted' || o.classification === 'lost' || o.classification === 'rejected';
-      if (stageNorm === 'closed won' && !terminal) {
-        return { ...o, previousClassification: o.classification, classification: 'closed_won' as const, movedAt: new Date().toISOString() };
+  // One-time cloud hydration: overlay Supabase app_state onto the localStorage
+  // state (cloud wins per key when present). Never blocks — on error or after a
+  // 3s timeout we proceed with the local copy. Keeps localStorage as the offline
+  // fallback (the initializer above and the save effect below are unchanged).
+  useEffect(() => {
+    const settle = (offline: boolean) => {
+      if (settledRef.current) return;
+      settledRef.current = true;
+      if (offline) {
+        toast({
+          title: 'Working offline',
+          description: "Couldn't reach the cloud — working from this device's local copy.",
+        });
       }
-      if (stageNorm === 'closed lost' && o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'rejected') {
-        return {
-          ...o,
-          previousClassification: o.classification,
-          classification: 'lost' as const,
-          lostDate: o.lostDate || new Date().toISOString(),
-          lostReason: o.lostReason || 'Closed Lost in Salesforce',
-          movedAt: new Date().toISOString(),
-        };
-      }
-      if (stageNorm === 'rejected' && o.classification !== 'rejected' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'lost') {
-        return {
-          ...o,
-          previousClassification: o.classification,
-          classification: 'rejected' as const,
-          lostDate: o.lostDate || new Date().toISOString(),
-          lostReason: o.lostReason || 'Rejected in Salesforce',
-          movedAt: new Date().toISOString(),
-        };
-      }
-      return o;
-    });
-
-    return {
-      reps: loadFromStorage<Rep[]>(STORAGE_KEYS.reps, []).map((r: any) => ({
-        ...r,
-        isActive: r.isActive === undefined ? true : !!r.isActive,
-      })),
-      opportunities: migrated,
-      imports: loadFromStorage(STORAGE_KEYS.imports, []),
-      changelog: cleanedChangelog,
-      snapshots: cleanedSnapshots,
-      commissionSettings: loadFromStorage(STORAGE_KEYS.commissionSettings, {}),
-      commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
-      commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
-      monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
-      monthlyManagerCommits: loadFromStorage<MonthlyManagerCommit[]>(STORAGE_KEYS.monthlyManagerCommits, []),
-      forecastPromotions: loadFromStorage<ForecastPromotion[]>(STORAGE_KEYS.forecastPromotions, []),
-      forecastSnapshots: loadFromStorage<ForecastSnapshot[]>(STORAGE_KEYS.forecastSnapshots, []),
-      dealRegistrations: loadFromStorage<DealRegistration[]>(STORAGE_KEYS.dealRegistrations, []).map((dr: any) => ({
-        ...dr,
-        stageHistory: dr.stageHistory ?? [],
-      })),
-      drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
-      managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
-      weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
-
-
-      loading: false,
+      setHydrated(true);
     };
-  });
+
+    const fallback = setTimeout(() => settle(true), 3000);
+
+    (async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        userIdRef.current = userData.user?.id ?? null;
+        const { data, error } = await supabase.from('app_state').select('key, value');
+        if (error) throw error;
+        if (settledRef.current) return; // already fell back; don't yank state away
+        const cloud = new Map<string, unknown>((data ?? []).map(row => [row.key, row.value]));
+        if (cloud.size > 0) {
+          setState(prev => {
+            const next: Record<string, unknown> = { ...prev };
+            for (const [field, storageKey] of Object.entries(STORAGE_KEYS)) {
+              if (cloud.has(storageKey)) {
+                next[field] = normalizeHydratedField(field, cloud.get(storageKey));
+                // Seed the dirty-tracker so unchanged cloud keys aren't re-uploaded.
+                lastSavedRef.current[storageKey] = JSON.stringify(next[field]);
+              }
+            }
+            return next as unknown as ForecastState;
+          });
+        }
+        clearTimeout(fallback);
+        settle(false);
+      } catch {
+        clearTimeout(fallback);
+        settle(true);
+      }
+    })();
+
+    return () => clearTimeout(fallback);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
@@ -338,7 +394,29 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     if (sizeKB > 4000) {
       console.warn(`[Forecast] localStorage usage: ${sizeKB}KB / ~5000KB. Consider exporting a backup.`);
     }
+
+    // Cloud write-through (in addition to localStorage). Gated on `hydrated` so a
+    // mount-time save never overwrites real cloud data with empty defaults; and on
+    // a known user id (RLS upsert requires user_id). Only changed keys are sent.
+    if (hydrated && userIdRef.current) {
+      const userId = userIdRef.current;
+      const rows: { user_id: string; key: string; value: Json }[] = [];
+      for (const [field, storageKey] of Object.entries(STORAGE_KEYS)) {
+        const value = (state as Record<string, unknown>)[field];
+        const json = JSON.stringify(value);
+        if (lastSavedRef.current[storageKey] !== json) {
+          rows.push({ user_id: userId, key: storageKey, value: value as Json });
+          lastSavedRef.current[storageKey] = json;
+        }
+      }
+      if (rows.length > 0) {
+        supabase.from('app_state').upsert(rows, { onConflict: 'user_id,key' }).then(({ error }) => {
+          if (error) console.warn('[Forecast] cloud sync failed:', error.message);
+        });
+      }
+    }
   }, [
+    hydrated,
     state.reps,
     state.opportunities,
     state.imports,
@@ -1049,6 +1127,14 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, [contextValue]);
+
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground">
+        <Loader2 size={20} className="animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <ForecastContext.Provider value={contextValue}>
