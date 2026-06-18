@@ -1097,16 +1097,17 @@ export default function DrPipeline() {
       const camSqlRate = camTotal > 0 ? camSql / camTotal : 0;
       const camResolved = deals.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
       const camSqlWon = camResolved.filter(d => d.status === 'closed_won').length;
-      const camWinOnSql = camResolved.length > 0 ? camSqlWon / camResolved.length : 0;
+      const camWinOnSql: number | null = camResolved.length > 0 ? camSqlWon / camResolved.length : null;
       const camWon = deals.filter(d => d.status === 'closed_won').length;
       const camCohortRate = camTotal > 0 ? camWon / camTotal : 0;
-      const camQualityGap = camWinOnSql - camCohortRate;
+      const camQualityGap = camWinOnSql !== null ? camWinOnSql - camCohortRate : 0;
       let verdict: CamQualityRow['verdict'];
       if (camSqlRate < 0.2) verdict = 'Lead Quality';
+      else if (camWinOnSql === null || camResolved.length < 10) verdict = 'Developing';
       else if (camWinOnSql < 0.15) verdict = 'Execution';
       else if (camWinOnSql >= 0.2) verdict = 'Performing';
       else verdict = 'Developing';
-      camRowsDQ.push({ cam, drs: camTotal, sqlRate: camSqlRate, winRateOnSQL: camWinOnSql, qualityGap: camQualityGap, verdict });
+      camRowsDQ.push({ cam, drs: camTotal, sqlRate: camSqlRate, winRateOnSQL: camWinOnSql, qualityGap: camQualityGap, verdict, sqlResolved: camResolved.length });
     }
     const verdictOrder = { 'Lead Quality': 0, 'Execution': 1, 'Developing': 2, 'Performing': 3 } as const;
     camRowsDQ.sort((a, b) => {
