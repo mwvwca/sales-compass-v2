@@ -1134,10 +1134,10 @@ export default function DrPipeline() {
     const resolved = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
     const sqlClosedWon = resolved.filter(d => d.status === 'closed_won').length;
     const sqlResolved = resolved.length;
-    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
+    const winRateOnSQL: number | null = sqlResolved > 0 ? sqlClosedWon / sqlResolved : null;
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
-    const qualityGap = winRateOnSQL - overallCohortRate;
+    const qualityGap = winRateOnSQL !== null ? winRateOnSQL - overallCohortRate : 0;
     return { total, reachedSQL, convertedToPipeline, closedWon, sqlClosedWon, sqlResolved, winRateOnSQL, overallCohortRate, sqlRate, qualityGap };
   }, [scopeNoStatus]);
 
