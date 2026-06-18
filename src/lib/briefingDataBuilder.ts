@@ -480,6 +480,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         totalDrs: totalDrsDQ,
         sqlRate: sqlRateDQ,
         winRateOnSQL,
+        sqlResolved,
         overallCohortRate,
         qualityGapPp,
         insightStatement,
