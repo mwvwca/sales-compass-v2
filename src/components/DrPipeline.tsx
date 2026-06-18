@@ -1016,10 +1016,11 @@ export default function DrPipeline() {
     const closedWon = drs.filter(d => d.status === 'closed_won').length;
 
     // Win rate on SQL'd deals: resolved-only (won vs lost) among everReachedSql.
+    // null when there are no resolved qualified deals — display layer must guard.
     const resolvedQualified = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
     const sqlClosedWon = resolvedQualified.filter(d => d.status === 'closed_won').length;
     const sqlResolved = resolvedQualified.length;
-    const winRateOnSQL = sqlResolved > 0 ? sqlClosedWon / sqlResolved : 0;
+    const winRateOnSQL: number | null = sqlResolved > 0 ? sqlClosedWon / sqlResolved : null;
 
     const overallCohortRate = total > 0 ? closedWon / total : 0;
     const sqlRate = total > 0 ? reachedSQL / total : 0;
