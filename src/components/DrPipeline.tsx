@@ -1383,8 +1383,10 @@ export default function DrPipeline() {
             // Dual-view insight statement
             const overallAllPct = (dqAll.overallCohortRate * 100).toFixed(0);
             const overallDefPct = (dqDef.overallCohortRate * 100).toFixed(0);
-            const winDefPct = (dqDef.winRateOnSQL * 100).toFixed(0);
-            const dualInsight = `Overall cohort rate is ${overallAllPct}% across all DRs. On defensible pipeline only — excluding padded and stale registrations — the rate is ${overallDefPct}% with a ${winDefPct}% win rate on SQL'd deals. Partners are diluting results with unqualified volume.`;
+            const winDefPct = dqDef.winRateOnSQL == null ? '—' : `${(dqDef.winRateOnSQL * 100).toFixed(0)}%`;
+            const dualInsight = (dqDef.winRateOnSQL == null || dqDef.sqlResolved < 10)
+              ? `Overall cohort rate is ${overallAllPct}% across all DRs. On defensible pipeline only — excluding padded and stale registrations — the rate is ${overallDefPct}%. Win rate on SQL'd deals is still building history (n=${dqDef.sqlResolved} resolved).`
+              : `Overall cohort rate is ${overallAllPct}% across all DRs. On defensible pipeline only — excluding padded and stale registrations — the rate is ${overallDefPct}% with a ${winDefPct} win rate on SQL'd deals. Partners are diluting results with unqualified volume.`;
             return (
               <section className="border border-border rounded-md">
                 <button
