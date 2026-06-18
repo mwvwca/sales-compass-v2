@@ -1058,17 +1058,22 @@ export default function DrPipeline() {
     ];
 
     // Insight statement
-    const qualityGap = winRateOnSQL - overallCohortRate;
+    const MIN_RESOLVED = 10;
+    const hasWinRate = winRateOnSQL !== null && sqlResolved >= MIN_RESOLVED;
+    const wr = winRateOnSQL ?? 0;
+    const qualityGap = hasWinRate ? wr - overallCohortRate : 0;
     let insightText: string;
-    if (sqlResolved < 5) {
-      insightText = `Win rate on SQL'd deals is based on only ${sqlResolved} resolved registrations — interpret as a directional floor, not a stable rate.`;
-    } else if (winRateOnSQL > overallCohortRate * 2 && winRateOnSQL >= 0.2) {
-      const mult = overallCohortRate > 0 ? Math.round(winRateOnSQL / overallCohortRate) : 0;
-      insightText = `AEs are closing ${(winRateOnSQL * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
-    } else if (winRateOnSQL < 0.15) {
-      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
+    if (winRateOnSQL === null) {
+      insightText = `Building history (n=0 resolved) — no SQL'd deals have closed yet. Win rate on SQL'd deals needs more import cycles before it is reliable.`;
+    } else if (sqlResolved < MIN_RESOLVED) {
+      insightText = `Building history (n=${sqlResolved} resolved) — win rate on SQL'd deals needs at least ${MIN_RESOLVED} resolved registrations before it is reliable.`;
+    } else if (wr > overallCohortRate * 2 && wr >= 0.2) {
+      const mult = overallCohortRate > 0 ? Math.round(wr / overallCohortRate) : 0;
+      insightText = `AEs are closing ${(wr * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
+    } else if (wr < 0.15) {
+      insightText = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
     } else {
-      insightText = `Win rate on qualified deals is ${(winRateOnSQL * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
+      insightText = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
     }
 
     // By-CAM breakdown
