@@ -1505,11 +1505,19 @@ export default function DrPipeline() {
                           </div>
                           <div className="border border-border rounded-md p-3">
                             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Win Rate on SQL'd Deals</p>
-                            <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                              {('sqlResolved' in dq) ? `${(dq as any).sqlClosedWon}/${(dq as any).sqlResolved} resolved (won + lost)` : 'Resolved SQL deals → Closed Won'}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 italic">Based on registrations observed reaching SQL across imports — floor, not absolute.</p>
+                            {dq.winRateOnSQL == null || dq.sqlResolved < 10 ? (
+                              <>
+                                <p className="text-2xl font-semibold mt-1 text-muted-foreground">Building history</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">n={dq.sqlResolved} resolved (needs ≥10)</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 italic">This metric needs more import cycles before it is reliable.</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className={`text-2xl font-semibold mt-1 ${winColor}`}>{fmtPct(dq.winRateOnSQL, 1)} <span className="text-xs font-normal text-muted-foreground">(n={dq.sqlResolved} resolved)</span></p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">{dq.sqlClosedWon}/{dq.sqlResolved} resolved (won + lost)</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 italic">Based on registrations observed reaching SQL across imports — floor, not absolute.</p>
+                              </>
+                            )}
                           </div>
                           <Tooltip>
                             <TooltipTrigger asChild>
