@@ -287,7 +287,12 @@ const ForecastContext = createContext<ForecastContextValue | null>(null);
 
 export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
+  // `hydrated` = ok to render (set on success OR offline fallback, so the app
+  // never hangs). `cloudWritable` = ok to push to the cloud — set ONLY after a
+  // successful read, so a slow/failed read on a fresh device can't overwrite
+  // unseen cloud data with empty local defaults.
   const [hydrated, setHydrated] = useState(false);
+  const [cloudWritable, setCloudWritable] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const settledRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
@@ -326,6 +331,10 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           title: 'Working offline',
           description: "Couldn't reach the cloud — working from this device's local copy.",
         });
+      } else {
+        // Only a real successful read enables cloud writes (even if the cloud was
+        // empty — that lets first-run seeding from localStorage proceed).
+        setCloudWritable(true);
       }
       setHydrated(true);
     };
@@ -395,10 +404,11 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       console.warn(`[Forecast] localStorage usage: ${sizeKB}KB / ~5000KB. Consider exporting a backup.`);
     }
 
-    // Cloud write-through (in addition to localStorage). Gated on `hydrated` so a
-    // mount-time save never overwrites real cloud data with empty defaults; and on
-    // a known user id (RLS upsert requires user_id). Only changed keys are sent.
-    if (hydrated && userIdRef.current) {
+    // Cloud write-through (in addition to localStorage). Gated on `cloudWritable`
+    // — true only after a successful cloud read — so an offline/timeout fallback
+    // never pushes empty local defaults over unseen cloud data. Also requires a
+    // known user id (RLS upsert needs user_id). Only changed keys are sent.
+    if (cloudWritable && userIdRef.current) {
       const userId = userIdRef.current;
       const rows: { user_id: string; key: string; value: Json }[] = [];
       for (const [field, storageKey] of Object.entries(STORAGE_KEYS)) {
@@ -416,7 +426,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [
-    hydrated,
+    cloudWritable,
     state.reps,
     state.opportunities,
     state.imports,
