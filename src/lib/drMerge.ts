@@ -23,6 +23,28 @@ function isRejectedStage(stage: string): boolean {
   return (stage || '').toLowerCase().trim() === 'rejected';
 }
 
+/**
+ * Normalize a Salesforce Opportunity ID for joining. Salesforce IDs come in a
+ * 15-char (case-sensitive) and an 18-char (15 + case-insensitive checksum) form;
+ * the first 15 chars are the canonical identity. Both the DR parser and the
+ * forecast parser accept 15–18 char IDs, so normalize both sides to 15 before
+ * joining to guard against a 15-vs-18 mismatch.
+ */
+function normSfId(id: string | undefined): string {
+  return (id || '').trim().slice(0, 15);
+}
+
+const stageNorm = (stage: string): string =>
+  (stage || '').toLowerCase().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Terminal DR status from a stage string ('Closed Won'/'Closed Lost'), else null. */
+function terminalStatusFromStage(stage: string): DrStatus | null {
+  const s = stageNorm(stage);
+  if (s === 'closed won') return 'closed_won';
+  if (s === 'closed lost') return 'closed_lost';
+  return null;
+}
+
 /** Stale = not rejected, not currently SQL, no activity for STALE_DAYS+. */
 function isStaleFor(d: DealRegistration, today: Date): boolean {
   if (isRejectedStage(d.stage)) return false;
@@ -32,9 +54,8 @@ function isStaleFor(d: DealRegistration, today: Date): boolean {
 
 function classifyByPipeline(opp: Opportunity | undefined): { status: DrStatus } | null {
   if (!opp) return null;
-  const stageNorm = (opp.stage || '').toLowerCase().replace(/[-_/]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (stageNorm === 'closed won') return { status: 'closed_won' };
-  if (stageNorm === 'closed lost') return { status: 'closed_lost' };
+  const terminal = terminalStatusFromStage(opp.stage);
+  if (terminal) return { status: terminal };
   return { status: 'converted' };
 }
 
@@ -106,7 +127,7 @@ export function mergeDrBatch(
   const oppMap = new Map(
     opportunities
       .filter(o => o.salesforceId)
-      .map(o => [o.salesforceId!, o])
+      .map(o => [normSfId(o.salesforceId), o])
   );
 
   let newCount = 0;
@@ -197,7 +218,7 @@ export function mergeDrBatch(
   // Step 2: existing records NOT in incoming → withdrawn or converted (pipeline match)
   for (const prev of existing) {
     if (incomingMap.has(prev.opportunityId)) continue;
-    const opp = oppMap.get(prev.opportunityId);
+    const opp = oppMap.get(normSfId(prev.opportunityId));
     const pipelineClass = classifyByPipeline(opp);
 
     if (pipelineClass) {
@@ -247,7 +268,7 @@ export function mergeDrBatch(
     }
 
     // 2) Pipeline match
-    const opp = oppMap.get(r.opportunityId);
+    const opp = oppMap.get(normSfId(r.opportunityId));
     const pipelineClass = classifyByPipeline(opp);
     if (pipelineClass) {
       const isFirstConversion = !r.convertedAt;
@@ -256,6 +277,27 @@ export function mergeDrBatch(
       merged[i] = {
         ...r,
         status: pipelineClass.status,
+        convertedAt: r.convertedAt || importedAt,
+        ...cycle,
+      };
+      continue;
+    }
+
+    // 2b) Terminal status from the DR's OWN stage — honored when no Opportunity matched.
+    // The DR export already carries the real stage, so a DR whose own Stage is
+    // "Closed Won"/"Closed Lost" must not silently fall through to sql/stale/active
+    // just because the pipeline join missed. Live opp data (above) still wins when present.
+    const drTerminal = terminalStatusFromStage(r.stage);
+    if (drTerminal) {
+      const isFirstConversion = !r.convertedAt;
+      if (isFirstConversion) convertedCount++;
+      // No matched opp here, so derive cycle fields from the DR's own closeDate.
+      const cycle = drTerminal === 'closed_won'
+        ? computeCycleFields(r, { closeDate: r.closeDate } as Opportunity)
+        : {};
+      merged[i] = {
+        ...r,
+        status: drTerminal,
         convertedAt: r.convertedAt || importedAt,
         ...cycle,
       };
