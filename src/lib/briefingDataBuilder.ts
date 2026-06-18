@@ -61,8 +61,8 @@ export interface BriefingPayload {
     dealQualityAnalysis: {
       totalDrs: number;
       sqlRate: number;
-      winRateOnSQL: number | null;
-      sqlResolved: number;
+      winRate: number | null;
+      resolvedCount: number;
       overallCohortRate: number;
       qualityGapPp: number;
       insightStatement: string;
@@ -440,30 +440,32 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     const nonRej = drs.filter(d => d.status !== 'rejected');
     const totalDrsDQ = nonRej.length;
     const reachedSQL = nonRej.filter(everReachedSql).length;
-    const resolvedQ = drs.filter(d => everReachedSql(d) && (d.status === 'closed_won' || d.status === 'closed_lost'));
-    const sqlClosedWon = resolvedQ.filter(d => d.status === 'closed_won').length;
+    // Win rate: conventional Closed Won / (Closed Won + Closed Lost) over ALL resolved
+    // deals. NOT gated on everReachedSql, so deals imported already-closed are counted.
+    const resolved = drs.filter(d => d.status === 'closed_won' || d.status === 'closed_lost');
+    const closedWonR = resolved.filter(d => d.status === 'closed_won').length;
     const closedWonAll = drs.filter(d => d.status === 'closed_won').length;
-    const sqlResolved = resolvedQ.length;
-    const winRateOnSQL: number | null = sqlResolved > 0 ? sqlClosedWon / sqlResolved : null;
+    const resolvedCount = resolved.length;
+    const winRate: number | null = resolvedCount > 0 ? closedWonR / resolvedCount : null;
     const overallCohortRate = totalDrsDQ > 0 ? closedWonAll / totalDrsDQ : 0;
     const sqlRateDQ = totalDrsDQ > 0 ? reachedSQL / totalDrsDQ : 0;
-    const wr = winRateOnSQL ?? 0;
-    const qualityGapPp = winRateOnSQL !== null ? (wr - overallCohortRate) * 100 : 0;
+    const wr = winRate ?? 0;
+    const qualityGapPp = winRate !== null ? (wr - overallCohortRate) * 100 : 0;
     const nonQualifyingPct = totalDrsDQ > 0 ? ((totalDrsDQ - reachedSQL) / totalDrsDQ * 100).toFixed(0) : '0';
     let insightStatement: string;
     let primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing' | 'building';
-    if (winRateOnSQL === null || sqlResolved < 10) {
-      insightStatement = `Building history (n=${sqlResolved} resolved) — win rate on SQL'd deals needs at least 10 resolved registrations before it is reliable.`;
+    if (winRate === null || resolvedCount < 10) {
+      insightStatement = `Building history (n=${resolvedCount} resolved) — win rate needs at least 10 resolved deals before it is reliable.`;
       primaryProblem = 'building';
     } else if (wr > overallCohortRate * 2 && wr >= 0.2) {
       const mult = overallCohortRate > 0 ? Math.round(wr / overallCohortRate) : 0;
-      insightStatement = `AEs are closing ${(wr * 100).toFixed(0)}% of qualified deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% rate. The gap is explained by leads that never reached SQL.`;
+      insightStatement = `AEs are closing ${(wr * 100).toFixed(0)}% of resolved deals — ${mult}x the overall ${(overallCohortRate * 100).toFixed(0)}% cohort rate. The gap is explained by registrations that never reached a close.`;
       primaryProblem = 'lead_quality';
     } else if (wr < 0.15) {
-      insightStatement = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
+      insightStatement = `Win rate is ${(wr * 100).toFixed(0)}% — below the threshold where closing performance becomes a concern. Both lead quality and AE execution need attention.`;
       primaryProblem = sqlRateDQ < 0.2 ? 'both' : 'execution';
     } else {
-      insightStatement = `Win rate on qualified deals is ${(wr * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall. The gap is explained by leads that never reached SQL.`;
+      insightStatement = `Win rate is ${(wr * 100).toFixed(0)}% — compared to ${(overallCohortRate * 100).toFixed(0)}% overall cohort rate. The gap is explained by registrations that never closed.`;
       primaryProblem = wr >= 0.2 ? 'performing' : 'execution';
     }
 
@@ -479,8 +481,8 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       dealQualityAnalysis: {
         totalDrs: totalDrsDQ,
         sqlRate: sqlRateDQ,
-        winRateOnSQL,
-        sqlResolved,
+        winRate,
+        resolvedCount,
         overallCohortRate,
         qualityGapPp,
         insightStatement,
