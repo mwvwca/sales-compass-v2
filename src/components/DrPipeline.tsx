@@ -38,7 +38,7 @@ function fmtMoney(n: number): string {
 function fmtDollar(n: number): string {
   return `$${Math.round(n || 0).toLocaleString()}`;
 }
-function fmtPct(n: number, digits = 0): string { return `${(n * 100).toFixed(digits)}%`; }
+function fmtPct(n: number | null | undefined, digits = 0): string { return n == null ? '—' : `${(n * 100).toFixed(digits)}%`; }
 
 // Pipeline DR = SQL'd, amount > 0, still open
 function isPipelineDr(d: DealRegistration): boolean {
