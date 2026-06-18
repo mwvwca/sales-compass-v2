@@ -1351,7 +1351,7 @@ export default function DrPipeline() {
             const dqDef = dealQualityDefensible;
             const dq = dqView === 'defensible' ? dqDef : dqAll;
             const cohortColor = dq.overallCohortRate >= 0.2 ? 'text-green-600 dark:text-green-400' : dq.overallCohortRate >= 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
-            const winColor = dq.winRateOnSQL >= 0.25 ? 'text-green-600 dark:text-green-400' : dq.winRateOnSQL >= 0.15 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+            const winColor = dq.winRateOnSQL == null ? 'text-muted-foreground' : dq.winRateOnSQL >= 0.25 ? 'text-green-600 dark:text-green-400' : dq.winRateOnSQL >= 0.15 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
             const dropColor = (d: number) => d > 0.6 ? 'text-red-600 dark:text-red-400' : d >= 0.4 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400';
             const verdictBadge = (v: string) => {
               switch (v) {
