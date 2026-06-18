@@ -9,6 +9,7 @@ import { parseDrExport } from '@/lib/drParser';
 import { mergeDrBatch } from '@/lib/drMerge';
 import type { DealRegistration, RawDrRecord, DrStatus, Opportunity } from '@/types/forecast';
 import { currentlySql, everReachedSql, daysSinceActivity } from '@/lib/drSql';
+import { computeDealQualityCore, MIN_RESOLVED } from '@/lib/dealQuality';
 
 
 // ---------- Constants & helpers ----------
@@ -1007,23 +1008,12 @@ export default function DrPipeline() {
 
   const dealQuality = useMemo(() => {
     const drs = scopeNoStatus;
-    const nonRej = drs.filter(d => d.status !== 'rejected');
-    const total = nonRej.length;
-    // SQL rate: any DR that ever qualified (includes lost-after-qualifying).
-    const reachedSQL = nonRej.filter(everReachedSql).length;
+    // Shared metric definitions (win rate, cohort rate, sql rate) — single source
+    // of truth so they can't drift from the AI briefing's copy.
+    const { total, reachedSQL, sqlRate, closedWon, resolvedCount, closedWonR, winRate, overallCohortRate } =
+      computeDealQualityCore(drs);
+    // Funnel-only metrics (dashboard-specific, not part of the shared core).
     const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
-    const closedWon = drs.filter(d => d.status === 'closed_won').length;
-
-    // Win rate: conventional Closed Won / (Closed Won + Closed Lost) over ALL resolved
-    // deals. NOT gated on everReachedSql, so deals imported already-closed are counted.
-    // null when there are no resolved deals — display layer must guard.
-    const resolved = drs.filter(d => d.status === 'closed_won' || d.status === 'closed_lost');
-    const closedWonR = resolved.filter(d => d.status === 'closed_won').length;
-    const resolvedCount = resolved.length;
-    const winRate: number | null = resolvedCount > 0 ? closedWonR / resolvedCount : null;
-
-    const overallCohortRate = total > 0 ? closedWon / total : 0;
-    const sqlRate = total > 0 ? reachedSQL / total : 0;
     const conversionRate = reachedSQL > 0 ? convertedToPipeline / reachedSQL : 0;
     const closeRate = convertedToPipeline > 0 ? closedWon / convertedToPipeline : 0;
 
@@ -1058,7 +1048,6 @@ export default function DrPipeline() {
     ];
 
     // Insight statement
-    const MIN_RESOLVED = 10;
     const hasWinRate = winRate !== null && resolvedCount >= MIN_RESOLVED;
     const wr = winRate ?? 0;
     const qualityGap = hasWinRate ? wr - overallCohortRate : 0;
@@ -1091,23 +1080,16 @@ export default function DrPipeline() {
     }
     const camRowsDQ: CamQualityRow[] = [];
     for (const [cam, deals] of byCam.entries()) {
-      const nr = deals.filter(d => d.status !== 'rejected');
-      const camTotal = nr.length;
-      if (camTotal < 5) continue;
-      const camSql = nr.filter(everReachedSql).length;
-      const camSqlRate = camTotal > 0 ? camSql / camTotal : 0;
-      const camResolved = deals.filter(d => d.status === 'closed_won' || d.status === 'closed_lost');
-      const camWon = camResolved.filter(d => d.status === 'closed_won').length;
-      const camWinRate: number | null = camResolved.length > 0 ? camWon / camResolved.length : null;
-      const camCohortRate = camTotal > 0 ? camWon / camTotal : 0;
-      const camQualityGap = camWinRate !== null ? camWinRate - camCohortRate : 0;
+      const c = computeDealQualityCore(deals);
+      if (c.total < 5) continue;
+      const camQualityGap = c.winRate !== null ? c.winRate - c.overallCohortRate : 0;
       let verdict: CamQualityRow['verdict'];
-      if (camSqlRate < 0.2) verdict = 'Lead Quality';
-      else if (camWinRate === null || camResolved.length < 10) verdict = 'Developing';
-      else if (camWinRate < 0.15) verdict = 'Execution';
-      else if (camWinRate >= 0.2) verdict = 'Performing';
+      if (c.sqlRate < 0.2) verdict = 'Lead Quality';
+      else if (c.winRate === null || c.resolvedCount < MIN_RESOLVED) verdict = 'Developing';
+      else if (c.winRate < 0.15) verdict = 'Execution';
+      else if (c.winRate >= 0.2) verdict = 'Performing';
       else verdict = 'Developing';
-      camRowsDQ.push({ cam, drs: camTotal, sqlRate: camSqlRate, winRate: camWinRate, qualityGap: camQualityGap, verdict, resolvedCount: camResolved.length });
+      camRowsDQ.push({ cam, drs: c.total, sqlRate: c.sqlRate, winRate: c.winRate, qualityGap: camQualityGap, verdict, resolvedCount: c.resolvedCount });
     }
     const verdictOrder = { 'Lead Quality': 0, 'Execution': 1, 'Developing': 2, 'Performing': 3 } as const;
     camRowsDQ.sort((a, b) => {
@@ -1126,16 +1108,9 @@ export default function DrPipeline() {
   const NON_DEFENSIBLE_STATUSES = new Set<string>(['padded', 'stale', 'rejected', 'withdrawn']);
   const dealQualityDefensible = useMemo(() => {
     const drs = scopeNoStatus.filter(d => !NON_DEFENSIBLE_STATUSES.has(d.status));
-    const total = drs.length;
-    const reachedSQL = drs.filter(everReachedSql).length;
+    const { total, reachedSQL, sqlRate, closedWon, resolvedCount, closedWonR, winRate, overallCohortRate } =
+      computeDealQualityCore(drs);
     const convertedToPipeline = drs.filter(d => d.status === 'converted' || d.status === 'closed_won' || d.status === 'closed_lost').length;
-    const closedWon = drs.filter(d => d.status === 'closed_won').length;
-    const resolved = drs.filter(d => d.status === 'closed_won' || d.status === 'closed_lost');
-    const closedWonR = resolved.filter(d => d.status === 'closed_won').length;
-    const resolvedCount = resolved.length;
-    const winRate: number | null = resolvedCount > 0 ? closedWonR / resolvedCount : null;
-    const overallCohortRate = total > 0 ? closedWon / total : 0;
-    const sqlRate = total > 0 ? reachedSQL / total : 0;
     const qualityGap = winRate !== null ? winRate - overallCohortRate : 0;
     return { total, reachedSQL, convertedToPipeline, closedWon, closedWonR, resolvedCount, winRate, overallCohortRate, sqlRate, qualityGap };
   }, [scopeNoStatus]);
