@@ -2,6 +2,7 @@ import * as XLSX from '@e965/xlsx';
 import type { Opportunity, Rep, MonthlyRepCommit } from '@/types/forecast';
 import { getDateAtUtcStart } from '@/types/forecast';
 import { normalizeRepName } from '@/lib/repUtils';
+import { sfdcOpportunityUrl } from '@/lib/sfdc';
 
 export interface MonthlyPresentationContext {
   opportunities: Opportunity[];
@@ -117,10 +118,11 @@ function progressColor(pct: number): string {
   return RED;
 }
 
-function ensureCell(ws: XLSX.WorkSheet, addr: string, value: any, style?: any, type?: 's' | 'n') {
+function ensureCell(ws: XLSX.WorkSheet, addr: string, value: any, style?: any, type?: 's' | 'n', link?: string) {
   const t = type || (typeof value === 'number' ? 'n' : 's');
   const cell: any = { v: value, t };
   if (style) cell.s = style;
+  if (link) cell.l = { Target: link, Tooltip: 'Open in Salesforce' };
   ws[addr] = cell;
 }
 
@@ -364,7 +366,7 @@ export function exportMonthlyPresentation(monthKey: string, ctx: MonthlyPresenta
       let c = 0;
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), wk ? `Week ${wk.weekNum}` : '', cellStyle(bg));
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.closeDate ? o.closeDate.slice(0, 10) : '', cellStyle(bg));
-      ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.name, cellStyle(bg));
+      ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.name, cellStyle(bg), 's', o.salesforceId ? sfdcOpportunityUrl(o.salesforceId) : undefined);
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.repName, cellStyle(bg));
       if (hasCAM) ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.channelAccountManager || '', cellStyle(bg));
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.accountName || '', cellStyle(bg));
@@ -480,7 +482,7 @@ export function exportMonthlyPresentation(monthKey: string, ctx: MonthlyPresenta
     for (const o of sorted) {
       let c = 0;
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.closeDate ? o.closeDate.slice(0, 10) : '', cellStyle(LOST_BG));
-      ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.name, cellStyle(LOST_BG));
+      ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.name, cellStyle(LOST_BG), 's', o.salesforceId ? sfdcOpportunityUrl(o.salesforceId) : undefined);
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.repName, cellStyle(LOST_BG));
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.amount || 0, { ...moneyStyle, fill: { fgColor: { rgb: LOST_BG } } }, 'n');
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.stage || '', cellStyle(LOST_BG));

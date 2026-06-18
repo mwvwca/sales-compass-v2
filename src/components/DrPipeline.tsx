@@ -3,12 +3,13 @@ import { useForecast } from '@/context/ForecastContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Upload, FileSpreadsheet, Download, RefreshCw, X, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, RefreshCw, X, ChevronDown, ChevronRight, Info, ExternalLink } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { parseDrExport } from '@/lib/drParser';
 import { mergeDrBatch } from '@/lib/drMerge';
 import type { DealRegistration, RawDrRecord, DrStatus, Opportunity } from '@/types/forecast';
 import { currentlySql, everReachedSql, daysSinceActivity } from '@/lib/drSql';
+import { sfdcOpportunityUrl, sfdcAccountUrl } from '@/lib/sfdc';
 
 
 // ---------- Constants & helpers ----------
@@ -2290,8 +2291,32 @@ export default function DrPipeline() {
                       <Fragment key={d.opportunityId}>
                         <tr onClick={() => setExpandedRow(isOpen ? null : d.opportunityId)} className="border-t border-border cursor-pointer hover:bg-muted/40">
                           <td className="px-1 py-1.5">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</td>
-                          <td className="px-2 py-1.5">{d.accountName || '—'}</td>
-                          <td className="px-2 py-1.5">{d.opportunityName}</td>
+                          <td className="px-2 py-1.5">
+                            {(() => {
+                              const acctHref = sfdcAccountUrl(d.accountUrl);
+                              if (!d.accountName) return '—';
+                              return acctHref ? (
+                                <a href={acctHref} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="hover:underline">
+                                  {d.accountName}
+                                </a>
+                              ) : d.accountName;
+                            })()}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <span className="inline-flex items-center gap-1">
+                              {d.opportunityName}
+                              <a
+                                href={sfdcOpportunityUrl(d.opportunityId)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                title="Open in Salesforce"
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            </span>
+                          </td>
                           <td className="px-2 py-1.5">{d.repName}</td>
                           <td className="px-2 py-1.5">{d.channelAccountManager || '—'}</td>
                           <td className="px-2 py-1.5">{d.stage}</td>

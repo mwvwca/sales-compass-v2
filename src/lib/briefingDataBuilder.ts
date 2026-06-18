@@ -16,6 +16,19 @@ import {
 import type { BriefingMode } from './briefingPrompts';
 import { classifyCleanup, buildCleanupSummary, type CleanupSummary } from './drCleanup';
 import { everReachedSql } from './drSql';
+import { sfdcOpportunityUrl } from './sfdc';
+
+/**
+ * Salesforce link fields for a briefing deal item, so the CAM can open the
+ * opportunity straight from the email. Account links are not available here —
+ * Opportunity carries no classic account URL (only DealRegistration does).
+ */
+function oppLinkFields(o: Opportunity | undefined): { accountName?: string; opportunityUrl?: string } {
+  return {
+    accountName: o?.accountName,
+    opportunityUrl: o?.salesforceId ? sfdcOpportunityUrl(o.salesforceId) : undefined,
+  };
+}
 
 export interface BriefingPayload {
   mode: BriefingMode;
@@ -32,8 +45,8 @@ export interface BriefingPayload {
   commitPipeline: number;
   upsidePipeline: number;
   pipelineCoverage: number;
-  newDeals: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
-  lostDeals: { name: string; rep: string; amount: number }[];
+  newDeals: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string }[];
+  lostDeals: { name: string; rep: string; amount: number; accountName?: string; opportunityUrl?: string }[];
   pushedDeals: { name: string; rep: string; amount: number; oldClose: string; newClose: string }[];
   classificationChanges: { name: string; rep: string; amount: number; from: string; to: string }[];
   amountChanges: { name: string; rep: string; oldAmount: number; newAmount: number }[];
@@ -70,9 +83,9 @@ export interface BriefingPayload {
     };
     cleanupSummary: CleanupSummary;
   } | null;
-  closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
-  closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string }[];
-  pastDueCommits: { name: string; rep: string; amount: number; closeDate: string }[];
+  closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string }[];
+  closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string }[];
+  pastDueCommits: { name: string; rep: string; amount: number; closeDate: string; accountName?: string; opportunityUrl?: string }[];
   defensibleCoverage: number;
   paceVariance: number;
   pctElapsed: number;
@@ -243,6 +256,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         amount: o.amount,
         closeDate: o.closeDate,
         classification: o.classification,
+        ...oppLinkFields(o),
       })),
   );
 
@@ -251,7 +265,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       .filter(e => e.field === 'classification' && (e.newValue === 'lost' || e.newValue === 'rejected'))
       .map(e => {
         const o = findOpp(e.opportunityId);
-        return { name: e.opportunityName, rep: e.repName, amount: o?.amount || 0 };
+        return { name: e.opportunityName, rep: e.repName, amount: o?.amount || 0, ...oppLinkFields(o) };
       }),
   );
 
@@ -318,12 +332,12 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
 
   const closingThisWeek = topByAmount(
     openOpps.filter(o => dateInRange(o.closeDate, weekStart, weekEnd)).map(o => ({
-      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate, classification: o.classification,
+      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate, classification: o.classification, ...oppLinkFields(o),
     })),
   );
   const closingNextWeek = topByAmount(
     openOpps.filter(o => dateInRange(o.closeDate, nextWeekStart, nextWeekEnd)).map(o => ({
-      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate, classification: o.classification,
+      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate, classification: o.classification, ...oppLinkFields(o),
     })),
   );
 
@@ -341,7 +355,7 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
         d < todayLocal
       );
     }).map(o => ({
-      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate,
+      name: o.name, rep: o.repName, amount: o.amount, closeDate: o.closeDate, ...oppLinkFields(o),
     })),
   );
 

@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
 import { getMonthKey, type Quarter } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle, ExternalLink } from 'lucide-react';
 import { getStagePercentage, formatStageWithPct } from '@/lib/utils';
+import { sfdcOpportunityUrl } from '@/lib/sfdc';
 import OpportunityHistory from './OpportunityHistory';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -352,6 +353,18 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                       ) : (
                         <>
                           <span className="font-medium">{opp.name}</span>
+                          {opp.salesforceId && (
+                            <a
+                              href={sfdcOpportunityUrl(opp.salesforceId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              title="Open in Salesforce"
+                              className="ml-1.5 inline-flex align-middle text-muted-foreground hover:text-foreground"
+                            >
+                              <ExternalLink size={12} />
+                            </a>
+                          )}
                           {opp.previousClassification && opp.previousClassification !== opp.classification && (
                             <span className="ml-2 text-xs text-upside">{opp.previousClassification} → {opp.classification}</span>
                           )}
