@@ -4,7 +4,7 @@ import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
 import { getMonthKey, type Quarter } from '@/types/forecast';
 import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle, ExternalLink } from 'lucide-react';
 import { getStagePercentage, formatStageWithPct } from '@/lib/utils';
-import { sfdcOpportunityUrl } from '@/lib/sfdc';
+import { sfdcOpportunityUrl, buildAccountUrlMap, accountUrlForOpportunity } from '@/lib/sfdc';
 import OpportunityHistory from './OpportunityHistory';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,7 +42,9 @@ const classificationFilters: { key: Classification; label: string }[] = [
 // Filter out lost opps from the main list
 
 export default function OpportunityList({ opportunities, lostOpportunities = [], quarter: _quarter }: Props) {
-  const { classifyOpportunity, updateOpportunity, changelog } = useForecast();
+  const { classifyOpportunity, updateOpportunity, changelog, dealRegistrations } = useForecast();
+  // Account Lightning links, derived from registered deals (Opportunity has no account URL).
+  const acctUrlMap = useMemo(() => buildAccountUrlMap(dealRegistrations), [dealRegistrations]);
   const [notesOpp, setNotesOpp] = useState<{ id: string; name: string } | null>(null);
   const [notesText, setNotesText] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
@@ -368,6 +370,16 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                           {opp.previousClassification && opp.previousClassification !== opp.classification && (
                             <span className="ml-2 text-xs text-upside">{opp.previousClassification} → {opp.classification}</span>
                           )}
+                          {opp.accountName && (() => {
+                            const acctHref = accountUrlForOpportunity(opp.salesforceId, acctUrlMap);
+                            return (
+                              <div className="text-xs text-muted-foreground">
+                                {acctHref ? (
+                                  <a href={acctHref} target="_blank" rel="noopener noreferrer" className="hover:underline">{opp.accountName}</a>
+                                ) : opp.accountName}
+                              </div>
+                            );
+                          })()}
                         </>
                       )}
                     </td>

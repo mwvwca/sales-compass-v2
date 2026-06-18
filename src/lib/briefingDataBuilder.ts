@@ -16,19 +16,7 @@ import {
 import type { BriefingMode } from './briefingPrompts';
 import { classifyCleanup, buildCleanupSummary, type CleanupSummary } from './drCleanup';
 import { everReachedSql } from './drSql';
-import { sfdcOpportunityUrl } from './sfdc';
-
-/**
- * Salesforce link fields for a briefing deal item, so the CAM can open the
- * opportunity straight from the email. Account links are not available here —
- * Opportunity carries no classic account URL (only DealRegistration does).
- */
-function oppLinkFields(o: Opportunity | undefined): { accountName?: string; opportunityUrl?: string } {
-  return {
-    accountName: o?.accountName,
-    opportunityUrl: o?.salesforceId ? sfdcOpportunityUrl(o.salesforceId) : undefined,
-  };
-}
+import { sfdcOpportunityUrl, buildAccountUrlMap, accountUrlForOpportunity } from './sfdc';
 
 export interface BriefingPayload {
   mode: BriefingMode;
@@ -45,8 +33,8 @@ export interface BriefingPayload {
   commitPipeline: number;
   upsidePipeline: number;
   pipelineCoverage: number;
-  newDeals: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string }[];
-  lostDeals: { name: string; rep: string; amount: number; accountName?: string; opportunityUrl?: string }[];
+  newDeals: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string; accountUrl?: string }[];
+  lostDeals: { name: string; rep: string; amount: number; accountName?: string; opportunityUrl?: string; accountUrl?: string }[];
   pushedDeals: { name: string; rep: string; amount: number; oldClose: string; newClose: string }[];
   classificationChanges: { name: string; rep: string; amount: number; from: string; to: string }[];
   amountChanges: { name: string; rep: string; oldAmount: number; newAmount: number }[];
@@ -83,9 +71,9 @@ export interface BriefingPayload {
     };
     cleanupSummary: CleanupSummary;
   } | null;
-  closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string }[];
-  closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string }[];
-  pastDueCommits: { name: string; rep: string; amount: number; closeDate: string; accountName?: string; opportunityUrl?: string }[];
+  closingThisWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string; accountUrl?: string }[];
+  closingNextWeek: { name: string; rep: string; amount: number; closeDate: string; classification: string; accountName?: string; opportunityUrl?: string; accountUrl?: string }[];
+  pastDueCommits: { name: string; rep: string; amount: number; closeDate: string; accountName?: string; opportunityUrl?: string; accountUrl?: string }[];
   defensibleCoverage: number;
   paceVariance: number;
   pctElapsed: number;
@@ -169,6 +157,18 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   
 
   const opps = input.opportunities;
+
+  // Salesforce link fields for a briefing deal item, so the CAM can open the
+  // opportunity (and, when the deal is a registered DR, the account) from the
+  // email. Account URL is derived from the matching DR's stored accountUrl since
+  // Opportunity carries none.
+  const accountUrlMap = buildAccountUrlMap(input.dealRegistrations);
+  const oppLinkFields = (o: Opportunity | undefined): { accountName?: string; opportunityUrl?: string; accountUrl?: string } => ({
+    accountName: o?.accountName,
+    opportunityUrl: o?.salesforceId ? sfdcOpportunityUrl(o.salesforceId) : undefined,
+    accountUrl: accountUrlForOpportunity(o?.salesforceId, accountUrlMap),
+  });
+
   const openOpps = opps.filter(isOpen);
   const commitOpps = opps.filter(isCommit);
   const upsideOpps = opps.filter(o => o.classification === 'upside');

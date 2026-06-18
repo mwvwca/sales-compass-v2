@@ -46,7 +46,7 @@ function localQuarter(dateStr: string): string | null {
 }
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot, dealRegistrations } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('monthly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
@@ -384,7 +384,7 @@ export default function ForecastDashboard() {
             Snapshot
           </button>
           <button
-            onClick={() => exportMonthlyPresentation(presentationMonth, { reps, opportunities, monthlyRepCommits })}
+            onClick={() => exportMonthlyPresentation(presentationMonth, { reps, opportunities, monthlyRepCommits, dealRegistrations })}
             className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             title="Download monthly management presentation"
           >

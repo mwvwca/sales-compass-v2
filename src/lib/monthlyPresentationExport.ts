@@ -1,13 +1,15 @@
 import * as XLSX from '@e965/xlsx';
-import type { Opportunity, Rep, MonthlyRepCommit } from '@/types/forecast';
+import type { Opportunity, Rep, MonthlyRepCommit, DealRegistration } from '@/types/forecast';
 import { getDateAtUtcStart } from '@/types/forecast';
 import { normalizeRepName } from '@/lib/repUtils';
-import { sfdcOpportunityUrl } from '@/lib/sfdc';
+import { sfdcOpportunityUrl, buildAccountUrlMap, accountUrlForOpportunity } from '@/lib/sfdc';
 
 export interface MonthlyPresentationContext {
   opportunities: Opportunity[];
   reps: Rep[];
   monthlyRepCommits: MonthlyRepCommit[];
+  /** Registered deals — source of account Lightning links (Opportunity has none). */
+  dealRegistrations?: DealRegistration[];
 }
 
 interface WeekRow {
@@ -139,6 +141,9 @@ export function exportMonthlyPresentation(monthKey: string, ctx: MonthlyPresenta
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
   const monthFull = `${MONTH_FULL[month - 1]} ${year}`;
   const monthAbbr = `${MONTH_ABBR[month - 1]} ${year}`;
+
+  // Account Lightning links, derived from registered deals (Opportunity has no account URL).
+  const acctUrlMap = buildAccountUrlMap(ctx.dealRegistrations ?? []);
 
   const weeks = buildWeeks(monthStart, monthEnd);
 
@@ -369,7 +374,7 @@ export function exportMonthlyPresentation(monthKey: string, ctx: MonthlyPresenta
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.name, cellStyle(bg), 's', o.salesforceId ? sfdcOpportunityUrl(o.salesforceId) : undefined);
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.repName, cellStyle(bg));
       if (hasCAM) ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.channelAccountManager || '', cellStyle(bg));
-      ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.accountName || '', cellStyle(bg));
+      ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.accountName || '', cellStyle(bg), 's', accountUrlForOpportunity(o.salesforceId, acctUrlMap));
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.amount || 0, { ...moneyStyle, ...(bg ? { fill: { fgColor: { rgb: bg } } } : {}) }, 'n');
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), o.stage || '', cellStyle(bg));
       ensureCell(ws2, XLSX.utils.encode_cell({ r, c: c++ }), cls, cellStyle(bg));
@@ -486,7 +491,7 @@ export function exportMonthlyPresentation(monthKey: string, ctx: MonthlyPresenta
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.repName, cellStyle(LOST_BG));
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.amount || 0, { ...moneyStyle, fill: { fgColor: { rgb: LOST_BG } } }, 'n');
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.stage || '', cellStyle(LOST_BG));
-      ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.accountName || '', cellStyle(LOST_BG));
+      ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.accountName || '', cellStyle(LOST_BG), 's', accountUrlForOpportunity(o.salesforceId, acctUrlMap));
       ensureCell(ws4, XLSX.utils.encode_cell({ r, c: c++ }), o.productName || '', cellStyle(LOST_BG));
       r++;
     }
