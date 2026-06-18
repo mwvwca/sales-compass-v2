@@ -15,8 +15,8 @@ import {
 } from '@/types/forecast';
 import type { BriefingMode } from './briefingPrompts';
 import { classifyCleanup, buildCleanupSummary, type CleanupSummary } from './drCleanup';
-import { everReachedSql } from './drSql';
 import { sfdcOpportunityUrl, buildAccountUrlMap, accountUrlForOpportunity } from './sfdc';
+import { computeDealQualityCore, MIN_RESOLVED } from './dealQuality';
 
 export interface BriefingPayload {
   mode: BriefingMode;
@@ -450,26 +450,16 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
       .filter(r => r.totalDrs >= 20 && r.cohortRate < 0.05)
       .map(({ name, totalDrs, cohortRate }) => ({ name, totalDrs, cohortRate }));
 
-    // Deal Quality Analysis
-    const nonRej = drs.filter(d => d.status !== 'rejected');
-    const totalDrsDQ = nonRej.length;
-    const reachedSQL = nonRej.filter(everReachedSql).length;
-    // Win rate: conventional Closed Won / (Closed Won + Closed Lost) over ALL resolved
-    // deals. NOT gated on everReachedSql, so deals imported already-closed are counted.
-    const resolved = drs.filter(d => d.status === 'closed_won' || d.status === 'closed_lost');
-    const closedWonR = resolved.filter(d => d.status === 'closed_won').length;
-    const closedWonAll = drs.filter(d => d.status === 'closed_won').length;
-    const resolvedCount = resolved.length;
-    const winRate: number | null = resolvedCount > 0 ? closedWonR / resolvedCount : null;
-    const overallCohortRate = totalDrsDQ > 0 ? closedWonAll / totalDrsDQ : 0;
-    const sqlRateDQ = totalDrsDQ > 0 ? reachedSQL / totalDrsDQ : 0;
+    // Deal Quality Analysis — shared core (single source of truth, src/lib/dealQuality.ts).
+    const { total: totalDrsDQ, reachedSQL, sqlRate: sqlRateDQ, resolvedCount, winRate, overallCohortRate } =
+      computeDealQualityCore(drs);
     const wr = winRate ?? 0;
     const qualityGapPp = winRate !== null ? (wr - overallCohortRate) * 100 : 0;
     const nonQualifyingPct = totalDrsDQ > 0 ? ((totalDrsDQ - reachedSQL) / totalDrsDQ * 100).toFixed(0) : '0';
     let insightStatement: string;
     let primaryProblem: 'lead_quality' | 'execution' | 'both' | 'performing' | 'building';
-    if (winRate === null || resolvedCount < 10) {
-      insightStatement = `Building history (n=${resolvedCount} resolved) — win rate needs at least 10 resolved deals before it is reliable.`;
+    if (winRate === null || resolvedCount < MIN_RESOLVED) {
+      insightStatement = `Building history (n=${resolvedCount} resolved) — win rate needs at least ${MIN_RESOLVED} resolved deals before it is reliable.`;
       primaryProblem = 'building';
     } else if (wr > overallCohortRate * 2 && wr >= 0.2) {
       const mult = overallCohortRate > 0 ? Math.round(wr / overallCohortRate) : 0;
