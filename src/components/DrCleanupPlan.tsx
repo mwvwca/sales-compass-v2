@@ -9,6 +9,7 @@ import {
   groupByCAM,
   buildCleanupEmailPrompt,
   buildCleanupEmail,
+  isActionable,
   type CamCleanupGroup,
   type CleanupStage,
   type CleanupClassification,
@@ -130,6 +131,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   }, [dealRegistrations]);
 
   const generateForCam = async (group: CamCleanupGroup): Promise<string | null> => {
+    if (!isActionable(group)) return null; // monitoring-only — nothing to send
     const { subject, body } = buildCleanupEmail(group);
     const text = `Subject: ${subject}\n\n${body}`;
     setEmails(prev => ({ ...prev, [group.cam]: text }));
@@ -143,14 +145,21 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   };
 
   const handleGenerateAll = async () => {
-    setBulkProgress({ current: 0, total: groups.length });
-    for (let i = 0; i < groups.length; i++) {
-      setBulkProgress({ current: i + 1, total: groups.length });
-      await generateForCam(groups[i]);
-      if (i < groups.length - 1) await new Promise(r => setTimeout(r, 1000));
+    const actionable = groups.filter(isActionable);
+    const skipped = groups.length - actionable.length;
+    setBulkProgress({ current: 0, total: actionable.length });
+    for (let i = 0; i < actionable.length; i++) {
+      setBulkProgress({ current: i + 1, total: actionable.length });
+      await generateForCam(actionable[i]);
+      if (i < actionable.length - 1) await new Promise(r => setTimeout(r, 1000));
     }
     setBulkProgress(null);
-    toast({ title: 'All emails generated', description: `${groups.length} CAM emails ready to review.` });
+    toast({
+      title: 'Emails generated',
+      description: skipped > 0
+        ? `${actionable.length} generated · ${skipped} skipped (nothing actionable)`
+        : `${actionable.length} CAM emails ready to review.`,
+    });
   };
 
   const copyEmail = async (group: CamCleanupGroup) => {
@@ -264,6 +273,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                     const isLoading = loadingCam === group.cam;
                     const emailText = emails[group.cam];
                     const parsed = emailText ? extractSubject(emailText) : null;
+                    const actionable = isActionable(group);
                     return (
                       <div key={group.cam} className="border border-border rounded-md">
                         <div className="flex items-center justify-between gap-3 px-3 py-2 flex-wrap">
@@ -296,12 +306,16 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                             </div>
                           </button>
                           <div className="flex items-center gap-2 shrink-0">
+                            {!actionable && (
+                              <span className="text-[11px] text-muted-foreground">Monitoring only — nothing to send.</span>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs"
                               onClick={() => handleGenerate(group)}
-                              disabled={isLoading || !!bulkProgress}
+                              disabled={isLoading || !!bulkProgress || !actionable}
+                              title={!actionable ? 'Monitoring only — nothing to send.' : undefined}
                             >
                               {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
                               {emailText ? 'Regenerate' : 'Generate Email'}

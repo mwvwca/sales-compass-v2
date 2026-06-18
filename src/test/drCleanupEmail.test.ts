@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCleanupEmail, type CamCleanupGroup, type CleanupClassification } from '@/lib/drCleanup';
+import { buildCleanupEmail, isActionable, type CamCleanupGroup, type CleanupClassification } from '@/lib/drCleanup';
 import type { DealRegistration } from '@/types/forecast';
 
 function dr(over: Partial<DealRegistration> = {}): DealRegistration {
@@ -69,5 +69,31 @@ describe('buildCleanupEmail re-bucketing', () => {
     const { body } = buildCleanupEmail(group([a1, a2]));
     expect((body.match(/DupCo/g) || []).length).toBe(1);
     expect(body).toContain('0 closing · 0 final notice · 0 outreach · 1 need attention');
+  });
+});
+
+describe('isActionable / actionable subject count', () => {
+  it('is false when a group has only monitoring registrations', () => {
+    const g = group([
+      cls({ cleanupStage: 'monitoring', daysSinceActivity: 5, dr: { accountName: 'MonCo' } }),
+      cls({ cleanupStage: 'monitoring', daysSinceActivity: 3, dr: { accountName: 'MonCo2' } }),
+    ]);
+    expect(isActionable(g)).toBe(false);
+  });
+
+  it('is true when at least one registration is past monitoring', () => {
+    const g = group([
+      cls({ cleanupStage: 'monitoring', daysSinceActivity: 5 }),
+      cls({ cleanupStage: 'final_notice', daysSinceActivity: 35 }),
+    ]);
+    expect(isActionable(g)).toBe(true);
+  });
+
+  it('subject counts only actionable (non-monitoring) registrations', () => {
+    const g = group([
+      cls({ cleanupStage: 'ready_to_close', daysSinceActivity: 50, dr: { accountName: 'A' } }),
+      cls({ cleanupStage: 'monitoring', daysSinceActivity: 5, dr: { accountName: 'B' } }),
+    ]);
+    expect(buildCleanupEmail(g).subject).toContain('(1 registrations)');
   });
 });

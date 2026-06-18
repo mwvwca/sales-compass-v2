@@ -350,10 +350,20 @@ type AeBuckets = {
   needsAttention: CleanupClassification[];
 };
 
+/**
+ * Whether a CAM group has anything worth emailing. Anchors are already excluded
+ * upstream (groupByCAM), so the only non-actionable tier left is 'monitoring'
+ * (<15 days, no action yet) — a group of only monitoring regs has nothing to send.
+ */
+export function isActionable(group: CamCleanupGroup): boolean {
+  return group.deals.some(d => d.cleanupStage !== 'monitoring');
+}
+
 export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; body: string; html: string } {
   // Orphan clusters (immediateAction) no longer fall into "Closing" by virtue of
   // being immediate — Closing is strictly the 45+ day ready_to_close tier. Orphan
   // clusters get their own "Needs attention" bucket, deduped to one row per account.
+  const actionableCount = group.deals.filter(d => d.cleanupStage !== 'monitoring').length;
   const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' && !d.immediateAction);
   const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction);
   const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction);
@@ -444,7 +454,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   line('Michael Wells');
   line('Sales Manager, N-able');
 
-  const subject = `Deal Registration Cleanup Cadence — Action Required (${group.deals.length} registrations)`;
+  const subject = `Deal Registration Cleanup Cadence — Action Required (${actionableCount} registrations)`;
   return { subject, body: P.join('\n'), html: H.join('<br>') };
 }
 
