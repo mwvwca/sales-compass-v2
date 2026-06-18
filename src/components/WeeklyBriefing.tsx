@@ -8,6 +8,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useForecast } from '@/context/ForecastContext';
 import { buildBriefingPayload } from '@/lib/briefingDataBuilder';
+import { briefingToHtml } from '@/lib/briefingClipboard';
 import { generateBriefing } from '@/lib/briefingApi';
 import {
   type BriefingMode,
@@ -110,8 +111,21 @@ export default function WeeklyBriefing() {
   const handleCopy = useCallback(async () => {
     if (!text) return;
     const header = `[Sales Compass — ${MODE_LABELS[mode]} — ${todayLabel}]\n\n`;
+    const plain = header + text;
     try {
-      await navigator.clipboard.writeText(header + text);
+      // Dual-format write so pasted emails keep clickable links. Fall back to
+      // plain text where ClipboardItem (or the rich write API) is unavailable.
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+        const html = briefingToHtml(plain);
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': new Blob([plain], { type: 'text/plain' }),
+            'text/html': new Blob([html], { type: 'text/html' }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(plain);
+      }
       toast({ title: 'Copied!', description: 'Briefing copied to clipboard.' });
     } catch {
       toast({ title: 'Copy failed', description: 'Clipboard access blocked.', variant: 'destructive' });
