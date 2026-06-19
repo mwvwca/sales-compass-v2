@@ -252,6 +252,8 @@ export default function DataBackup() {
     forecastSnapshots,
     managerQuotas,
     weeklySnapshots,
+    dealRegistrations,
+    drBatches,
     restoreFromBackup,
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -273,6 +275,8 @@ export default function DataBackup() {
       forecastSnapshots,
       managerQuotas,
       weeklySnapshots,
+      dealRegistrations,
+      drBatches,
     });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };

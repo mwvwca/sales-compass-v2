@@ -51,6 +51,8 @@ export default function RepGoalSetup() {
     createForecastSnapshot,
     reconcileForecastSnapshot,
     deleteForecastSnapshot,
+    dealRegistrations,
+    drBatches,
   } = useForecast();
   const { toast } = useToast();
   const [name, setName] = useState('');
@@ -141,6 +143,8 @@ export default function RepGoalSetup() {
       forecastPromotions,
       forecastSnapshots,
       managerQuotas,
+      dealRegistrations,
+      drBatches,
     });
   };
 

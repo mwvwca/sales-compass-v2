@@ -12,6 +12,8 @@ import type {
   CommissionSettingsMap,
   CommissionReviewsMap,
   WeeklySnapshot,
+  DealRegistration,
+  DrBatch,
 } from '@/types/forecast';
 
 export interface BackupPayload {
@@ -29,6 +31,8 @@ export interface BackupPayload {
   snapshots?: OpportunitySnapshot[];
   managerQuotas?: ManagerQuota[];
   weeklySnapshots?: WeeklySnapshot[];
+  dealRegistrations: DealRegistration[];
+  drBatches: DrBatch[];
 }
 
 export function downloadBackupNow(data: BackupPayload, fileNamePrefix = 'forecast-backup'): void {
