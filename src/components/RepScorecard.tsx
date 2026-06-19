@@ -3,10 +3,10 @@ import { Check, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
 import { buildRepScorecard, type RepScorecard as RepScorecardData, type RiskFlagKind } from '@/lib/repScorecard';
 import {
-  weekKey, loadOneOnOne, saveOneOnOne,
-  addActionItem, toggleActionItem, updateActionItem, removeActionItem,
+  weekKey, addActionItem, toggleActionItem, updateActionItem, removeActionItem,
   type ActionItem,
 } from '@/lib/oneOnOnes';
+import { loadOneOnOne, saveOneOnOne } from '@/lib/oneOnOnesApi';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
