@@ -6,6 +6,7 @@ import { computeCommitAccuracy } from './commitAccuracy';
 import { computeSlips } from './slips';
 import { computeAeRows } from './aeAccountability';
 import { buildChangelogIndex, dealRiskSignals, flagDeal, STALE_DAYS } from './dealRisk';
+import type { TranscriptSignals } from './transcripts';
 
 // Risk flagging now lives in ./dealRisk (shared with the all-reps Deal Risk view).
 // Re-exported here so existing consumers of these types keep working unchanged.
@@ -37,6 +38,8 @@ const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`
 export interface ScorecardOpts {
   today?: Date;
   currentQuarter?: Quarter;
+  /** Latest transcript signals per opp id, for the single-threaded / sentiment flags. */
+  signalsByOpp?: Record<string, TranscriptSignals>;
 }
 
 /**
@@ -88,10 +91,10 @@ export function buildRepScorecard(repId: string, ctx: ScorecardContext, opts: Sc
   const stale = openOpps.filter(o => dealRiskSignals(o, index, today).daysSinceMovement >= STALE_DAYS).length;
   const slipped = computeSlips(opportunities, changelog, currentQuarter).filter(s => s.repName === repName).length;
 
-  // ---- at-risk deals (flags computed NOW; nextStep/single-threaded left for later) ----
+  // ---- at-risk deals (flags computed NOW; single-threaded/sentiment from transcripts) ----
   const atRisk: AtRiskDeal[] = [];
   for (const o of openOpps) {
-    const flags = flagDeal(o, index, today);
+    const flags = flagDeal(o, index, today, undefined, opts.signalsByOpp?.[o.id]);
     if (flags.length) {
       atRisk.push({ id: o.id, name: o.name, salesforceId: o.salesforceId, closeDate: o.closeDate, amount: o.amount || 0, stage: o.stage, flags, nextStep: o.nextStep?.trim() || null });
     }

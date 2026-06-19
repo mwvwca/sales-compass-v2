@@ -11,6 +11,8 @@ import { sfdcOpportunityUrl } from '@/lib/sfdc';
 import { getQuarter } from '@/types/forecast';
 import { nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
 import { loadNextStepCache } from '@/lib/nextStepCacheApi';
+import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
+import type { TranscriptSignals } from '@/lib/transcripts';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -33,6 +35,7 @@ const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
   no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
   vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
+  negative_sentiment: { label: 'Negative sentiment', tone: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -141,10 +144,18 @@ export default function RepScorecard() {
   );
   const [repId, setRepId] = useState<string>(() => pickReps[0]?.id ?? '');
 
+  // Latest transcript signals per opp (read-only; captured from the opportunity list).
+  const [signalsByOpp, setSignalsByOpp] = useState<Record<string, TranscriptSignals>>({});
+  useEffect(() => {
+    let cancelled = false;
+    loadCurrentSignalsByOpp().then(s => { if (!cancelled) setSignalsByOpp(s); }).catch(() => { /* offline → no signals */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const sc: RepScorecardData | null = useMemo(() => {
     if (!repId) return null;
-    return buildRepScorecard(repId, { opportunities, changelog, dealRegistrations, managerQuotas, reps });
-  }, [repId, opportunities, changelog, dealRegistrations, managerQuotas, reps]);
+    return buildRepScorecard(repId, { opportunities, changelog, dealRegistrations, managerQuotas, reps }, { signalsByOpp });
+  }, [repId, opportunities, changelog, dealRegistrations, managerQuotas, reps, signalsByOpp]);
 
   // Next-step classification cache (read-only here; classified from the Deal Risk view).
   const [nsCache, setNsCache] = useState<NextStepCache>({});
