@@ -1,6 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
 import { buildRepScorecard, type RepScorecard as RepScorecardData, type RiskFlagKind } from '@/lib/repScorecard';
+import {
+  weekKey, loadOneOnOne, saveOneOnOne,
+  addActionItem, toggleActionItem, updateActionItem, removeActionItem,
+  type ActionItem,
+} from '@/lib/oneOnOnes';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -30,6 +36,94 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
       {children}
     </section>
+  );
+}
+
+function OneOnOneCapture({ repId }: { repId: string }) {
+  const week = useMemo(() => weekKey(new Date()), []);
+  const [notes, setNotes] = useState('');
+  const [items, setItems] = useState<ActionItem[]>([]);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const loadedRef = useRef(false);
+  const skipSaveRef = useRef(true);
+
+  // Load this week's row on mount / rep change (empty if none yet).
+  useEffect(() => {
+    let cancelled = false;
+    loadedRef.current = false;
+    skipSaveRef.current = true;
+    setStatus('idle');
+    loadOneOnOne(repId, week)
+      .then(o => { if (!cancelled) { setNotes(o?.notes ?? ''); setItems(o?.actionItems ?? []); loadedRef.current = true; } })
+      .catch(() => { if (!cancelled) { setNotes(''); setItems([]); loadedRef.current = true; } });
+    return () => { cancelled = true; };
+  }, [repId, week]);
+
+  // Debounced auto-save on any change; skip the load-triggered state set.
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    if (skipSaveRef.current) { skipSaveRef.current = false; return; }
+    setStatus('saving');
+    const t = setTimeout(() => {
+      saveOneOnOne({ repId, week, notes, actionItems: items })
+        .then(() => setStatus('saved'))
+        .catch(() => setStatus('idle'));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [notes, items, repId, week]);
+
+  return (
+    <Section title={`This Week's 1:1 · ${week}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-muted-foreground">Notes &amp; action items auto-save to the cloud.</span>
+        <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+          {status === 'saving' && <><Loader2 size={11} className="animate-spin" /> Saving…</>}
+          {status === 'saved' && <><Check size={11} className="text-positive" /> Saved</>}
+        </span>
+      </div>
+      <textarea
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        placeholder="Discussion notes, coaching, blockers…"
+        rows={4}
+        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <div className="space-y-1.5">
+        {items.map(it => (
+          <div key={it.id} className="flex items-center gap-2">
+            <input type="checkbox" checked={it.done} onChange={() => setItems(prev => toggleActionItem(prev, it.id))} className="shrink-0" />
+            <input
+              value={it.text}
+              onChange={e => setItems(prev => updateActionItem(prev, it.id, { text: e.target.value }))}
+              placeholder="Action item"
+              className={`flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring ${it.done ? 'line-through text-muted-foreground' : ''}`}
+            />
+            <input
+              value={it.owner ?? ''}
+              onChange={e => setItems(prev => updateActionItem(prev, it.id, { owner: e.target.value || undefined }))}
+              placeholder="owner"
+              className="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <input
+              type="date"
+              value={it.due ?? ''}
+              onChange={e => setItems(prev => updateActionItem(prev, it.id, { due: e.target.value || undefined }))}
+              className="w-32 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <button type="button" onClick={() => setItems(prev => removeActionItem(prev, it.id))} title="Remove" className="text-muted-foreground hover:text-foreground shrink-0">
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => setItems(prev => addActionItem(prev, ''))}
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <Plus size={12} /> Add action item
+        </button>
+      </div>
+    </Section>
   );
 }
 
@@ -147,6 +241,9 @@ export default function RepScorecard() {
               </ul>
             )}
           </Section>
+
+          {/* Stage 2 — 1:1 capture (notes + action items), cloud-persisted */}
+          <OneOnOneCapture repId={repId} />
         </>
       )}
     </div>
