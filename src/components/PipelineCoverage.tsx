@@ -27,8 +27,8 @@ export default function PipelineCoverage({ opportunities, allOpportunities, tota
     const remainingTarget = Math.max(0, totalGoal - closedWon);
 
     const unweightedPipe = activeOpps.reduce((s, o) => s + o.amount, 0);
-    const pipe25 = activeOpps.filter(o => o.probability >= 25).reduce((s, o) => s + o.amount, 0);
-    const pipe50 = activeOpps.filter(o => o.probability >= 50).reduce((s, o) => s + o.amount, 0);
+    const pipe25 = activeOpps.filter(o => o.probability >= 0.25).reduce((s, o) => s + o.amount, 0);
+    const pipe50 = activeOpps.filter(o => o.probability >= 0.5).reduce((s, o) => s + o.amount, 0);
 
     // Prior quarter open pipe: deals with close dates before the selected period that are still open
     const earliestQuarter = fullYearQuarters[0];

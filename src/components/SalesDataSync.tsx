@@ -34,7 +34,8 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
         : isForecast ? 'commit' as const
         : isUpside ? 'upside' as const
         : 'unclassified' as const,
-      probability: parseFloat(probStr) || 0,
+      // 0–1 scale (e.g. "25%" → 0.25), matching ImportSheet and the dealRisk SQL gate.
+      probability: (parseFloat(probStr) || 0) / 100,
       importDate,
       accountName: row["Account Name"]?.trim() || undefined,
       productName: row.Product?.trim() || undefined,
