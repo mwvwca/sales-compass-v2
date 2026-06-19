@@ -5,13 +5,15 @@ import { buildChangelogIndex, dealRiskSignals, flagDeal, type RiskFlag, type Ris
 import { selectChangedDeals, mergeClassifications, qualityFor, nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
 import { classifyNextSteps } from '@/lib/nextStepClassifyApi';
 import { loadNextStepCache, saveNextStepCache } from '@/lib/nextStepCacheApi';
+import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
+import type { TranscriptSignals } from '@/lib/transcripts';
 import { sfdcOpportunityUrl } from '@/lib/sfdc';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const TERMINAL = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
 
 // Only the populated flag kinds are filterable.
-const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step', 'vague_next_step'];
+const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step', 'vague_next_step', 'single_threaded', 'negative_sentiment'];
 const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
   pushed: { label: 'Pushed', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   stalled: { label: 'Stalled', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
@@ -19,6 +21,7 @@ const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
   no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
   vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
+  negative_sentiment: { label: 'Negative sentiment', tone: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
 };
 
 interface RiskRow {
@@ -39,12 +42,14 @@ export default function DealRiskView() {
   const [repFilter, setRepFilter] = useState<string>('all');
   const [activeKinds, setActiveKinds] = useState<Set<RiskFlagKind>>(() => new Set(FILTER_KINDS));
   const [cache, setCache] = useState<NextStepCache>({});
+  const [signalsByOpp, setSignalsByOpp] = useState<Record<string, TranscriptSignals>>({});
   const [classifyState, setClassifyState] = useState<'idle' | 'running' | 'error'>('idle');
 
-  // Load the persisted classification cache once.
+  // Load the persisted classification cache + latest transcript signals once.
   useEffect(() => {
     let cancelled = false;
     loadNextStepCache().then(c => { if (!cancelled) setCache(c); }).catch(() => { /* offline → empty cache */ });
+    loadCurrentSignalsByOpp().then(s => { if (!cancelled) setSignalsByOpp(s); }).catch(() => { /* offline → no signals */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -54,7 +59,7 @@ export default function DealRiskView() {
     const out: RiskRow[] = [];
     for (const o of opportunities) {
       if (TERMINAL.has(o.classification)) continue; // open deals only
-      const flags = flagDeal(o, index, today, qualityFor(o, cache));
+      const flags = flagDeal(o, index, today, qualityFor(o, cache), signalsByOpp[o.id]);
       if (flags.length === 0) continue;
       const { pushCount, daysSinceMovement } = dealRiskSignals(o, index, today);
       out.push({
@@ -64,7 +69,7 @@ export default function DealRiskView() {
     }
     out.sort((a, b) => b.amount - a.amount); // default sort: amount desc
     return out;
-  }, [opportunities, changelog, cache]);
+  }, [opportunities, changelog, cache, signalsByOpp]);
 
   // Open deals whose non-empty next step changed since last classification — the
   // only ones an AI call would spend on.

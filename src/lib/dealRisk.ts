@@ -1,14 +1,15 @@
 import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
 import { currentlySql } from './drSql';
+import type { TranscriptSignals } from './transcripts';
 
 // ---- Tunables ----
 export const STALE_DAYS = 30;      // open deal with no changelog movement in this many days
 export const PUSH_FLAG_MIN = 2;    // close-date pushes before a deal is flagged "pushed"
 
 /**
- * Risk flag kinds. `single_threaded` is defined but NOT populated yet — that data
- * arrives in a later step; we never fabricate it. `vague_next_step` is populated
- * only when an AI quality classification is supplied to flagDeal.
+ * Risk flag kinds. `single_threaded` and `negative_sentiment` are populated only
+ * when transcript signals are supplied to flagDeal — never fabricated otherwise.
+ * `vague_next_step` is populated only when an AI quality classification is supplied.
  */
 export type RiskFlagKind =
   | 'pushed'
@@ -16,7 +17,8 @@ export type RiskFlagKind =
   | 'under_qualified'
   | 'no_next_step'
   | 'vague_next_step'
-  | 'single_threaded';
+  | 'single_threaded'
+  | 'negative_sentiment';
 
 export interface RiskFlag {
   kind: RiskFlagKind;
@@ -72,13 +74,16 @@ export function dealRiskSignals(
 /**
  * Risk flags for a deal. `nextStepQuality` (optional) is the AI classification of
  * a non-empty next step: when 'vague' it adds a softer `vague_next_step` flag. An
- * empty next step still produces the harder `no_next_step` flag.
+ * empty next step still produces the harder `no_next_step` flag. `signals` (optional)
+ * are the latest call-transcript signals: a lone stakeholder adds `single_threaded`
+ * and a negative read adds `negative_sentiment`.
  */
 export function flagDeal(
   opp: Opportunity,
   index: Map<string, ChangeLogEntry[]>,
   today: Date,
   nextStepQuality?: 'concrete' | 'vague',
+  signals?: TranscriptSignals,
 ): RiskFlag[] {
   const { pushCount, daysSinceMovement } = dealRiskSignals(opp, index, today);
   const flags: RiskFlag[] = [];
@@ -97,6 +102,11 @@ export function flagDeal(
   } else if (nextStepQuality === 'vague') {
     flags.push({ kind: 'vague_next_step', detail: 'vague next step', why: 'The next step reads as generic filler, not a concrete dated action.' });
   }
-  // 'single_threaded' still arrives in a later step — not populated yet.
+  if (signals && signals.stakeholders.length <= 1) {
+    flags.push({ kind: 'single_threaded', detail: 'single-threaded', why: 'Only one stakeholder engaged on recent calls — deal is single-threaded.' });
+  }
+  if (signals?.sentiment === 'negative') {
+    flags.push({ kind: 'negative_sentiment', detail: 'negative sentiment', why: 'Latest call sentiment read as negative.' });
+  }
   return flags;
 }
