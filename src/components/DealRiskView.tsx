@@ -187,7 +187,7 @@ export default function DealRiskView() {
                   <td className="px-2 py-1.5">
                     <div className="flex flex-wrap gap-1">
                       {r.flags.map((f, i) => (
-                        <span key={i} title={f.detail} className={`px-1.5 py-0.5 rounded text-[10px] ${FLAG_META[f.kind].tone}`}>
+                        <span key={i} title={f.why ?? f.detail} className={`px-1.5 py-0.5 rounded text-[10px] ${FLAG_META[f.kind].tone}`}>
                           {FLAG_META[f.kind].label}
                         </span>
                       ))}

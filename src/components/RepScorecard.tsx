@@ -246,7 +246,7 @@ export default function RepScorecard() {
                       <div className="text-[11px] text-muted-foreground">{d.stage} · {fmtMoney(d.amount)}</div>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {d.flags.map((f, i) => (
-                          <span key={i} title={f.detail} className={`px-1.5 py-0.5 rounded text-[10px] ${FLAG_META[f.kind].tone}`}>
+                          <span key={i} title={f.why ?? f.detail} className={`px-1.5 py-0.5 rounded text-[10px] ${FLAG_META[f.kind].tone}`}>
                             {FLAG_META[f.kind].label}{f.detail ? ` · ${f.detail}` : ''}
                           </span>
                         ))}
