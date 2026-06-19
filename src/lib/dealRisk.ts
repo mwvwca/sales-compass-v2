@@ -27,6 +27,7 @@ export interface AtRiskDeal {
   id: string;
   name: string;
   salesforceId?: string;
+  closeDate?: string;
   amount: number;
   stage: string;
   flags: RiskFlag[];

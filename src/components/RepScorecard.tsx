@@ -8,6 +8,7 @@ import {
 } from '@/lib/oneOnOnes';
 import { loadOneOnOne, saveOneOnOne } from '@/lib/oneOnOnesApi';
 import { sfdcOpportunityUrl } from '@/lib/sfdc';
+import { getQuarter } from '@/types/forecast';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -143,6 +144,24 @@ export default function RepScorecard() {
     return buildRepScorecard(repId, { opportunities, changelog, dealRegistrations, managerQuotas, reps });
   }, [repId, opportunities, changelog, dealRegistrations, managerQuotas, reps]);
 
+  // At-risk quarter filter (distinct close-date quarters present in the list).
+  const [atRiskQuarter, setAtRiskQuarter] = useState<string>('all');
+  const atRiskQuarters = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of sc?.atRisk ?? []) {
+      if (d.closeDate) { try { set.add(getQuarter(d.closeDate)); } catch { /* skip bad dates */ } }
+    }
+    return Array.from(set).sort();
+  }, [sc]);
+  const atRiskFiltered = useMemo(() => {
+    const all = sc?.atRisk ?? [];
+    if (atRiskQuarter === 'all') return all;
+    return all.filter(d => {
+      if (!d.closeDate) return false;
+      try { return getQuarter(d.closeDate) === atRiskQuarter; } catch { return false; }
+    });
+  }, [sc, atRiskQuarter]);
+
   if (pickReps.length === 0) {
     return <p className="text-xs text-muted-foreground py-6 text-center">No reps yet — add reps in Goals to build scorecards.</p>;
   }
@@ -201,8 +220,22 @@ export default function RepScorecard() {
             {sc.atRisk.length === 0 ? (
               <p className="text-xs text-muted-foreground">No open deals flagged at risk.</p>
             ) : (
+              <>
+                {atRiskQuarters.length > 0 && (
+                  <select
+                    value={atRiskQuarter}
+                    onChange={e => setAtRiskQuarter(e.target.value)}
+                    className="mb-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="all">All quarters</option>
+                    {atRiskQuarters.map(q => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                )}
+                {atRiskFiltered.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No at-risk deals in this quarter.</p>
+                ) : (
               <div className="border border-border rounded-md divide-y divide-border">
-                {sc.atRisk.map(d => (
+                {atRiskFiltered.map(d => (
                   <div key={d.id} className="px-3 py-2 flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium truncate">
@@ -223,6 +256,8 @@ export default function RepScorecard() {
                   </div>
                 ))}
               </div>
+                )}
+              </>
             )}
           </Section>
 
