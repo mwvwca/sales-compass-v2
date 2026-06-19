@@ -58,8 +58,18 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
+let localWriteWarned = false;
 function saveToStorage<T>(key: string, data: T) {
-  localStorage.setItem(key, JSON.stringify(data));
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    // Best-effort local mirror; Supabase is the source of truth. iOS Safari can throw
+    // QuotaExceededError (or always throws in Private Browsing) — don't break the save path.
+    if (!localWriteWarned) {
+      console.warn('localStorage write failed; continuing (cloud is source of truth):', e);
+      localWriteWarned = true;
+    }
+  }
 }
 
 // ---- Slice cleanup/migration, shared by the localStorage initializer and the
@@ -129,12 +139,18 @@ function normalizeHydratedField(field: string, value: unknown): unknown {
 const MAX_SNAPSHOTS = 5000;
 
 function getStorageSizeKB(): number {
-  let total = 0;
-  for (const key of Object.values(STORAGE_KEYS)) {
-    const item = localStorage.getItem(key);
-    if (item) total += item.length * 2;
+  try {
+    let total = 0;
+    for (const key of Object.values(STORAGE_KEYS)) {
+      const item = localStorage.getItem(key);
+      if (item) total += item.length * 2;
+    }
+    return Math.round(total / 1024);
+  } catch {
+    // Accessing localStorage can throw outright when storage is fully blocked
+    // (iOS strict privacy). Fall back to 0 like loadFromStorage falls back.
+    return 0;
   }
-  return Math.round(total / 1024);
 }
 
 function pruneSnapshots(snapshots: OpportunitySnapshot[], limit: number): OpportunitySnapshot[] {
