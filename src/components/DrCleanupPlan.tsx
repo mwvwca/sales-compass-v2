@@ -22,6 +22,7 @@ const STAGE_META: Record<CleanupStage, { label: string; tone: string; short: str
   partner_outreach: { label: 'Partner Outreach', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400', short: 'Outreach' },
   final_notice: { label: 'Final Notice', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', short: 'Final Notice' },
   ready_to_close: { label: 'Ready to Close', tone: 'bg-red-500/15 text-red-700 dark:text-red-400', short: 'Close' },
+  confirm_qualified: { label: 'Confirm (Qualified)', tone: 'bg-teal-500/15 text-teal-700 dark:text-teal-400', short: 'Confirm' },
   exempt: { label: 'Exempt (Anchor)', tone: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', short: 'Anchor' },
 };
 

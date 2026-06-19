@@ -2,6 +2,11 @@ import type { DealRegistration } from '@/types/forecast';
 import { sfdcAccountUrl } from './sfdc';
 import { escapeHtml } from './richClipboard';
 
+// A "qualified" registration (reached SQL or >=25% probability) is escalated to a
+// confirm-or-close notice rather than auto-closed once it goes quiet.
+const QUALIFY_FLOOR = 0.25;
+const QUALIFIED_ESCALATE_DAYS = 30;
+
 // ============================================================
 // Anchor analysis — distinguish the real worked deal from padding satellites
 // on multi-registration accounts (same accountName + CAM).
@@ -86,6 +91,7 @@ export type CleanupStage =
   | 'partner_outreach'  // 15-29 days
   | 'final_notice'      // 30-44 days
   | 'ready_to_close'    // 45+ days
+  | 'confirm_qualified' // qualified, quiet 30+ days — escalate, never auto-close
   | 'exempt';           // anchor
 
 export interface CleanupClassification {
@@ -95,6 +101,7 @@ export interface CleanupClassification {
   daysSinceActivity: number;
   immediateAction: boolean;
   recommendedAction: string;
+  everQualified: boolean;
   /** Total registrations on this account+CAM (for orphan/satellite context). */
   accountRegCount: number;
 }
@@ -130,6 +137,9 @@ export function classifyCleanup(
     const refDate = refDateStr ? new Date(refDateStr) : today;
     const daysSinceActivity = Math.floor((today.getTime() - refDate.getTime()) / 86400000);
 
+    const everQualified = dr.isSql || dr.probability >= QUALIFY_FLOOR
+      || (dr.stageHistory || []).some(h => h.probability >= QUALIFY_FLOOR);
+
     if (role === 'anchor') {
       results.push({
         dr,
@@ -137,6 +147,7 @@ export function classifyCleanup(
         cleanupStage: 'exempt',
         daysSinceActivity,
         immediateAction: false,
+        everQualified,
         accountRegCount,
         recommendedAction: 'Anchor opportunity — actively worked. No action needed.',
       });
@@ -150,6 +161,7 @@ export function classifyCleanup(
         cleanupStage: 'partner_outreach',
         daysSinceActivity,
         immediateAction: true,
+        everQualified,
         accountRegCount,
         recommendedAction: `Account has ${accountRegCount} registrations with NO activity on any. AE must engage or close all.`,
       });
@@ -160,16 +172,26 @@ export function classifyCleanup(
     let action: string;
     if (daysSinceActivity < 15) {
       stage = 'monitoring';
-      action = 'Within initial 15-day follow-up window. AE to continue outreach.';
-    } else if (daysSinceActivity < 30) {
-      stage = 'partner_outreach';
-      action = 'Send partner rep email (CC CAM): 15-day response window before closure.';
-    } else if (daysSinceActivity < 45) {
-      stage = 'final_notice';
-      action = 'Send final notice email: registration will be closed if no response.';
+      action = 'Within initial 15-day window. Continue outreach.';
+    } else if (everQualified) {
+      if (daysSinceActivity < QUALIFIED_ESCALATE_DAYS) {
+        stage = 'monitoring';
+        action = 'Qualified and worked within 30 days. No action.';
+      } else {
+        stage = 'confirm_qualified';
+        action = 'Qualified deal, no activity 30+ days. Send confirm-or-close notice — do NOT auto-close.';
+      }
     } else {
-      stage = 'ready_to_close';
-      action = 'No response after 30+ days. Close the deal registration.';
+      if (daysSinceActivity < 30) {
+        stage = 'partner_outreach';
+        action = 'Send partner rep email (CC CAM): 15-day response window.';
+      } else if (daysSinceActivity < 45) {
+        stage = 'final_notice';
+        action = 'Send final notice: will be closed if no response.';
+      } else {
+        stage = 'ready_to_close';
+        action = 'Never qualified, no activity 45+ days. Close the registration.';
+      }
     }
 
     results.push({
@@ -178,12 +200,13 @@ export function classifyCleanup(
       cleanupStage: stage,
       daysSinceActivity,
       immediateAction: false,
+      everQualified,
       accountRegCount,
       recommendedAction: action,
     });
   }
 
-  const stageOrder: CleanupStage[] = ['partner_outreach', 'ready_to_close', 'final_notice', 'monitoring', 'exempt'];
+  const stageOrder: CleanupStage[] = ['partner_outreach', 'ready_to_close', 'confirm_qualified', 'final_notice', 'monitoring', 'exempt'];
   return results.sort((a, b) => {
     if (a.immediateAction !== b.immediateAction) return a.immediateAction ? -1 : 1;
     // Ready to close ranks above other non-immediate stages
@@ -191,9 +214,10 @@ export function classifyCleanup(
       if (c.immediateAction) return 0;
       if (c.cleanupStage === 'ready_to_close') return 1;
       if (c.cleanupStage === 'final_notice') return 2;
-      if (c.cleanupStage === 'partner_outreach') return 3;
-      if (c.cleanupStage === 'monitoring') return 4;
-      return 5;
+      if (c.cleanupStage === 'confirm_qualified') return 3;
+      if (c.cleanupStage === 'partner_outreach') return 4;
+      if (c.cleanupStage === 'monitoring') return 5;
+      return 6;
     };
     const pa = priority(a);
     const pb = priority(b);
@@ -236,7 +260,7 @@ export function groupByCAM(items: CleanupClassification[]): CamCleanupGroup[] {
         camEmail: cam === 'No CAM' ? '' : nameToEmail(cam),
         deals: [],
         aeEmails: [],
-        stageCounts: { monitoring: 0, partner_outreach: 0, final_notice: 0, ready_to_close: 0, exempt: 0 },
+        stageCounts: { monitoring: 0, partner_outreach: 0, final_notice: 0, ready_to_close: 0, confirm_qualified: 0, exempt: 0 },
         immediateCount: 0,
       };
       groups.set(cam, g);
@@ -345,6 +369,7 @@ function stagePct(d: CleanupClassification): string {
 
 type AeBuckets = {
   closing: CleanupClassification[];
+  confirmQualified: CleanupClassification[];
   finalNotice: CleanupClassification[];
   outreach: CleanupClassification[];
   needsAttention: CleanupClassification[];
@@ -365,6 +390,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   // clusters get their own "Needs attention" bucket, deduped to one row per account.
   const actionableCount = group.deals.filter(d => d.cleanupStage !== 'monitoring').length;
   const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' && !d.immediateAction);
+  const confirmQualified = group.deals.filter(d => d.cleanupStage === 'confirm_qualified' && !d.immediateAction);
   const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction);
   const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction);
   const needsAttention: CleanupClassification[] = [];
@@ -383,16 +409,17 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   const byAe = new Map<string, AeBuckets>();
   const ensure = (ae: string): AeBuckets => {
     let b = byAe.get(ae);
-    if (!b) { b = { closing: [], finalNotice: [], outreach: [], needsAttention: [] }; byAe.set(ae, b); }
+    if (!b) { b = { closing: [], confirmQualified: [], finalNotice: [], outreach: [], needsAttention: [] }; byAe.set(ae, b); }
     return b;
   };
   const aeOf = (d: CleanupClassification) => d.dr.repName?.trim() || '(unassigned AE)';
   for (const d of closing) ensure(aeOf(d)).closing.push(d);
+  for (const d of confirmQualified) ensure(aeOf(d)).confirmQualified.push(d);
   for (const d of finalNotice) ensure(aeOf(d)).finalNotice.push(d);
   for (const d of outreach) ensure(aeOf(d)).outreach.push(d);
   for (const d of needsAttention) ensure(aeOf(d)).needsAttention.push(d);
   const aes = Array.from(byAe.entries()).sort((a, b) => {
-    const total = (x: AeBuckets) => x.closing.length + x.finalNotice.length + x.outreach.length + x.needsAttention.length;
+    const total = (x: AeBuckets) => x.closing.length + x.confirmQualified.length + x.finalNotice.length + x.outreach.length + x.needsAttention.length;
     return total(b[1]) - total(a[1]) || a[0].localeCompare(b[0]);
   });
 
@@ -409,6 +436,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
 
   const BUCKET_COLOR = {
     closing: '#b91c1c',
+    confirmQualified: '#0f766e',
     finalNotice: '#b45309',
     outreach: '#1d4ed8',
     needsAttention: '#92400e',
@@ -426,9 +454,10 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   }
 
   // Totals count line — each count colored to match its bucket below.
-  P.push(`${closing.length} closing · ${finalNotice.length} final notice · ${outreach.length} outreach · ${needsAttention.length} need attention`);
+  P.push(`${closing.length} closing · ${confirmQualified.length} confirm · ${finalNotice.length} final notice · ${outreach.length} outreach · ${needsAttention.length} need attention`);
   const countHtml = [
     `<span style="color:${BUCKET_COLOR.closing}">${esc(`${closing.length} closing`)}</span>`,
+    `<span style="color:${BUCKET_COLOR.confirmQualified}">${esc(`${confirmQualified.length} confirm`)}</span>`,
     `<span style="color:${BUCKET_COLOR.finalNotice}">${esc(`${finalNotice.length} final notice`)}</span>`,
     `<span style="color:${BUCKET_COLOR.outreach}">${esc(`${outreach.length} outreach`)}</span>`,
     `<span style="color:${BUCKET_COLOR.needsAttention}">${esc(`${needsAttention.length} need attention`)}</span>`,
@@ -458,6 +487,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   for (const [ae, b] of aes) {
     const counts: string[] = [];
     if (b.closing.length) counts.push(`${b.closing.length} closing`);
+    if (b.confirmQualified.length) counts.push(`${b.confirmQualified.length} confirm`);
     if (b.finalNotice.length) counts.push(`${b.finalNotice.length} final notice`);
     if (b.outreach.length) counts.push(`${b.outreach.length} outreach`);
     if (b.needsAttention.length) counts.push(`${b.needsAttention.length} need attention`);
@@ -465,6 +495,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
     P.push('', `AE: ${ae} — ${countsStr}`); // plain: blank line before each AE header
     H.push(`<div style="font-weight:600;font-size:15px;margin:14px 0 0;padding-bottom:5px;border-bottom:1px solid #e5e7eb">${esc(ae)}<span style="font-weight:400;color:#6b7280;font-size:13px"> — ${esc(countsStr)}</span></div>`);
     renderBucket('Closing — being closed, no response needed (45+ days)', b.closing, false, BUCKET_COLOR.closing);
+    renderBucket('Confirm — qualified but quiet 30+ days; confirm it is active or it will be closed', b.confirmQualified, false, BUCKET_COLOR.confirmQualified);
     renderBucket('Final notice — confirm within 15 days or it will be closed', b.finalNotice, false, BUCKET_COLOR.finalNotice);
     renderBucket('Outreach — quiet 15+ days, please confirm status', b.outreach, false, BUCKET_COLOR.outreach);
     renderBucket('Needs attention — no activity on any registration; engage or close', b.needsAttention, true, BUCKET_COLOR.needsAttention);
@@ -487,25 +518,27 @@ export interface CleanupSummary {
   totalActionable: number;
   immediateAction: number;
   readyToClose: number;
+  confirmQualified: number;
   finalNotice: number;
   partnerOutreach: number;
   monitoring: number;
   anchorsExempt: number;
   topOrphanAccounts: { account: string; cam: string; regCount: number }[];
   orphansByRep: { rep: string; account: string; cam: string; regCount: number }[];
-  byRep: { rep: string; immediate: number; readyToClose: number; finalNotice: number; partnerOutreach: number; total: number }[];
+  byRep: { rep: string; immediate: number; readyToClose: number; confirmQualified: number; finalNotice: number; partnerOutreach: number; total: number }[];
 }
 
 export function buildCleanupSummary(items: CleanupClassification[]): CleanupSummary {
   const actionable = items.filter(i => i.cleanupStage !== 'exempt');
   const anchorsExempt = items.filter(i => i.cleanupStage === 'exempt').length;
 
-  const repMap = new Map<string, { immediate: number; readyToClose: number; finalNotice: number; partnerOutreach: number; total: number }>();
+  const repMap = new Map<string, { immediate: number; readyToClose: number; confirmQualified: number; finalNotice: number; partnerOutreach: number; total: number }>();
   for (const item of actionable) {
     const rep = item.dr.repName?.trim() || '(unassigned)';
-    const cur = repMap.get(rep) || { immediate: 0, readyToClose: 0, finalNotice: 0, partnerOutreach: 0, total: 0 };
+    const cur = repMap.get(rep) || { immediate: 0, readyToClose: 0, confirmQualified: 0, finalNotice: 0, partnerOutreach: 0, total: 0 };
     if (item.immediateAction) cur.immediate++;
     else if (item.cleanupStage === 'ready_to_close') cur.readyToClose++;
+    else if (item.cleanupStage === 'confirm_qualified') cur.confirmQualified++;
     else if (item.cleanupStage === 'final_notice') cur.finalNotice++;
     else if (item.cleanupStage === 'partner_outreach') cur.partnerOutreach++;
     cur.total++;
@@ -532,6 +565,7 @@ export function buildCleanupSummary(items: CleanupClassification[]): CleanupSumm
     totalActionable: actionable.length,
     immediateAction: actionable.filter(i => i.immediateAction).length,
     readyToClose: actionable.filter(i => i.cleanupStage === 'ready_to_close').length,
+    confirmQualified: actionable.filter(i => i.cleanupStage === 'confirm_qualified').length,
     finalNotice: actionable.filter(i => i.cleanupStage === 'final_notice').length,
     partnerOutreach: actionable.filter(i => i.cleanupStage === 'partner_outreach' && !i.immediateAction).length,
     monitoring: actionable.filter(i => i.cleanupStage === 'monitoring').length,

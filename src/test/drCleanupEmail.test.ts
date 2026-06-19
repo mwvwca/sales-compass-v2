@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCleanupEmail, isActionable, type CamCleanupGroup, type CleanupClassification } from '@/lib/drCleanup';
+import { buildCleanupEmail, isActionable, classifyCleanup, type CamCleanupGroup, type CleanupClassification } from '@/lib/drCleanup';
 import type { DealRegistration } from '@/types/forecast';
 
 function dr(over: Partial<DealRegistration> = {}): DealRegistration {
@@ -15,7 +15,7 @@ function dr(over: Partial<DealRegistration> = {}): DealRegistration {
   } as DealRegistration;
 }
 
-function cls(over: Partial<CleanupClassification> & { dr?: Partial<DealRegistration> } = {}): CleanupClassification {
+function cls(over: Omit<Partial<CleanupClassification>, 'dr'> & { dr?: Partial<DealRegistration> } = {}): CleanupClassification {
   const { dr: drOver, ...rest } = over;
   return {
     dr: dr(drOver),
@@ -35,7 +35,7 @@ function group(deals: CleanupClassification[]): CamCleanupGroup {
     camEmail: 'bob.smith@n-able.com',
     deals,
     aeEmails: ['jane.doe@n-able.com'],
-    stageCounts: { monitoring: 0, partner_outreach: 0, final_notice: 0, ready_to_close: 0, exempt: 0 },
+    stageCounts: { monitoring: 0, partner_outreach: 0, final_notice: 0, ready_to_close: 0, confirm_qualified: 0, exempt: 0 },
     immediateCount: 0,
   };
 }
@@ -48,7 +48,7 @@ describe('buildCleanupEmail re-bucketing', () => {
     const { body, html } = buildCleanupEmail(group([close, orphan]));
 
     // Totals line proves the split: orphan is "need attention", not closing/outreach.
-    expect(body).toContain('1 closing · 0 final notice · 0 outreach · 1 need attention');
+    expect(body).toContain('1 closing · 0 confirm · 0 final notice · 0 outreach · 1 need attention');
     // Closing section is genuinely 45+ days and excludes the 17-day orphan.
     expect(body).toContain('Closing — being closed, no response needed (45+ days)');
     expect(body).toContain('CloseCo');
@@ -68,7 +68,7 @@ describe('buildCleanupEmail re-bucketing', () => {
     const a2 = cls({ immediateAction: true, anchorRole: 'orphan_cluster', accountRegCount: 4, dr: { accountName: 'DupCo', opportunityName: 'DupCo Deal 2' } });
     const { body } = buildCleanupEmail(group([a1, a2]));
     expect((body.match(/DupCo/g) || []).length).toBe(1);
-    expect(body).toContain('0 closing · 0 final notice · 0 outreach · 1 need attention');
+    expect(body).toContain('0 closing · 0 confirm · 0 final notice · 0 outreach · 1 need attention');
   });
 });
 
@@ -114,5 +114,51 @@ describe('buildCleanupEmail styled HTML', () => {
     expect(html).toContain('<div style="margin-left:16px;padding:1px 0">');
     // Plain body still breaks up with a blank line before the AE header.
     expect(body).toContain('\n\nAE: Jane Doe');
+  });
+});
+
+describe('classifyCleanup qualified-vs-never-qualified ladders', () => {
+  const TODAY = new Date('2026-06-18T00:00:00Z');
+  const daysAgo = (n: number) => new Date(TODAY.getTime() - n * 86400000).toISOString().slice(0, 10);
+
+  function realDr(over: Partial<DealRegistration> = {}): DealRegistration {
+    return {
+      opportunityId: '006Vy00001cDDU6',
+      accountName: 'SoloCo',
+      channelAccountManager: 'Bob Smith',
+      repName: 'Jane Doe',
+      status: 'active',
+      isSql: false,
+      probability: 0,
+      stage: 'Discovery',
+      stageHistory: [],
+      createdDate: '2020-01-01',
+      ...over,
+    } as DealRegistration;
+  }
+
+  const stageOf = (dr: DealRegistration) => classifyCleanup([dr], TODAY)[0].cleanupStage;
+
+  it('qualified (isSql), quiet 35d → confirm_qualified, not ready_to_close', () => {
+    expect(stageOf(realDr({ isSql: true, lastActivity: daysAgo(35) }))).toBe('confirm_qualified');
+  });
+
+  it('qualified (prob 0.5), quiet 60d → confirm_qualified (never closes)', () => {
+    expect(stageOf(realDr({ probability: 0.5, lastActivity: daysAgo(60) }))).toBe('confirm_qualified');
+  });
+
+  it('qualified, quiet 20d → monitoring', () => {
+    expect(stageOf(realDr({ isSql: true, lastActivity: daysAgo(20) }))).toBe('monitoring');
+  });
+
+  it('never-qualified (prob 0.05), quiet 50d → ready_to_close', () => {
+    expect(stageOf(realDr({ probability: 0.05, lastActivity: daysAgo(50) }))).toBe('ready_to_close');
+  });
+
+  it('email HTML includes the Confirm bucket header when such a deal exists', () => {
+    const confirm = cls({ cleanupStage: 'confirm_qualified', daysSinceActivity: 35, dr: { accountName: 'QualCo' } });
+    const { html } = buildCleanupEmail(group([confirm]));
+    expect(html).toContain('Confirm — qualified but quiet 30+ days; confirm it is active or it will be closed');
+    expect(html).toContain('<span style="color:#0f766e">1 confirm</span>');
   });
 });
