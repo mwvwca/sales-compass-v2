@@ -2,14 +2,15 @@ import type {
   Opportunity, ChangeLogEntry, ManagerQuota, Rep, DealRegistration, Quarter,
 } from '@/types/forecast';
 import { getCurrentQuarter, getQuarter } from '@/types/forecast';
-import { currentlySql } from './drSql';
 import { computeCommitAccuracy } from './commitAccuracy';
 import { computeSlips } from './slips';
 import { computeAeRows } from './aeAccountability';
+import { buildChangelogIndex, dealRiskSignals, flagDeal, STALE_DAYS } from './dealRisk';
 
-// ---- Tunables ----
-const STALE_DAYS = 30;      // open deal with no changelog movement in this many days
-const PUSH_FLAG_MIN = 2;    // close-date pushes before a deal is flagged "pushed"
+// Risk flagging now lives in ./dealRisk (shared with the all-reps Deal Risk view).
+// Re-exported here so existing consumers of these types keep working unchanged.
+export type { RiskFlag, RiskFlagKind, AtRiskDeal } from './dealRisk';
+import type { AtRiskDeal } from './dealRisk';
 
 export interface ScorecardContext {
   opportunities: Opportunity[];
@@ -17,32 +18,6 @@ export interface ScorecardContext {
   dealRegistrations: DealRegistration[];
   managerQuotas: ManagerQuota[];
   reps: Rep[];
-}
-
-/**
- * Risk flag kinds. `no_next_step` and `single_threaded` are defined now but NOT
- * populated — that data arrives in a later roadmap step. We never fabricate them.
- */
-export type RiskFlagKind =
-  | 'pushed'
-  | 'stalled'
-  | 'under_qualified'
-  | 'no_next_step'
-  | 'single_threaded';
-
-export interface RiskFlag {
-  kind: RiskFlagKind;
-  detail?: string;
-}
-
-export interface AtRiskDeal {
-  id: string;
-  name: string;
-  amount: number;
-  stage: string;
-  flags: RiskFlag[];
-  /** Stage 2 (notes capture) — defined but unpopulated for now. */
-  nextStep: string | null;
 }
 
 export interface RepScorecard {
@@ -106,43 +81,19 @@ export function buildRepScorecard(repId: string, ctx: ScorecardContext, opts: Sc
   const caClosed = caRows.reduce((s, r) => s + r.closedFromCommitAmount, 0);
   const commitAccuracy = caCommitted > 0 ? caClosed / caCommitted : null;
 
-  // ---- changelog-derived per-opp signals ----
-  const byOpp = new Map<string, ChangeLogEntry[]>();
-  for (const e of changelog) {
-    const arr = byOpp.get(e.opportunityId);
-    if (arr) arr.push(e); else byOpp.set(e.opportunityId, [e]);
-  }
-  const lastMovement = (o: Opportunity): string | undefined => {
-    const dates = (byOpp.get(o.id) ?? []).map(e => e.importDate).filter(Boolean);
-    return dates.length ? dates.sort()[dates.length - 1] : o.importDate;
-  };
-  const daysSinceMovement = (o: Opportunity): number => {
-    const last = lastMovement(o);
-    const d = last ? new Date(last) : null;
-    if (!d || isNaN(d.getTime())) return 0;
-    return Math.max(0, Math.floor((today.getTime() - d.getTime()) / 86_400_000));
-  };
-  const pushCount = (o: Opportunity): number =>
-    (byOpp.get(o.id) ?? []).filter(e => e.field === 'closeDate' && e.oldValue && e.newValue).length;
+  // ---- changelog index + risk flagging (shared with the all-reps Deal Risk view) ----
+  const index = buildChangelogIndex(changelog);
 
   // ---- pipeline ----
-  const stale = openOpps.filter(o => daysSinceMovement(o) >= STALE_DAYS).length;
+  const stale = openOpps.filter(o => dealRiskSignals(o, index, today).daysSinceMovement >= STALE_DAYS).length;
   const slipped = computeSlips(opportunities, changelog, currentQuarter).filter(s => s.repName === repName).length;
 
   // ---- at-risk deals (flags computed NOW; nextStep/single-threaded left for later) ----
   const atRisk: AtRiskDeal[] = [];
   for (const o of openOpps) {
-    const flags: RiskFlag[] = [];
-    const pc = pushCount(o);
-    if (pc >= PUSH_FLAG_MIN) flags.push({ kind: 'pushed', detail: `close date pushed ${pc}×` });
-    const dsm = daysSinceMovement(o);
-    if (dsm >= STALE_DAYS) flags.push({ kind: 'stalled', detail: `${dsm}d no movement` });
-    if (!currentlySql({ probability: o.probability })) {
-      flags.push({ kind: 'under_qualified', detail: `${Math.round((o.probability ?? 0) * 100)}% probability` });
-    }
-    // 'no_next_step' / 'single_threaded' arrive with notes capture (Stage 2) — not populated yet.
+    const flags = flagDeal(o, index, today);
     if (flags.length) {
-      atRisk.push({ id: o.id, name: o.name, amount: o.amount || 0, stage: o.stage, flags, nextStep: null });
+      atRisk.push({ id: o.id, name: o.name, amount: o.amount || 0, stage: o.stage, flags, nextStep: o.nextStep?.trim() || null });
     }
   }
   atRisk.sort((a, b) => b.amount - a.amount);
@@ -162,8 +113,10 @@ export function buildRepScorecard(repId: string, ctx: ScorecardContext, opts: Sc
   // TODO: replace rule-based talking points with the briefing engine in a later step.
   const talkingPoints: string[] = [];
   for (const o of openOpps) {
-    if (o.classification === 'commit' && pushCount(o) >= 3) {
-      talkingPoints.push(`${o.name}: committed but close date pushed ${pushCount(o)}× (${fmtMoney(o.amount)}). Confirm it is still landing this quarter.`);
+    if (o.classification !== 'commit') continue;
+    const pc = dealRiskSignals(o, index, today).pushCount;
+    if (pc >= 3) {
+      talkingPoints.push(`${o.name}: committed but close date pushed ${pc}× (${fmtMoney(o.amount)}). Confirm it is still landing this quarter.`);
     }
   }
   if (commitAccuracy !== null && commitAccuracy < 0.5) {

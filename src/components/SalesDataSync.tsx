@@ -38,6 +38,8 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
       importDate,
       accountName: row["Account Name"]?.trim() || undefined,
       productName: row.Product?.trim() || undefined,
+      nextStep: row["Next Step"]?.trim() || undefined,
+      description: row.Description?.trim() || undefined,
       ...(isClosedLost ? { lostDate: importDate, lostReason: 'Closed Lost in Salesforce' } : {}),
     };
   });

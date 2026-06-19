@@ -14,9 +14,10 @@ import SlipReport from '@/components/SlipReport';
 import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
 import SignOutButton from '@/components/SignOutButton';
 import RepScorecard from '@/components/RepScorecard';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles } from 'lucide-react';
+import DealRiskView from '@/components/DealRiskView';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'scorecard' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
@@ -34,6 +35,7 @@ const Index = () => {
     { id: 'forecast', label: 'Forecast', icon: <BarChart3 size={14} /> },
     { id: 'goals', label: 'Goals', icon: <Users size={14} /> },
     { id: 'scorecard', label: '1:1s', icon: <Users size={14} /> },
+    { id: 'deal-risk', label: 'Deal risk', icon: <AlertTriangle size={14} /> },
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
     { id: 'dr-pipeline', label: 'DR Pipeline', icon: <Layers size={14} /> },
@@ -126,6 +128,15 @@ const Index = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Per-rep attainment, forecast, pipeline health, at-risk deals and channel quality — for 1:1 prep.</p>
             </div>
             <RepScorecard />
+          </div>
+        )}
+        {tab === 'deal-risk' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">Deal Risk</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Every open deal across all reps that's flagged at risk — pushed, stalled, or under-qualified.</p>
+            </div>
+            <DealRiskView />
           </div>
         )}
         {tab === 'slips' && (

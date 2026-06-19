@@ -538,6 +538,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             { field: 'stage', oldVal: existing.stage, newVal: o.stage },
             { field: 'name', oldVal: existing.name, newVal: o.name },
             { field: 'repName', oldVal: existing.repName, newVal: o.repName },
+            // Records next-step changes — unlocks a future "stale next step" flag.
+            { field: 'nextStep', oldVal: existing.nextStep || '(empty)', newVal: o.nextStep || '(empty)' },
           ];
 
           for (const { field, oldVal, newVal } of fieldsToTrack) {
