@@ -60,6 +60,33 @@ export type Database = {
         }
         Relationships: []
       }
+      one_on_ones: {
+        Row: {
+          action_items: Json
+          notes: string
+          rep_id: string
+          updated_at: string
+          user_id: string
+          week: string
+        }
+        Insert: {
+          action_items?: Json
+          notes?: string
+          rep_id: string
+          updated_at?: string
+          user_id: string
+          week: string
+        }
+        Update: {
+          action_items?: Json
+          notes?: string
+          rep_id?: string
+          updated_at?: string
+          user_id?: string
+          week?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
