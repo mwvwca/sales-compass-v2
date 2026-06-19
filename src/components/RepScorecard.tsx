@@ -7,6 +7,7 @@ import {
   type ActionItem,
 } from '@/lib/oneOnOnes';
 import { loadOneOnOne, saveOneOnOne } from '@/lib/oneOnOnesApi';
+import { sfdcOpportunityUrl } from '@/lib/sfdc';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -204,7 +205,11 @@ export default function RepScorecard() {
                 {sc.atRisk.map(d => (
                   <div key={d.id} className="px-3 py-2 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-xs font-medium truncate">{d.name}</div>
+                      <div className="text-xs font-medium truncate">
+                        {d.salesforceId
+                          ? <a href={sfdcOpportunityUrl(d.salesforceId)} target="_blank" rel="noopener noreferrer" className="hover:underline">{d.name}</a>
+                          : d.name}
+                      </div>
                       <div className="text-[11px] text-muted-foreground">{d.stage} · {fmtMoney(d.amount)}</div>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {d.flags.map((f, i) => (

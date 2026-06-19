@@ -5,6 +5,7 @@ import { buildChangelogIndex, dealRiskSignals, flagDeal, type RiskFlag, type Ris
 import { selectChangedDeals, mergeClassifications, qualityFor, type NextStepCache } from '@/lib/nextStepClassify';
 import { classifyNextSteps } from '@/lib/nextStepClassifyApi';
 import { loadNextStepCache, saveNextStepCache } from '@/lib/nextStepCacheApi';
+import { sfdcOpportunityUrl } from '@/lib/sfdc';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const TERMINAL = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
@@ -24,6 +25,7 @@ interface RiskRow {
   id: string;
   rep: string;
   name: string;
+  salesforceId?: string;
   amount: number;
   stage: string;
   daysSinceMovement: number;
@@ -55,7 +57,7 @@ export default function DealRiskView() {
       if (flags.length === 0) continue;
       const { pushCount, daysSinceMovement } = dealRiskSignals(o, index, today);
       out.push({
-        id: o.id, rep: o.repName || '(unassigned)', name: o.name, amount: o.amount || 0,
+        id: o.id, rep: o.repName || '(unassigned)', name: o.name, salesforceId: o.salesforceId, amount: o.amount || 0,
         stage: o.stage, daysSinceMovement, pushCount, flags,
       });
     }
@@ -173,7 +175,11 @@ export default function DealRiskView() {
               {filtered.map(r => (
                 <tr key={r.id} className="border-t border-border">
                   <td className="px-2 py-1.5">{r.rep}</td>
-                  <td className="px-2 py-1.5 font-medium">{r.name}</td>
+                  <td className="px-2 py-1.5 font-medium">
+                    {r.salesforceId
+                      ? <a href={sfdcOpportunityUrl(r.salesforceId)} target="_blank" rel="noopener noreferrer" className="hover:underline">{r.name}</a>
+                      : r.name}
+                  </td>
                   <td className="px-2 py-1.5 text-right font-mono tabular-nums">{fmtMoney(r.amount)}</td>
                   <td className="px-2 py-1.5">{r.stage}</td>
                   <td className="px-2 py-1.5 text-right font-mono tabular-nums">{r.daysSinceMovement}d</td>
