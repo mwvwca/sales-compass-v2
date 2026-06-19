@@ -6,12 +6,13 @@ const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`
 const TERMINAL = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
 
 // Only the populated flag kinds are filterable.
-const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step'];
+const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step', 'vague_next_step'];
 const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
   pushed: { label: 'Pushed', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   stalled: { label: 'Stalled', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
   under_qualified: { label: 'Under-qualified', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
   no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
+  vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
 };
 
