@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
 import { buildChangelogIndex, dealRiskSignals, flagDeal, type RiskFlag, type RiskFlagKind } from '@/lib/dealRisk';
-import { selectChangedDeals, mergeClassifications, qualityFor, type NextStepCache } from '@/lib/nextStepClassify';
+import { selectChangedDeals, mergeClassifications, qualityFor, nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
 import { classifyNextSteps } from '@/lib/nextStepClassifyApi';
 import { loadNextStepCache, saveNextStepCache } from '@/lib/nextStepCacheApi';
 import { sfdcOpportunityUrl } from '@/lib/sfdc';
@@ -26,6 +26,7 @@ interface RiskRow {
   rep: string;
   name: string;
   salesforceId?: string;
+  nextStep?: string;
   amount: number;
   stage: string;
   daysSinceMovement: number;
@@ -57,7 +58,7 @@ export default function DealRiskView() {
       if (flags.length === 0) continue;
       const { pushCount, daysSinceMovement } = dealRiskSignals(o, index, today);
       out.push({
-        id: o.id, rep: o.repName || '(unassigned)', name: o.name, salesforceId: o.salesforceId, amount: o.amount || 0,
+        id: o.id, rep: o.repName || '(unassigned)', name: o.name, salesforceId: o.salesforceId, nextStep: o.nextStep, amount: o.amount || 0,
         stage: o.stage, daysSinceMovement, pushCount, flags,
       });
     }
@@ -191,6 +192,12 @@ export default function DealRiskView() {
                           {FLAG_META[f.kind].label}
                         </span>
                       ))}
+                      {(() => {
+                        const v = nextStepVerdict(r.id, r.nextStep, cache);
+                        if (v === 'concrete') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-700 dark:text-green-400">Concrete next step</span>;
+                        if (v === 'unclassified') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary/40 text-muted-foreground">Next step — not yet classified</span>;
+                        return null;
+                      })()}
                     </div>
                   </td>
                 </tr>

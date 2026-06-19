@@ -9,6 +9,8 @@ import {
 import { loadOneOnOne, saveOneOnOne } from '@/lib/oneOnOnesApi';
 import { sfdcOpportunityUrl } from '@/lib/sfdc';
 import { getQuarter } from '@/types/forecast';
+import { nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
+import { loadNextStepCache } from '@/lib/nextStepCacheApi';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -144,6 +146,14 @@ export default function RepScorecard() {
     return buildRepScorecard(repId, { opportunities, changelog, dealRegistrations, managerQuotas, reps });
   }, [repId, opportunities, changelog, dealRegistrations, managerQuotas, reps]);
 
+  // Next-step classification cache (read-only here; classified from the Deal Risk view).
+  const [nsCache, setNsCache] = useState<NextStepCache>({});
+  useEffect(() => {
+    let cancelled = false;
+    loadNextStepCache().then(c => { if (!cancelled) setNsCache(c); }).catch(() => { /* offline → empty */ });
+    return () => { cancelled = true; };
+  }, []);
+
   // At-risk quarter filter (distinct close-date quarters present in the list).
   const [atRiskQuarter, setAtRiskQuarter] = useState<string>('all');
   const atRiskQuarters = useMemo(() => {
@@ -250,6 +260,12 @@ export default function RepScorecard() {
                             {FLAG_META[f.kind].label}{f.detail ? ` · ${f.detail}` : ''}
                           </span>
                         ))}
+                        {(() => {
+                          const v = nextStepVerdict(d.id, d.nextStep, nsCache);
+                          if (v === 'concrete') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-700 dark:text-green-400">Concrete next step</span>;
+                          if (v === 'unclassified') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary/40 text-muted-foreground">Next step — not yet classified</span>;
+                          return null;
+                        })()}
                       </div>
                     </div>
                     <div className="text-[11px] text-muted-foreground italic max-w-[45%] line-clamp-2 text-right" title={d.nextStep ?? undefined}>{d.nextStep ?? 'next step —'}</div>
