@@ -2,10 +2,11 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
 import { getMonthKey, type Quarter } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle, ExternalLink } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle, ExternalLink, FileText } from 'lucide-react';
 import { getStagePercentage, formatStageWithPct } from '@/lib/utils';
 import { sfdcOpportunityUrl, buildAccountUrlMap, accountUrlForOpportunity } from '@/lib/sfdc';
 import OpportunityHistory from './OpportunityHistory';
+import { TranscriptDialog } from './TranscriptDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   const acctUrlMap = useMemo(() => buildAccountUrlMap(dealRegistrations), [dealRegistrations]);
   const [notesOpp, setNotesOpp] = useState<{ id: string; name: string } | null>(null);
   const [notesText, setNotesText] = useState('');
+  const [transcriptOpp, setTranscriptOpp] = useState<{ id: string; name: string } | null>(null);
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -463,6 +465,13 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                           <StickyNote size={12} />
                           </button>
                           <button
+                            onClick={() => setTranscriptOpp({ id: opp.id, name: opp.name })}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Call transcripts"
+                          >
+                            <FileText size={12} />
+                          </button>
+                          <button
                             onClick={() => classifyOpportunity(opp.id, isOmitted ? 'unclassified' : 'omitted')}
                             className={`transition-colors ${isOmitted ? 'text-foreground hover:text-foreground/80' : 'text-muted-foreground hover:text-foreground'}`}
                             title={isOmitted ? 'Restore opportunity' : 'Omit opportunity'}
@@ -637,6 +646,12 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
           })()}
         </DialogContent>
       </Dialog>
+
+      <TranscriptDialog
+        oppId={transcriptOpp?.id ?? null}
+        name={transcriptOpp?.name}
+        onClose={() => setTranscriptOpp(null)}
+      />
 
     </div>
   );
