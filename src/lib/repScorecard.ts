@@ -1,7 +1,7 @@
 import type {
   Opportunity, ChangeLogEntry, ManagerQuota, Rep, DealRegistration, Quarter,
 } from '@/types/forecast';
-import { getCurrentQuarter } from '@/types/forecast';
+import { getCurrentQuarter, getQuarter } from '@/types/forecast';
 import { currentlySql } from './drSql';
 import { computeCommitAccuracy } from './commitAccuracy';
 import { computeSlips } from './slips';
@@ -69,7 +69,9 @@ export interface ScorecardOpts {
  * Accuracy and AE Accountability by reusing their lib cores. Pure given ctx+opts.
  */
 export function buildRepScorecard(repId: string, ctx: ScorecardContext, opts: ScorecardOpts = {}): RepScorecard {
-  const { opportunities, changelog, dealRegistrations, managerQuotas, reps } = ctx;
+  // managerQuotas stays on the context for contract stability but is no longer the
+  // quota source — attainment is per-rep / per-quarter (rep.quarterlyGoals).
+  const { opportunities, changelog, dealRegistrations, reps } = ctx;
   const today = opts.today ?? new Date();
   const currentQuarter = opts.currentQuarter ?? getCurrentQuarter();
 
@@ -80,16 +82,19 @@ export function buildRepScorecard(repId: string, ctx: ScorecardContext, opts: Sc
   const repOpps = opportunities.filter(o => (!!repName && o.repName === repName) || (!!o.repId && o.repId === repId));
   const openOpps = repOpps.filter(o => !TERMINAL.has(o.classification));
 
-  // ---- attainment ----
-  const closedWon = repOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + (o.amount || 0), 0);
   const openAmount = openOpps.reduce((s, o) => s + (o.amount || 0), 0);
   const openCount = openOpps.length;
-  const year = today.getUTCFullYear();
-  const mq = managerQuotas.find(m => m.year === year)
-    ?? [...managerQuotas].sort((a, b) => b.year - a.year)[0];
-  const quota = mq?.annualAmount ?? 0;
-  const gap = quota - closedWon;
-  const coverage = openAmount / Math.max(gap, 1);
+
+  // ---- attainment: per-rep and per-quarter — the rep's own quarterly goal vs won THIS quarter ----
+  const inQuarter = (o: Opportunity) => !!o.closeDate && getQuarter(o.closeDate) === currentQuarter;
+  const closedWon = repOpps
+    .filter(o => o.classification === 'closed_won' && inQuarter(o))
+    .reduce((s, o) => s + (o.amount || 0), 0);
+  const quota = rep?.quarterlyGoals[currentQuarter] ?? 0;
+  const gap = Math.max(quota - closedWon, 0);
+  // coverage = in-quarter open pipeline against the remaining gap
+  const openInQuarter = openOpps.filter(inQuarter).reduce((s, o) => s + (o.amount || 0), 0);
+  const coverage = openInQuarter / Math.max(gap, 1);
 
   // ---- forecast ----
   const commit = repOpps.filter(o => o.classification === 'commit').reduce((s, o) => s + (o.amount || 0), 0);

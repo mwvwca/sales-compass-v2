@@ -7,7 +7,7 @@ import type {
 const TODAY = new Date('2026-06-18T00:00:00Z');
 const OPTS = { today: TODAY, currentQuarter: '2026-Q2' as Quarter };
 
-const REP: Rep = { id: 'r1', name: 'Jane Doe', quarterlyGoals: {}, isActive: true } as Rep;
+const REP: Rep = { id: 'r1', name: 'Jane Doe', quarterlyGoals: { '2026-Q2': 500_000 }, isActive: true } as Rep;
 
 function opp(over: Partial<Opportunity> & { id: string }): Opportunity {
   return {
@@ -47,7 +47,8 @@ describe('buildRepScorecard', () => {
       ],
     }), OPTS);
 
-    expect(sc.attainment).toEqual({ quota: 1_000_000, closedWon: 200_000, gap: 800_000, coverage: 250_000 / 800_000 });
+    // per-rep quota (quarterlyGoals['2026-Q2']); closed-won + open are all in-quarter here
+    expect(sc.attainment).toEqual({ quota: 500_000, closedWon: 200_000, gap: 300_000, coverage: 250_000 / 300_000 });
     expect(sc.forecast.commit).toBe(150_000);
     expect(sc.forecast.bestCase).toBe(250_000);       // commit + upside
     expect(sc.forecast.commitAccuracy).toBeNull();     // nothing resolved
@@ -111,5 +112,18 @@ describe('buildRepScorecard', () => {
     }), OPTS);
 
     expect(sc.forecast.commitAccuracy).toBe(1); // committed 90k in 2025-Q4, closed 90k
+    expect(sc.attainment.closedWon).toBe(0);    // G closed in 2025-Q4 — not the current quarter
+  });
+
+  it('coverage and gap clamp: gap floors at 0 when quota already met', () => {
+    const sc = buildRepScorecard('r1', ctx({
+      opportunities: [
+        opp({ id: 'H', classification: 'closed_won', amount: 600_000 }), // exceeds 500k goal, in-quarter
+        opp({ id: 'I', classification: 'commit', amount: 90_000, probability: 0.6 }),
+      ],
+    }), OPTS);
+    expect(sc.attainment.closedWon).toBe(600_000);
+    expect(sc.attainment.gap).toBe(0);                 // clamped, not negative
+    expect(sc.attainment.coverage).toBe(90_000 / 1);   // gap 0 → denominator max(0,1)=1
   });
 });
