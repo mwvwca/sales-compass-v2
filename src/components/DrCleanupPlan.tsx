@@ -172,12 +172,15 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
     toast(ok ? { title: 'Copied (formatted)' } : { title: 'Copy failed', variant: 'destructive' });
   };
 
-  const openInMail = (group: CamCleanupGroup) => {
-    const raw = emails[group.cam] || '';
-    const { subject, body } = extractSubject(raw);
-    const finalSubject = subject || `Pipeline Review — ${group.deals.length} Deal Registrations`;
-    const link = `mailto:${group.camEmail}?cc=${encodeURIComponent(group.aeEmails.join(','))}&subject=${encodeURIComponent(finalSubject)}&body=${encodeURIComponent(body)}`;
+  const openInMail = async (group: CamCleanupGroup) => {
+    const { subject, body, html } = buildCleanupEmail(group);
+    // Stage the formatted body on the clipboard so the user can one-paste it.
+    await copyRich(body, html);
+    // Open Outlook compose with To/CC/Subject filled and an EMPTY body — keeps the
+    // mailto URL short (no truncation on long lists) and lets ⌘V drop the rich list in.
+    const link = `mailto:${group.camEmail}?cc=${encodeURIComponent(group.aeEmails.join(','))}&subject=${encodeURIComponent(subject)}`;
     window.open(link);
+    toast({ title: 'Outlook opened — recipients & subject filled. Paste (⌘V) for the formatted list.' });
   };
 
   if (dealRegistrations.length === 0) return null;
@@ -352,7 +355,7 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                                 <RefreshCw size={12} /> Regenerate
                               </Button>
                               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openInMail(group)}>
-                                <ExternalLink size={12} /> Open in Mail
+                                <ExternalLink size={12} /> Open in Outlook
                               </Button>
                             </div>
                           </div>

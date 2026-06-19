@@ -402,34 +402,55 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
     return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(name)}</a>` : escapeHtml(name);
   };
 
-  // Build plain and HTML in lockstep so they never diverge.
+  // Plain text keeps its line form; HTML is styled <div> blocks joined with ''.
   const P: string[] = [];
   const H: string[] = [];
-  const line = (plain: string, html?: string) => { P.push(plain); H.push(html ?? escapeHtml(plain)); };
-  const blank = () => { P.push(''); H.push(''); };
+  const esc = escapeHtml;
 
-  line(`Hi ${camFirstName},`);
-  blank();
-  line('I am reaching out as part of our standard deal registration cleanup cadence. Per our agreed policy, registrations move through three phases: partner outreach at 15 days of inactivity, final notice at 30 days requiring confirmation within 15 days, and closure at 45 days if no activity has been recorded.');
-  blank();
-  line('Where an account has multiple registrations and one is actively being worked, we are retaining that anchor opportunity and only addressing the satellite registrations that have had no independent activity. The goal is a clean and accurate pipeline, not disruption of active deals.');
-  blank();
-  line(`${closing.length} closing · ${finalNotice.length} final notice · ${outreach.length} outreach · ${needsAttention.length} need attention`);
-  blank();
+  const BUCKET_COLOR = {
+    closing: '#b91c1c',
+    finalNotice: '#b45309',
+    outreach: '#1d4ed8',
+    needsAttention: '#92400e',
+  };
 
-  const renderBucket = (title: string, deals: CleanupClassification[], attention: boolean) => {
+  // Greeting + intro paragraphs.
+  const intro = [
+    `Hi ${camFirstName},`,
+    'I am reaching out as part of our standard deal registration cleanup cadence. Per our agreed policy, registrations move through three phases: partner outreach at 15 days of inactivity, final notice at 30 days requiring confirmation within 15 days, and closure at 45 days if no activity has been recorded.',
+    'Where an account has multiple registrations and one is actively being worked, we are retaining that anchor opportunity and only addressing the satellite registrations that have had no independent activity. The goal is a clean and accurate pipeline, not disruption of active deals.',
+  ];
+  for (const para of intro) {
+    P.push(para, '');
+    H.push(`<div style="margin:0 0 10px">${esc(para)}</div>`);
+  }
+
+  // Totals count line — each count colored to match its bucket below.
+  P.push(`${closing.length} closing · ${finalNotice.length} final notice · ${outreach.length} outreach · ${needsAttention.length} need attention`);
+  const countHtml = [
+    `<span style="color:${BUCKET_COLOR.closing}">${esc(`${closing.length} closing`)}</span>`,
+    `<span style="color:${BUCKET_COLOR.finalNotice}">${esc(`${finalNotice.length} final notice`)}</span>`,
+    `<span style="color:${BUCKET_COLOR.outreach}">${esc(`${outreach.length} outreach`)}</span>`,
+    `<span style="color:${BUCKET_COLOR.needsAttention}">${esc(`${needsAttention.length} need attention`)}</span>`,
+  ].join(' · ');
+  H.push(`<div style="font-weight:600;margin:0 0 14px">${countHtml}</div>`);
+
+  const renderBucket = (title: string, deals: CleanupClassification[], attention: boolean, color: string) => {
     if (deals.length === 0) return;
-    line(`  ${title}`);
+    P.push('', `  ${title}`); // plain: blank line before each bucket header
+    H.push(`<div style="font-weight:600;color:${color};margin:14px 0 4px">${esc(title)}</div>`);
     for (const d of deals) {
       const acct = d.dr.accountName || '(no account)';
       const days = `${d.daysSinceActivity}d`;
       if (attention) {
-        const tail = `${d.accountRegCount} regs, no activity · ${days}`;
-        line(`    ${acct} — ${tail}`, `    ${linkAccount(acct, d.dr.accountUrl)} — ${escapeHtml(tail)}`);
+        const regs = `${d.accountRegCount} regs, no activity`;
+        P.push(`    ${acct} — ${regs} · ${days}`);
+        H.push(`<div style="margin-left:16px;padding:1px 0">${linkAccount(acct, d.dr.accountUrl)}<span style="color:#9ca3af"> · ${esc(regs)} · ${esc(days)}</span></div>`);
       } else {
         const desc = d.dr.opportunityName || d.dr.product || '(deal)';
-        const tail = `${desc} · ${stagePct(d)} · ${days}`;
-        line(`    ${acct} — ${tail}`, `    ${linkAccount(acct, d.dr.accountUrl)} — ${escapeHtml(tail)}`);
+        const sp = stagePct(d);
+        P.push(`    ${acct} — ${desc} · ${sp} · ${days}`);
+        H.push(`<div style="margin-left:16px;padding:1px 0">${linkAccount(acct, d.dr.accountUrl)}<span style="color:#374151"> — ${esc(desc)}</span><span style="color:#9ca3af"> · ${esc(sp)} · ${esc(days)}</span></div>`);
       }
     }
   };
@@ -440,22 +461,22 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
     if (b.finalNotice.length) counts.push(`${b.finalNotice.length} final notice`);
     if (b.outreach.length) counts.push(`${b.outreach.length} outreach`);
     if (b.needsAttention.length) counts.push(`${b.needsAttention.length} need attention`);
-    line(`AE: ${ae} — ${counts.join(' · ')}`);
-    renderBucket('Closing — being closed, no response needed (45+ days)', b.closing, false);
-    renderBucket('Final notice — confirm within 15 days or it will be closed', b.finalNotice, false);
-    renderBucket('Outreach — quiet 15+ days, please confirm status', b.outreach, false);
-    renderBucket('Needs attention — no activity on any registration; engage or close', b.needsAttention, true);
-    blank();
+    const countsStr = counts.join(' · ');
+    P.push('', `AE: ${ae} — ${countsStr}`); // plain: blank line before each AE header
+    H.push(`<div style="font-weight:600;font-size:15px;margin:14px 0 0;padding-bottom:5px;border-bottom:1px solid #e5e7eb">${esc(ae)}<span style="font-weight:400;color:#6b7280;font-size:13px"> — ${esc(countsStr)}</span></div>`);
+    renderBucket('Closing — being closed, no response needed (45+ days)', b.closing, false, BUCKET_COLOR.closing);
+    renderBucket('Final notice — confirm within 15 days or it will be closed', b.finalNotice, false, BUCKET_COLOR.finalNotice);
+    renderBucket('Outreach — quiet 15+ days, please confirm status', b.outreach, false, BUCKET_COLOR.outreach);
+    renderBucket('Needs attention — no activity on any registration; engage or close', b.needsAttention, true, BUCKET_COLOR.needsAttention);
   }
 
-  line('Happy to discuss any of these on a call if useful.');
-  blank();
-  line('Best,');
-  line('Michael Wells');
-  line('Sales Manager, N-able');
+  // Sign-off.
+  P.push('', 'Happy to discuss any of these on a call if useful.', '', 'Best,', 'Michael Wells', 'Sales Manager, N-able');
+  H.push(`<div style="margin:14px 0 10px">${esc('Happy to discuss any of these on a call if useful.')}</div>`);
+  H.push(`<div>${esc('Best,')}<br>${esc('Michael Wells')}<br>${esc('Sales Manager, N-able')}</div>`);
 
   const subject = `Deal Registration Cleanup Cadence — Action Required (${actionableCount} registrations)`;
-  return { subject, body: P.join('\n'), html: H.join('<br>') };
+  return { subject, body: P.join('\n'), html: H.join('') };
 }
 
 // ============================================================

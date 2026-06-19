@@ -97,3 +97,22 @@ describe('isActionable / actionable subject count', () => {
     expect(buildCleanupEmail(g).subject).toContain('(1 registrations)');
   });
 });
+
+describe('buildCleanupEmail styled HTML', () => {
+  it('emits styled div blocks with bucket-colored headers and an AE header rule', () => {
+    const close = cls({ cleanupStage: 'ready_to_close', daysSinceActivity: 50, dr: { accountName: 'CloseCo', repName: 'Jane Doe' } });
+    const { html, body } = buildCleanupEmail(group([close]));
+    // Count line is bold with each count colored to its bucket.
+    expect(html).toContain('<div style="font-weight:600;margin:0 0 14px">');
+    expect(html).toContain('<span style="color:#b91c1c">1 closing</span>');
+    // Bucket header carries the closing color.
+    expect(html).toContain('<div style="font-weight:600;color:#b91c1c;margin:14px 0 4px">Closing — being closed, no response needed (45+ days)</div>');
+    // AE header has the bottom rule and the AE name.
+    expect(html).toContain('border-bottom:1px solid #e5e7eb');
+    expect(html).toContain('Jane Doe');
+    // Deal rows are indented divs (not <br>-joined flat text).
+    expect(html).toContain('<div style="margin-left:16px;padding:1px 0">');
+    // Plain body still breaks up with a blank line before the AE header.
+    expect(body).toContain('\n\nAE: Jane Doe');
+  });
+});
