@@ -33,7 +33,7 @@ function titleCase(str: string): string {
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
 }
 
-function parseStage(rawStage: string): { stage: string; probability: string } {
+export function parseStage(rawStage: string): { stage: string; probability: string } {
   if (!rawStage) return { stage: "", probability: "" };
   const trimmed = rawStage.trim();
 

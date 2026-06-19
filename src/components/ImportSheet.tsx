@@ -3,6 +3,7 @@ import type { Opportunity } from '@/types/forecast';
 import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { getImportedClassification } from '@/lib/forecastClassification';
+import { parseStage } from '@/lib/transformSalesforce';
 import { resolveReseller } from '@/lib/resellerUtils';
 import ImportReview from './ImportReview';
 import { notifyImportComplete } from './WeeklyBriefing';
@@ -263,6 +264,15 @@ export default function ImportSheet() {
             classification = 'commit';
           }
 
+          // Salesforce exports the stage verbatim ("Discovery 25%") and rarely a separate
+          // probability column — so derive probability (0–1) from the stage, falling back
+          // to the probability column when present.
+          const rawStage = String(row[mapping.stage || ''] || '').trim();
+          const parsed = parseStage(rawStage);
+          const stageName = parsed.stage || rawStage;
+          const stageProb = parsed.probability ? parseFloat(parsed.probability) / 100 : 0;
+          const colProb = parseFloat(row[mapping.probability || ''] || '0') || 0;
+
           return {
             id: sfid || `import-${Date.now()}-${i}`,
             salesforceId: sfid,
@@ -271,11 +281,11 @@ export default function ImportSheet() {
             repName: String(row[mapping.repName || ''] || 'Unassigned'),
             amount: parseFloat(row[mapping.amount || ''] || '0') || 0,
             closeDate,
-            stage: String(row[mapping.stage || ''] || '').trim(),
+            stage: stageName,
             classification,
-            lostDate: (() => { const s = String(row[mapping.stage || ''] || '').toLowerCase().trim(); return s === 'closed lost' || s === 'rejected' ? importDate : undefined; })(),
-            lostReason: (() => { const s = String(row[mapping.stage || ''] || '').toLowerCase().trim(); if (s === 'closed lost') return 'Closed Lost in Salesforce'; if (s === 'rejected') return 'Rejected in Salesforce'; return undefined; })(),
-            probability: parseFloat(row[mapping.probability || ''] || '0') || 0,
+            lostDate: (() => { const s = stageName.toLowerCase(); return s === 'closed lost' || s === 'rejected' ? importDate : undefined; })(),
+            lostReason: (() => { const s = stageName.toLowerCase(); if (s === 'closed lost') return 'Closed Lost in Salesforce'; if (s === 'rejected') return 'Rejected in Salesforce'; return undefined; })(),
+            probability: stageProb || colProb,
             importDate,
             accountName: String(row[mapping.accountName || ''] || '').trim() || undefined,
             productName: String(row[mapping.productName || ''] || '').trim() || undefined,
