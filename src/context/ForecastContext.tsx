@@ -9,9 +9,6 @@ import type {
   ImportRecord,
   ChangeLogEntry,
   OpportunitySnapshot,
-  CommissionReviewsMap,
-  CommissionSettingsMap,
-  RepCommissionSettings,
   MonthlyRepCommit,
   MonthlyManagerCommit,
   ManagerQuota,
@@ -28,7 +25,6 @@ import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, qua
 import { mergeDrBatch } from '@/lib/drMerge';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
-import { getCommissionReviewKey } from '@/lib/commissionUtils';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
@@ -36,9 +32,6 @@ const STORAGE_KEYS = {
   imports: 'forecast_imports',
   changelog: 'forecast_changelog',
   snapshots: 'forecast_snapshots',
-  commissionSettings: 'forecast_commission_settings',
-  commissionReviews: 'forecast_commission_reviews',
-  commissionPinHash: 'forecast_commission_pin_hash',
   monthlyRepCommits: 'forecast_monthly_rep_commits',
   monthlyManagerCommits: 'forecast_monthly_manager_commits',
   forecastPromotions: 'forecast_promotions',
@@ -177,45 +170,12 @@ function pruneSnapshots(snapshots: OpportunitySnapshot[], limit: number): Opport
   return pruned;
 }
 
-function updateCommissionReviewRecord(
-  reviews: CommissionReviewsMap,
-  repName: string,
-  monthKey: string,
-  updater: (current: NonNullable<CommissionReviewsMap[string]>) => NonNullable<CommissionReviewsMap[string]> | null,
-): CommissionReviewsMap {
-  const repKey = normalizeRepName(repName);
-  if (!repKey || !monthKey) return reviews;
-
-  const reviewKey = getCommissionReviewKey(repKey, monthKey);
-  const current = reviews[reviewKey] || {
-    repKey,
-    repName: repName.trim(),
-    monthKey,
-    actualTotal: undefined,
-    opportunities: {},
-  };
-
-  const next = updater(current);
-  if (!next) {
-    const { [reviewKey]: _removed, ...remaining } = reviews;
-    return remaining;
-  }
-
-  return {
-    ...reviews,
-    [reviewKey]: next,
-  };
-}
-
 interface ForecastState {
   reps: Rep[];
   opportunities: Opportunity[];
   imports: ImportRecord[];
   changelog: ChangeLogEntry[];
   snapshots: OpportunitySnapshot[];
-  commissionSettings: CommissionSettingsMap;
-  commissionReviews: CommissionReviewsMap;
-  commissionPinHash: string | null;
   monthlyRepCommits: MonthlyRepCommit[];
   monthlyManagerCommits: MonthlyManagerCommit[];
   forecastPromotions: ForecastPromotion[];
@@ -242,12 +202,6 @@ interface ForecastContextValue extends ForecastState {
   updateOpportunity: (id: string, updates: Partial<Omit<Opportunity, 'id'>>) => void;
   deleteOpportunity: (id: string) => void;
   clearChangelog: () => void;
-  setCommissionSettings: (repName: string, settings: RepCommissionSettings) => void;
-  clearCommissionSettings: (repName: string) => void;
-  updateCommissionMonthActual: (repName: string, monthKey: string, actualTotal?: number) => void;
-  updateCommissionOpportunityReview: (repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => void;
-  updateOpportunityCommissionDetails: (id: string, updates: Pick<Opportunity, 'commissionMrr' | 'commissionTermYears' | 'commissionPaymentType' | 'commissionSpiff' | 'commissionNotes'>) => void;
-  setCommissionPinHash: (pinHash: string | null) => void;
   setMonthlyRepCommit: (repId: string, repName: string, monthKey: string, amount: number, notes?: string) => void;
   getMonthlyRepCommit: (repId: string, monthKey: string) => MonthlyRepCommit | undefined;
   getMonthlyCommitsByMonth: (monthKey: string) => MonthlyRepCommit[];
@@ -272,9 +226,6 @@ interface ForecastContextValue extends ForecastState {
     imports: ImportRecord[];
     changelog: ChangeLogEntry[];
     snapshots?: OpportunitySnapshot[];
-    commissionSettings?: CommissionSettingsMap;
-    commissionReviews?: CommissionReviewsMap;
-    commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
     monthlyManagerCommits?: MonthlyManagerCommit[];
     forecastPromotions?: ForecastPromotion[];
@@ -319,9 +270,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     imports: loadFromStorage(STORAGE_KEYS.imports, []),
     changelog: cleanChangelog(loadFromStorage<ChangeLogEntry[]>(STORAGE_KEYS.changelog, [])),
     snapshots: cleanSnapshots(loadFromStorage<OpportunitySnapshot[]>(STORAGE_KEYS.snapshots, [])),
-    commissionSettings: loadFromStorage(STORAGE_KEYS.commissionSettings, {}),
-    commissionReviews: loadFromStorage(STORAGE_KEYS.commissionReviews, {}),
-    commissionPinHash: loadFromStorage<string | null>(STORAGE_KEYS.commissionPinHash, null),
     monthlyRepCommits: loadFromStorage<MonthlyRepCommit[]>(STORAGE_KEYS.monthlyRepCommits, []),
     monthlyManagerCommits: loadFromStorage<MonthlyManagerCommit[]>(STORAGE_KEYS.monthlyManagerCommits, []),
     forecastPromotions: loadFromStorage<ForecastPromotion[]>(STORAGE_KEYS.forecastPromotions, []),
@@ -402,9 +350,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.imports, state.imports);
     saveToStorage(STORAGE_KEYS.changelog, state.changelog);
     saveToStorage(STORAGE_KEYS.snapshots, state.snapshots);
-    saveToStorage(STORAGE_KEYS.commissionSettings, state.commissionSettings);
-    saveToStorage(STORAGE_KEYS.commissionReviews, state.commissionReviews);
-    saveToStorage(STORAGE_KEYS.commissionPinHash, state.commissionPinHash);
     saveToStorage(STORAGE_KEYS.monthlyRepCommits, state.monthlyRepCommits);
     saveToStorage(STORAGE_KEYS.monthlyManagerCommits, state.monthlyManagerCommits);
     saveToStorage(STORAGE_KEYS.forecastPromotions, state.forecastPromotions);
@@ -448,9 +393,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.imports,
     state.changelog,
     state.snapshots,
-    state.commissionSettings,
-    state.commissionReviews,
-    state.commissionPinHash,
     state.monthlyRepCommits,
     state.monthlyManagerCommits,
     state.forecastPromotions,
@@ -581,11 +523,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             // Preserved app-generated fields not present in Salesforce export
             importDate: existing.importDate,
             notes: existing.notes,
-            commissionMrr: existing.commissionMrr,
-            commissionTermYears: existing.commissionTermYears,
-            commissionPaymentType: existing.commissionPaymentType,
-            commissionSpiff: existing.commissionSpiff,
-            commissionNotes: existing.commissionNotes,
             classification: resolvedClassification,
             previousClassification: existing.classification !== resolvedClassification ? existing.classification : existing.previousClassification,
             movedAt: existing.classification !== resolvedClassification ? new Date().toISOString() : existing.movedAt,
@@ -670,100 +607,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
   const clearChangelog = useCallback(() => {
     setState(s => ({ ...s, changelog: [] }));
-  }, []);
-
-  const setCommissionSettings = useCallback((repName: string, settings: RepCommissionSettings) => {
-    const repKey = normalizeRepName(repName);
-    if (!repKey) return;
-
-    setState(s => ({
-      ...s,
-      commissionSettings: {
-        ...s.commissionSettings,
-        [repKey]: {
-          monthlyQuota: Math.max(0, settings.monthlyQuota || 0),
-          annualVariableComp: settings.annualVariableComp === undefined ? undefined : Math.max(0, settings.annualVariableComp || 0),
-            priorQuarterPayout: settings.priorQuarterPayout === undefined ? undefined : Math.max(0, settings.priorQuarterPayout || 0),
-          baseRate: settings.baseRate === undefined ? undefined : Math.max(0, settings.baseRate || 0),
-        },
-      },
-    }));
-  }, []);
-
-  const clearCommissionSettings = useCallback((repName: string) => {
-    const repKey = normalizeRepName(repName);
-    if (!repKey) return;
-
-    setState(s => {
-      const { [repKey]: _removed, ...remaining } = s.commissionSettings;
-      return { ...s, commissionSettings: remaining };
-    });
-  }, []);
-
-  const updateCommissionMonthActual = useCallback((repName: string, monthKey: string, actualTotal?: number) => {
-    setState(s => ({
-      ...s,
-      commissionReviews: updateCommissionReviewRecord(s.commissionReviews, repName, monthKey, current => {
-        const nextActualTotal = actualTotal === undefined || Number.isNaN(actualTotal) ? undefined : Math.max(0, actualTotal);
-        const hasOpportunityEntries = Object.keys(current.opportunities).length > 0;
-        if (nextActualTotal === undefined && !hasOpportunityEntries) return null;
-        return {
-          ...current,
-          actualTotal: nextActualTotal,
-        };
-      }),
-    }));
-  }, []);
-
-  const updateCommissionOpportunityReview = useCallback((repName: string, monthKey: string, opportunityId: string, updates: { actualCommission?: number; note?: string }) => {
-    setState(s => ({
-      ...s,
-      commissionReviews: updateCommissionReviewRecord(s.commissionReviews, repName, monthKey, current => {
-        const sanitizedActual = updates.actualCommission === undefined || Number.isNaN(updates.actualCommission)
-          ? undefined
-          : Math.max(0, updates.actualCommission);
-        const sanitizedNote = updates.note?.trim() ? updates.note.trim() : undefined;
-        const nextOpportunity = {
-          actualCommission: sanitizedActual,
-          note: sanitizedNote,
-        };
-        const nextOpportunities = { ...current.opportunities };
-
-        if (nextOpportunity.actualCommission === undefined && !nextOpportunity.note) {
-          delete nextOpportunities[opportunityId];
-        } else {
-          nextOpportunities[opportunityId] = nextOpportunity;
-        }
-
-        const hasOpportunityEntries = Object.keys(nextOpportunities).length > 0;
-        if (current.actualTotal === undefined && !hasOpportunityEntries) return null;
-
-        return {
-          ...current,
-          opportunities: nextOpportunities,
-        };
-      }),
-    }));
-  }, []);
-
-  const updateOpportunityCommissionDetails = useCallback((id: string, updates: Pick<Opportunity, 'commissionMrr' | 'commissionTermYears' | 'commissionPaymentType' | 'commissionSpiff' | 'commissionNotes'>) => {
-    setState(s => ({
-      ...s,
-      opportunities: s.opportunities.map(o => (o.id === id
-        ? {
-            ...o,
-            commissionMrr: updates.commissionMrr,
-            commissionTermYears: updates.commissionTermYears,
-            commissionPaymentType: updates.commissionPaymentType,
-            commissionSpiff: updates.commissionSpiff,
-            commissionNotes: updates.commissionNotes,
-          }
-        : o)),
-    }));
-  }, []);
-
-  const setCommissionPinHash = useCallback((pinHash: string | null) => {
-    setState(s => ({ ...s, commissionPinHash: pinHash }));
   }, []);
 
   const setMonthlyRepCommit = useCallback((repId: string, repName: string, monthKey: string, amount: number, notes?: string) => {
@@ -1061,9 +904,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     imports: ImportRecord[];
     changelog: ChangeLogEntry[];
     snapshots?: OpportunitySnapshot[];
-    commissionSettings?: CommissionSettingsMap;
-    commissionReviews?: CommissionReviewsMap;
-    commissionPinHash?: string | null;
     monthlyRepCommits?: MonthlyRepCommit[];
     monthlyManagerCommits?: MonthlyManagerCommit[];
     forecastPromotions?: ForecastPromotion[];
@@ -1080,9 +920,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       imports: data.imports,
       changelog: data.changelog,
       snapshots: data.snapshots || s.snapshots,
-      commissionSettings: data.commissionSettings || {},
-      commissionReviews: data.commissionReviews || {},
-      commissionPinHash: data.commissionPinHash ?? null,
       monthlyRepCommits: data.monthlyRepCommits || [],
       monthlyManagerCommits: data.monthlyManagerCommits || [],
       forecastPromotions: data.forecastPromotions || [],
@@ -1115,12 +952,6 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     archiveToGraveyard,
     restoreFromGraveyard,
     clearChangelog,
-    setCommissionSettings,
-    clearCommissionSettings,
-    updateCommissionMonthActual,
-    updateCommissionOpportunityReview,
-    updateOpportunityCommissionDetails,
-    setCommissionPinHash,
     setMonthlyRepCommit,
     getMonthlyRepCommit,
     getMonthlyCommitsByMonth,

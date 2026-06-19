@@ -33,11 +33,6 @@ const opportunitySchema = z.object({
   lostReason: z.string().max(500).optional(),
   movedAt: z.string().optional(),
   notes: z.string().max(4000).optional(),
-  commissionMrr: z.number().finite().min(0).optional(),
-  commissionTermYears: z.number().finite().min(1).max(10).optional(),
-  commissionPaymentType: z.enum(['annual', 'upfront']).optional(),
-  commissionSpiff: z.number().finite().min(0).optional(),
-  commissionNotes: z.string().max(4000).optional(),
   accountName: z.string().max(500).optional(),
   productName: z.string().max(500).optional(),
 });
@@ -59,26 +54,6 @@ const changeLogSchema = z.object({
   field: z.enum(['closeDate', 'amount', 'stage', 'classification', 'name', 'repName']),
   oldValue: z.string(),
   newValue: z.string(),
-});
-
-const commissionSettingSchema = z.object({
-  monthlyQuota: z.number().finite().min(0),
-  annualVariableComp: z.number().finite().min(0).optional(),
-  priorQuarterPayout: z.number().finite().min(0).optional(),
-  baseRate: z.number().finite().min(0).max(1).optional(),
-});
-
-const commissionOpportunityReviewSchema = z.object({
-  actualCommission: z.number().finite().min(0).optional(),
-  note: z.string().max(4000).optional(),
-});
-
-const commissionMonthlyReviewSchema = z.object({
-  repKey: z.string().max(200),
-  repName: z.string().max(200),
-  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
-  actualTotal: z.number().finite().min(0).optional(),
-  opportunities: z.record(z.string(), commissionOpportunityReviewSchema),
 });
 
 const monthlyRepCommitSchema = z.object({
@@ -205,9 +180,6 @@ const backupSchema = z.object({
   opportunities: z.array(opportunitySchema).max(10000),
   imports: z.array(importRecordSchema).max(1000).optional(),
   changelog: z.array(changeLogSchema).max(50000).optional(),
-  commissionSettings: z.record(z.string(), commissionSettingSchema).optional(),
-  commissionReviews: z.record(z.string(), commissionMonthlyReviewSchema).optional(),
-  commissionPinHash: z.string().max(256).nullable().optional(),
   monthlyRepCommits: z.array(monthlyRepCommitSchema).max(5000).optional(),
   monthlyManagerCommits: z.array(monthlyManagerCommitSchema).max(120).optional(),
   forecastPromotions: z.array(forecastPromotionSchema).max(20000).optional(),
@@ -243,9 +215,6 @@ export default function DataBackup() {
     imports,
     changelog,
     snapshots,
-    commissionSettings,
-    commissionReviews,
-    commissionPinHash,
     monthlyRepCommits,
     monthlyManagerCommits,
     forecastPromotions,
@@ -266,9 +235,6 @@ export default function DataBackup() {
       imports,
       changelog,
       snapshots,
-      commissionSettings,
-      commissionReviews,
-      commissionPinHash,
       monthlyRepCommits,
       monthlyManagerCommits,
       forecastPromotions,
