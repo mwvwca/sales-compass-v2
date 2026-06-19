@@ -24,6 +24,8 @@ interface ColumnMapping {
   resellerName?: string;
   distributorReseller?: string;
   opportunitySource?: string;
+  nextStep?: string;
+  description?: string;
 }
 
 function normalizeHeader(header: string): string {
@@ -76,6 +78,10 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'distributor reseller': 'distributorReseller',
   'distributor - reseller': 'distributorReseller',
   'opportunity source': 'opportunitySource',
+  'next step': 'nextStep',
+  'next steps': 'nextStep',
+  'description': 'description',
+  'opportunity description': 'description',
 };
 
 function parseImportDate(raw: unknown): string {
@@ -278,6 +284,8 @@ export default function ImportSheet() {
             distributorReseller,
             resolvedReseller: resolveReseller(resellerName, distributorReseller),
             opportunitySource: String(row[mapping.opportunitySource || ''] || '').trim() || undefined,
+            nextStep: String(row[mapping.nextStep || ''] || '').trim() || undefined,
+            description: String(row[mapping.description || ''] || '').trim() || undefined,
             forecastCategory: forecastCategoryRaw || undefined,
           };
         });
