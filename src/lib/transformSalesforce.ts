@@ -14,6 +14,8 @@ export interface ForecastRow {
   "Account Name"?: string;
   Product?: string;
   "Channel Account Manager"?: string;
+  "Next Step"?: string;
+  Description?: string;
 }
 
 const STAGE_PROBABILITY_MAP: Record<string, string> = {
@@ -165,6 +167,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
   const accountNameCol = findColumn(colMap, ["Account Name", "Account"]);
   const productCol = findColumn(colMap, ["Product", "Products", "Product Name", "Product Family", "Primary Product", "Product: Product Name", "Product: Product Family", "Opportunity Product: Product Name", "Opportunity Product: Product Family"]);
   const camCol = findColumn(colMap, ["Channel Account Manager", "CAM", "Channel Manager"]);
+  const nextStepCol = findColumn(colMap, ["Next Step", "Next Steps"]);
+  const descriptionCol = findColumn(colMap, ["Description", "Opportunity Description"]);
 
   const results: ForecastRow[] = [];
   const skipped: SkippedRow[] = [];
@@ -224,6 +228,8 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       "Account Name": accountNameCol !== undefined ? String(row[accountNameCol] ?? "").trim() : "",
       Product: productCol !== undefined ? String(row[productCol] ?? "").trim() : "",
       "Channel Account Manager": camCol !== undefined ? String(row[camCol] ?? "").trim() : "",
+      "Next Step": nextStepCol !== undefined ? String(row[nextStepCol] ?? "").trim() : "",
+      Description: descriptionCol !== undefined ? String(row[descriptionCol] ?? "").trim() : "",
     });
   }
 
@@ -232,7 +238,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
 
 export function createForecastWorkbook(rows: ForecastRow[], version: string): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows, {
-    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside", "Account Name", "Product", "Channel Account Manager"],
+    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside", "Account Name", "Product", "Channel Account Manager", "Next Step", "Description"],
   });
 
   ws["!cols"] = [
@@ -248,6 +254,8 @@ export function createForecastWorkbook(rows: ForecastRow[], version: string): XL
     { wch: 28 },
     { wch: 28 },
     { wch: 24 },
+    { wch: 40 },
+    { wch: 40 },
   ];
 
   const wb = XLSX.utils.book_new();

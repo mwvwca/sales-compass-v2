@@ -71,6 +71,9 @@ export function flagDeal(opp: Opportunity, index: Map<string, ChangeLogEntry[]>,
   if (!currentlySql({ probability: opp.probability })) {
     flags.push({ kind: 'under_qualified', detail: `${Math.round((opp.probability ?? 0) * 100)}% probability` });
   }
-  // 'no_next_step' / 'single_threaded' arrive with notes capture (Stage 2) — not populated yet.
+  if (!opp.nextStep?.trim()) {
+    flags.push({ kind: 'no_next_step', detail: 'no next step set' });
+  }
+  // 'single_threaded' still arrives in a later step — not populated yet.
   return flags;
 }

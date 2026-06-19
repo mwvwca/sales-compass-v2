@@ -13,7 +13,7 @@ function opp(over: Partial<Opportunity> & { id: string }): Opportunity {
   return {
     name: `Deal ${over.id}`, repId: '', repName: 'Jane Doe', amount: 0,
     closeDate: '2026-06-30', stage: 'Discovery', classification: 'unclassified',
-    probability: 0.5, importDate: '2026-06-10',
+    probability: 0.5, importDate: '2026-06-10', nextStep: 'Follow up',
     ...over,
   } as Opportunity;
 }
@@ -77,11 +77,11 @@ describe('buildRepScorecard', () => {
     expect(byId.F.flags.map(f => f.kind)).toContain('stalled');
     // sorted by amount desc
     expect(sc.atRisk.map(d => d.id)).toEqual(['E', 'D', 'F']);
-    // nextStep + future flag kinds are defined but unpopulated — never fabricated
-    expect(sc.atRisk.every(d => d.nextStep === null)).toBe(true);
+    // nextStep now carries the real text (these fixtures all have one)
+    expect(sc.atRisk.every(d => d.nextStep === 'Follow up')).toBe(true);
     const allKinds = sc.atRisk.flatMap(d => d.flags.map(f => f.kind));
-    expect(allKinds).not.toContain('no_next_step');
-    expect(allKinds).not.toContain('single_threaded');
+    expect(allKinds).not.toContain('no_next_step');     // fixtures have a next step
+    expect(allKinds).not.toContain('single_threaded');  // still a later step — never fabricated
     // rule-based talking point: a commit deal pushed >=3x
     expect(sc.talkingPoints.some(p => p.includes('Deal E') || p.startsWith('Deal E'))).toBe(true);
   });

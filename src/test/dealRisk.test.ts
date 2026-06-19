@@ -65,11 +65,19 @@ describe('flagDeal thresholds', () => {
   });
 
   it('under_qualified fires below the 0.25 SQL floor, not at/above it', () => {
-    expect(flagDeal(opp({ probability: 0.1, importDate: daysAgo(1) }), empty, TODAY).map(f => f.kind)).toContain('under_qualified');
-    expect(flagDeal(opp({ probability: 0.25, importDate: daysAgo(1) }), empty, TODAY).map(f => f.kind)).not.toContain('under_qualified');
+    expect(flagDeal(opp({ probability: 0.1, importDate: daysAgo(1), nextStep: 'x' }), empty, TODAY).map(f => f.kind)).toContain('under_qualified');
+    expect(flagDeal(opp({ probability: 0.25, importDate: daysAgo(1), nextStep: 'x' }), empty, TODAY).map(f => f.kind)).not.toContain('under_qualified');
   });
 
-  it('emits no populated flags for a fresh, qualified, never-pushed deal', () => {
-    expect(flagDeal(opp({ probability: 0.6, importDate: daysAgo(1) }), empty, TODAY)).toEqual([]);
+  it('no_next_step fires on a blank/whitespace next step, not when one is present', () => {
+    const fresh = { probability: 0.6, importDate: daysAgo(1) };
+    expect(flagDeal(opp({ ...fresh, nextStep: undefined }), empty, TODAY).map(f => f.kind)).toContain('no_next_step');
+    expect(flagDeal(opp({ ...fresh, nextStep: '' }), empty, TODAY).map(f => f.kind)).toContain('no_next_step');
+    expect(flagDeal(opp({ ...fresh, nextStep: '   ' }), empty, TODAY).map(f => f.kind)).toContain('no_next_step');
+    expect(flagDeal(opp({ ...fresh, nextStep: 'Call the CFO' }), empty, TODAY).map(f => f.kind)).not.toContain('no_next_step');
+  });
+
+  it('emits no populated flags for a fresh, qualified, never-pushed deal with a next step', () => {
+    expect(flagDeal(opp({ probability: 0.6, importDate: daysAgo(1), nextStep: 'Schedule demo' }), empty, TODAY)).toEqual([]);
   });
 });

@@ -93,7 +93,7 @@ export function buildRepScorecard(repId: string, ctx: ScorecardContext, opts: Sc
   for (const o of openOpps) {
     const flags = flagDeal(o, index, today);
     if (flags.length) {
-      atRisk.push({ id: o.id, name: o.name, amount: o.amount || 0, stage: o.stage, flags, nextStep: null });
+      atRisk.push({ id: o.id, name: o.name, amount: o.amount || 0, stage: o.stage, flags, nextStep: o.nextStep?.trim() || null });
     }
   }
   atRisk.sort((a, b) => b.amount - a.amount);

@@ -63,6 +63,8 @@ export interface Opportunity {
   /** Normalized reseller name resolved from resellerName / distributorReseller via resellerUtils. */
   resolvedReseller?: string;
   opportunitySource?: string;
+  nextStep?: string;
+  description?: string;
 }
 
 export interface MonthlyRepCommit {
@@ -150,7 +152,7 @@ export interface ChangeLogEntry {
   opportunityId: string;
   opportunityName: string;
   repName: string;
-  field: 'closeDate' | 'amount' | 'stage' | 'classification' | 'name' | 'repName';
+  field: 'closeDate' | 'amount' | 'stage' | 'classification' | 'name' | 'repName' | 'nextStep';
   oldValue: string;
   newValue: string;
 }
