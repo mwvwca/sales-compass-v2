@@ -13,6 +13,7 @@ import ExecutiveReportVisual from './ExecutiveReportVisual';
 import PipelineCoverage from './PipelineCoverage';
 import SalesIntelligence from './SalesIntelligence';
 import CommitAccuracySection from './CommitAccuracySection';
+import CoverageTrendCard from './CoverageTrendCard';
 
 import { Switch } from '@/components/ui/switch';
 import { ChevronLeft, ChevronRight, FileSpreadsheet, Camera } from 'lucide-react';
@@ -46,7 +47,7 @@ function localQuarter(dateStr: string): string | null {
 }
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot, dealRegistrations } = useForecast();
+  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot, dealRegistrations, snapshots } = useForecast();
   const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('monthly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
@@ -527,6 +528,14 @@ export default function ForecastDashboard() {
             </div>
           )}
         </div>
+
+        {/* Coverage trend over the quarter */}
+        <CoverageTrendCard
+          snapshots={snapshots}
+          quarter={getCurrentQuarter()}
+          goal={reps.reduce((s, r) => s + (r.quarterlyGoals[getCurrentQuarter()] || 0), 0)}
+          selectedRep={selectedRep}
+        />
       </div>
 
 
