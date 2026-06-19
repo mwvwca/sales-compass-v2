@@ -76,6 +76,21 @@ export function qualityFor(opp: Opportunity, cache: NextStepCache): NextStepQual
   return cached && cached.hash === hashText(text) ? cached.quality : undefined;
 }
 
+/**
+ * Verdict for a deal's next step: 'none' (empty), 'unclassified' (text present but
+ * not classified, or stale), or the cached quality ('concrete' | 'vague').
+ */
+export function nextStepVerdict(
+  id: string,
+  nextStep: string | null | undefined,
+  cache: NextStepCache,
+): 'concrete' | 'vague' | 'unclassified' | 'none' {
+  const text = nextStep?.trim();
+  if (!text) return 'none';
+  const c = cache[id];
+  return c && c.hash === hashText(text) ? c.quality : 'unclassified';
+}
+
 // ---- prompt + parsing (pure; reused by nextStepClassifyApi via the briefing fn) ----
 
 export const NEXT_STEP_SYSTEM_PROMPT =

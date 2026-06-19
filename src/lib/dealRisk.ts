@@ -21,12 +21,15 @@ export type RiskFlagKind =
 export interface RiskFlag {
   kind: RiskFlagKind;
   detail?: string;
+  /** Coaching sentence: the rule that fired + the remedy. */
+  why?: string;
 }
 
 export interface AtRiskDeal {
   id: string;
   name: string;
   salesforceId?: string;
+  closeDate?: string;
   amount: number;
   stage: string;
   flags: RiskFlag[];
@@ -79,15 +82,20 @@ export function flagDeal(
 ): RiskFlag[] {
   const { pushCount, daysSinceMovement } = dealRiskSignals(opp, index, today);
   const flags: RiskFlag[] = [];
-  if (pushCount >= PUSH_FLAG_MIN) flags.push({ kind: 'pushed', detail: `close date pushed ${pushCount}×` });
-  if (daysSinceMovement >= STALE_DAYS) flags.push({ kind: 'stalled', detail: `${daysSinceMovement}d no movement` });
+  if (pushCount >= PUSH_FLAG_MIN) {
+    flags.push({ kind: 'pushed', detail: `close date pushed ${pushCount}×`, why: `Close date pushed ${pushCount}× — repeated slips mean it is not progressing as forecast.` });
+  }
+  if (daysSinceMovement >= STALE_DAYS) {
+    flags.push({ kind: 'stalled', detail: `${daysSinceMovement}d no movement`, why: `No changelog movement in ${daysSinceMovement}d — the deal has gone quiet.` });
+  }
   if (!currentlySql({ probability: opp.probability })) {
-    flags.push({ kind: 'under_qualified', detail: `${Math.round((opp.probability ?? 0) * 100)}% probability` });
+    const pct = Math.round((opp.probability ?? 0) * 100);
+    flags.push({ kind: 'under_qualified', detail: `${pct}% probability`, why: `${pct}% is below the 25% SQL gate — not yet qualified; needs to reach 25%+.` });
   }
   if (!opp.nextStep?.trim()) {
-    flags.push({ kind: 'no_next_step', detail: 'no next step set' });
+    flags.push({ kind: 'no_next_step', detail: 'no next step set', why: 'No next step logged in Salesforce — the rep has not set what happens next.' });
   } else if (nextStepQuality === 'vague') {
-    flags.push({ kind: 'vague_next_step', detail: 'vague next step' });
+    flags.push({ kind: 'vague_next_step', detail: 'vague next step', why: 'The next step reads as generic filler, not a concrete dated action.' });
   }
   // 'single_threaded' still arrives in a later step — not populated yet.
   return flags;

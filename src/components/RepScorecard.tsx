@@ -8,6 +8,9 @@ import {
 } from '@/lib/oneOnOnes';
 import { loadOneOnOne, saveOneOnOne } from '@/lib/oneOnOnesApi';
 import { sfdcOpportunityUrl } from '@/lib/sfdc';
+import { getQuarter } from '@/types/forecast';
+import { nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
+import { loadNextStepCache } from '@/lib/nextStepCacheApi';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -143,6 +146,32 @@ export default function RepScorecard() {
     return buildRepScorecard(repId, { opportunities, changelog, dealRegistrations, managerQuotas, reps });
   }, [repId, opportunities, changelog, dealRegistrations, managerQuotas, reps]);
 
+  // Next-step classification cache (read-only here; classified from the Deal Risk view).
+  const [nsCache, setNsCache] = useState<NextStepCache>({});
+  useEffect(() => {
+    let cancelled = false;
+    loadNextStepCache().then(c => { if (!cancelled) setNsCache(c); }).catch(() => { /* offline → empty */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // At-risk quarter filter (distinct close-date quarters present in the list).
+  const [atRiskQuarter, setAtRiskQuarter] = useState<string>('all');
+  const atRiskQuarters = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of sc?.atRisk ?? []) {
+      if (d.closeDate) { try { set.add(getQuarter(d.closeDate)); } catch { /* skip bad dates */ } }
+    }
+    return Array.from(set).sort();
+  }, [sc]);
+  const atRiskFiltered = useMemo(() => {
+    const all = sc?.atRisk ?? [];
+    if (atRiskQuarter === 'all') return all;
+    return all.filter(d => {
+      if (!d.closeDate) return false;
+      try { return getQuarter(d.closeDate) === atRiskQuarter; } catch { return false; }
+    });
+  }, [sc, atRiskQuarter]);
+
   if (pickReps.length === 0) {
     return <p className="text-xs text-muted-foreground py-6 text-center">No reps yet — add reps in Goals to build scorecards.</p>;
   }
@@ -201,10 +230,24 @@ export default function RepScorecard() {
             {sc.atRisk.length === 0 ? (
               <p className="text-xs text-muted-foreground">No open deals flagged at risk.</p>
             ) : (
+              <>
+                {atRiskQuarters.length > 0 && (
+                  <select
+                    value={atRiskQuarter}
+                    onChange={e => setAtRiskQuarter(e.target.value)}
+                    className="mb-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="all">All quarters</option>
+                    {atRiskQuarters.map(q => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                )}
+                {atRiskFiltered.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No at-risk deals in this quarter.</p>
+                ) : (
               <div className="border border-border rounded-md divide-y divide-border">
-                {sc.atRisk.map(d => (
+                {atRiskFiltered.map(d => (
                   <div key={d.id} className="px-3 py-2 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium truncate">
                         {d.salesforceId
                           ? <a href={sfdcOpportunityUrl(d.salesforceId)} target="_blank" rel="noopener noreferrer" className="hover:underline">{d.name}</a>
@@ -213,17 +256,24 @@ export default function RepScorecard() {
                       <div className="text-[11px] text-muted-foreground">{d.stage} · {fmtMoney(d.amount)}</div>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {d.flags.map((f, i) => (
-                          <span key={i} title={f.detail} className={`px-1.5 py-0.5 rounded text-[10px] ${FLAG_META[f.kind].tone}`}>
+                          <span key={i} title={f.why ?? f.detail} className={`px-1.5 py-0.5 rounded text-[10px] ${FLAG_META[f.kind].tone}`}>
                             {FLAG_META[f.kind].label}{f.detail ? ` · ${f.detail}` : ''}
                           </span>
                         ))}
+                        {(() => {
+                          const v = nextStepVerdict(d.id, d.nextStep, nsCache);
+                          if (v === 'concrete') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-700 dark:text-green-400">Concrete next step</span>;
+                          if (v === 'unclassified') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary/40 text-muted-foreground">Next step — not yet classified</span>;
+                          return null;
+                        })()}
                       </div>
                     </div>
-                    {/* nextStep is Stage-2 data — shown as a placeholder until captured */}
-                    <div className="text-[11px] text-muted-foreground shrink-0 italic">{d.nextStep ?? 'next step —'}</div>
+                    <div className="text-[11px] text-muted-foreground italic max-w-[45%] line-clamp-2 text-right" title={d.nextStep ?? undefined}>{d.nextStep ?? 'next step —'}</div>
                   </div>
                 ))}
               </div>
+                )}
+              </>
             )}
           </Section>
 
