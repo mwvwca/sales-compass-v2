@@ -412,7 +412,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       const userId = userIdRef.current;
       const rows: { user_id: string; key: string; value: Json }[] = [];
       for (const [field, storageKey] of Object.entries(STORAGE_KEYS)) {
-        const value = (state as Record<string, unknown>)[field];
+        const value = (state as unknown as Record<string, unknown>)[field];
         const json = JSON.stringify(value);
         if (lastSavedRef.current[storageKey] !== json) {
           rows.push({ user_id: userId, key: storageKey, value: value as Json });
