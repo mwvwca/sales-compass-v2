@@ -27,6 +27,7 @@ const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
   stalled: { label: 'Stalled', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
   under_qualified: { label: 'Under-qualified', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
   no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
+  vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
 };
 

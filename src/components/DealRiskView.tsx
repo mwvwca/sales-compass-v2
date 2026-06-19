@@ -1,17 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
 import { buildChangelogIndex, dealRiskSignals, flagDeal, type RiskFlag, type RiskFlagKind } from '@/lib/dealRisk';
+import { selectChangedDeals, mergeClassifications, qualityFor, type NextStepCache } from '@/lib/nextStepClassify';
+import { classifyNextSteps } from '@/lib/nextStepClassifyApi';
+import { loadNextStepCache, saveNextStepCache } from '@/lib/nextStepCacheApi';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const TERMINAL = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
 
 // Only the populated flag kinds are filterable.
-const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step'];
+const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step', 'vague_next_step'];
 const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
   pushed: { label: 'Pushed', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   stalled: { label: 'Stalled', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
   under_qualified: { label: 'Under-qualified', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
   no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
+  vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
 };
 
@@ -30,6 +35,15 @@ export default function DealRiskView() {
   const { opportunities, changelog } = useForecast();
   const [repFilter, setRepFilter] = useState<string>('all');
   const [activeKinds, setActiveKinds] = useState<Set<RiskFlagKind>>(() => new Set(FILTER_KINDS));
+  const [cache, setCache] = useState<NextStepCache>({});
+  const [classifyState, setClassifyState] = useState<'idle' | 'running' | 'error'>('idle');
+
+  // Load the persisted classification cache once.
+  useEffect(() => {
+    let cancelled = false;
+    loadNextStepCache().then(c => { if (!cancelled) setCache(c); }).catch(() => { /* offline → empty cache */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const rows = useMemo<RiskRow[]>(() => {
     const today = new Date();
@@ -37,7 +51,7 @@ export default function DealRiskView() {
     const out: RiskRow[] = [];
     for (const o of opportunities) {
       if (TERMINAL.has(o.classification)) continue; // open deals only
-      const flags = flagDeal(o, index, today);
+      const flags = flagDeal(o, index, today, qualityFor(o, cache));
       if (flags.length === 0) continue;
       const { pushCount, daysSinceMovement } = dealRiskSignals(o, index, today);
       out.push({
@@ -47,7 +61,28 @@ export default function DealRiskView() {
     }
     out.sort((a, b) => b.amount - a.amount); // default sort: amount desc
     return out;
-  }, [opportunities, changelog]);
+  }, [opportunities, changelog, cache]);
+
+  // Open deals whose non-empty next step changed since last classification — the
+  // only ones an AI call would spend on.
+  const pendingClassify = useMemo(
+    () => selectChangedDeals(opportunities, cache),
+    [opportunities, cache],
+  );
+
+  const runClassify = async () => {
+    if (pendingClassify.length === 0 || classifyState === 'running') return;
+    setClassifyState('running');
+    try {
+      const results = await classifyNextSteps(pendingClassify);
+      const merged = mergeClassifications(cache, pendingClassify, results);
+      setCache(merged);
+      await saveNextStepCache(merged);
+      setClassifyState('idle');
+    } catch {
+      setClassifyState('error');
+    }
+  };
 
   const repOptions = useMemo(
     () => Array.from(new Set(rows.map(r => r.rep))).sort((a, b) => a.localeCompare(b)),
@@ -72,12 +107,25 @@ export default function DealRiskView() {
 
   return (
     <div className="space-y-4">
-      {/* Header: count + $ at risk */}
+      {/* Header: count + $ at risk + classify trigger */}
       <div className="flex items-baseline gap-3 flex-wrap">
         <span className="text-2xl font-semibold">{filtered.length}</span>
         <span className="text-xs text-muted-foreground uppercase tracking-wide">deals at risk</span>
         <span className="text-sm font-medium text-negative">{fmtMoney(totalAtRisk)}</span>
         <span className="text-xs text-muted-foreground">at risk</span>
+        <div className="ml-auto flex items-center gap-2">
+          {classifyState === 'error' && <span className="text-[11px] text-negative">Classify failed</span>}
+          <button
+            type="button"
+            onClick={runClassify}
+            disabled={pendingClassify.length === 0 || classifyState === 'running'}
+            title={pendingClassify.length === 0 ? 'All next steps already classified' : `Classify ${pendingClassify.length} changed next step(s)`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-secondary/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {classifyState === 'running' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {classifyState === 'running' ? 'Classifying…' : `Classify next steps${pendingClassify.length ? ` (${pendingClassify.length})` : ''}`}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
