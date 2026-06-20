@@ -9,8 +9,6 @@ import type {
   ForecastPromotion,
   ForecastSnapshot,
   ManagerQuota,
-  CommissionSettingsMap,
-  CommissionReviewsMap,
   WeeklySnapshot,
   DealRegistration,
   DrBatch,
@@ -25,9 +23,6 @@ export interface BackupPayload {
   monthlyManagerCommits?: MonthlyManagerCommit[];
   forecastPromotions?: ForecastPromotion[];
   forecastSnapshots?: ForecastSnapshot[];
-  commissionSettings: CommissionSettingsMap;
-  commissionReviews: CommissionReviewsMap;
-  commissionPinHash: string | null;
   snapshots?: OpportunitySnapshot[];
   managerQuotas?: ManagerQuota[];
   weeklySnapshots?: WeeklySnapshot[];

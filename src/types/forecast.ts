@@ -7,30 +7,6 @@ export interface Rep {
   inactivatedNote?: string;
 }
 
-export interface RepCommissionSettings {
-  monthlyQuota: number;
-  annualVariableComp?: number;
-  priorQuarterPayout?: number;
-  baseRate?: number;
-}
-
-export type CommissionSettingsMap = Record<string, RepCommissionSettings>;
-
-export interface CommissionOpportunityReview {
-  actualCommission?: number;
-  note?: string;
-}
-
-export interface CommissionMonthlyReview {
-  repKey: string;
-  repName: string;
-  monthKey: string;
-  actualTotal?: number;
-  opportunities: Record<string, CommissionOpportunityReview>;
-}
-
-export type CommissionReviewsMap = Record<string, CommissionMonthlyReview>;
-
 export interface Opportunity {
   id: string;
   /** Salesforce Opportunity ID (e.g. '006Vy000017OsIs') — stable join key across imports/DR. */
@@ -49,11 +25,6 @@ export interface Opportunity {
   lostReason?: string;
   movedAt?: string;
   notes?: string;
-  commissionMrr?: number;
-  commissionTermYears?: number;
-  commissionPaymentType?: 'annual' | 'upfront';
-  commissionSpiff?: number;
-  commissionNotes?: string;
   accountName?: string;
   productName?: string;
   channelAccountManager?: string;

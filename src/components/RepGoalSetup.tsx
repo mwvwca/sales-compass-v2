@@ -2,10 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { Plus, Trash2, Check, X, Copy, ChevronDown, ChevronRight, Target, RotateCcw, Camera, Star, Eye } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
-import CommissionLock from '@/components/CommissionLock';
-import CommissionSettings from '@/components/CommissionSettings';
-import CommissionTracker from '@/components/CommissionTracker';
-import CommissionReconciliation from '@/components/CommissionReconciliation';
 import ForecastSnapshotView from '@/components/ForecastSnapshot';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -25,15 +21,6 @@ export default function RepGoalSetup() {
     updateRep,
     deleteRep,
     setRepActiveStatus,
-    commissionSettings,
-    commissionReviews,
-    commissionPinHash,
-    setCommissionSettings,
-    clearCommissionSettings,
-    updateCommissionMonthActual,
-    updateCommissionOpportunityReview,
-    updateOpportunityCommissionDetails,
-    setCommissionPinHash,
     monthlyRepCommits,
     monthlyManagerCommits,
     forecastPromotions,
@@ -61,7 +48,6 @@ export default function RepGoalSetup() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editGoal, setEditGoal] = useState('');
   const [goalsOpen, setGoalsOpen] = useState(false);
-  const [commissionOpen, setCommissionOpen] = useState(false);
   const [mgmtOpen, setMgmtOpen] = useState(false);
   const [mgrCommitDraft, setMgrCommitDraft] = useState<string>('');
   const [mgrCommitDraftKey, setMgrCommitDraftKey] = useState<string>('');
@@ -135,9 +121,6 @@ export default function RepGoalSetup() {
       imports,
       changelog,
       snapshots,
-      commissionSettings,
-      commissionReviews,
-      commissionPinHash,
       monthlyRepCommits,
       monthlyManagerCommits,
       forecastPromotions,
@@ -882,44 +865,6 @@ export default function RepGoalSetup() {
         </CollapsibleContent>
       </Collapsible>
 
-      <Collapsible open={commissionOpen} onOpenChange={setCommissionOpen} className="space-y-4 border-t border-border pt-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Monthly commission review</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">Review the exact Closed Won deals behind each month’s expected payout and compare them to your company statement.</p>
-          </div>
-          <CollapsibleTrigger asChild>
-            <Button type="button" variant="outline" size="sm" className="gap-1.5">
-              {commissionOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              {commissionOpen ? 'Hide review' : 'Show review'}
-            </Button>
-          </CollapsibleTrigger>
-        </div>
-
-        <CollapsibleContent>
-          <CommissionLock pinHash={commissionPinHash} onPinHashChange={setCommissionPinHash}>
-            <div className="space-y-6">
-              <CommissionSettings
-                reps={reps}
-                commissionSettings={commissionSettings}
-                onSave={setCommissionSettings}
-                onClear={clearCommissionSettings}
-              />
-              <CommissionTracker
-                reps={reps}
-                opportunities={opportunities}
-                commissionSettings={commissionSettings}
-                commissionReviews={commissionReviews}
-                onMonthActualChange={updateCommissionMonthActual}
-                onOpportunityReviewChange={updateCommissionOpportunityReview}
-                onOpportunityCommissionDetailsChange={updateOpportunityCommissionDetails}
-              />
-            </div>
-          </CommissionLock>
-        </CollapsibleContent>
-      </Collapsible>
-
-      <CommissionReconciliation />
       {viewingSnapshot && (
         <ForecastSnapshotView snapshot={forecastSnapshots.find(s => s.id === viewingSnapshot.id) ?? viewingSnapshot} onClose={() => setViewingSnapshot(null)} />
       )}
