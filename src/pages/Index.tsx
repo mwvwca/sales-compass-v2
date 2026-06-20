@@ -19,7 +19,8 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search, Compass, MoreHorizontal, MoreVertical, Download, LogOut } from 'lucide-react';
+import { Sheet, SheetTrigger, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search, Compass, MoreHorizontal, MoreVertical, Download, LogOut, Menu } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'deal' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
 
@@ -53,6 +54,7 @@ const tabClass = (active: boolean) =>
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
   const [selectedOppId, setSelectedOppId] = useState<string | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -81,13 +83,64 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
+          <div className="md:hidden">
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <SheetTrigger asChild>
+                <button aria-label="Open menu" className="p-1.5 -ml-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                  <Menu size={18} />
+                </button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-0 flex flex-col">
+                <SheetTitle className="sr-only">Navigation</SheetTitle>
+                <nav className="flex-1 overflow-y-auto p-2">
+                  {VISIBLE_GROUPS.map((group, gi) => (
+                    <Fragment key={gi}>
+                      {gi > 0 && <div className="my-1 border-t border-border" />}
+                      {group.map(id => (
+                        <button
+                          key={id}
+                          onClick={() => { setTab(id); setMobileNavOpen(false); }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm text-left ${tab === id ? 'bg-foreground text-background' : 'text-foreground hover:bg-secondary'}`}
+                        >
+                          {TAB_META[id].icon}
+                          {TAB_META[id].label}
+                        </button>
+                      ))}
+                    </Fragment>
+                  ))}
+                  <div className="my-1 border-t border-border" />
+                  {OVERFLOW_TABS.map(id => (
+                    <button
+                      key={id}
+                      onClick={() => { setTab(id); setMobileNavOpen(false); }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm text-left ${tab === id ? 'bg-foreground text-background' : 'text-foreground hover:bg-secondary'}`}
+                    >
+                      {TAB_META[id].icon}
+                      {TAB_META[id].label}
+                    </button>
+                  ))}
+                </nav>
+                <div className="border-t border-border p-2">
+                  <button onClick={() => { handleSave(); setMobileNavOpen(false); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm text-left text-foreground hover:bg-secondary">
+                    <Download size={16} /> Save backup
+                  </button>
+                  <button onClick={() => { openRestore(); setMobileNavOpen(false); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm text-left text-foreground hover:bg-secondary">
+                    <Upload size={16} /> Restore
+                  </button>
+                  <button onClick={() => { void supabase.auth.signOut(); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm text-left text-foreground hover:bg-secondary">
+                    <LogOut size={16} /> Sign out
+                  </button>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
           <span className="flex items-center justify-center w-[18px] h-[18px] rounded bg-foreground">
             <Compass size={11} className="text-background" />
           </span>
           <h1 className="text-sm font-semibold tracking-tight">FORECAST</h1>
         </div>
         <div className="flex items-center gap-3">
-          <nav className="flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
+          <nav className="hidden md:flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
             {VISIBLE_GROUPS.map((group, gi) => (
               <Fragment key={gi}>
                 {gi > 0 && <span className="w-px h-4 bg-border mx-1" />}
@@ -117,25 +170,27 @@ const Index = () => {
             </DropdownMenu>
           </nav>
           <WeeklyBriefing />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button title="More actions" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
-                <MoreVertical size={16} />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem className="gap-2 text-xs" onSelect={handleSave}>
-                <Download size={14} /> Save backup
-              </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 text-xs" onSelect={openRestore}>
-                <Upload size={14} /> Restore
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2 text-xs" onSelect={() => { void supabase.auth.signOut(); }}>
-                <LogOut size={14} /> Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="hidden md:block">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button title="More actions" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                  <MoreVertical size={16} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem className="gap-2 text-xs" onSelect={handleSave}>
+                  <Download size={14} /> Save backup
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 text-xs" onSelect={openRestore}>
+                  <Upload size={14} /> Restore
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 text-xs" onSelect={() => { void supabase.auth.signOut(); }}>
+                  <LogOut size={14} /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           {restoreInput}
         </div>
       </header>
