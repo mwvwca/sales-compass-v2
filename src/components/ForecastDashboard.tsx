@@ -9,15 +9,13 @@ import {
 } from '@/types/forecast';
 import OpportunityList from './OpportunityList';
 import ExecutiveReport from './ExecutiveReport';
-import ExecutiveReportVisual from './ExecutiveReportVisual';
 import PipelineCoverage from './PipelineCoverage';
 import SalesIntelligence from './SalesIntelligence';
 import CommitAccuracySection from './CommitAccuracySection';
 import CoverageTrendCard from './CoverageTrendCard';
 
 import { Switch } from '@/components/ui/switch';
-import { ChevronLeft, ChevronRight, FileSpreadsheet, Camera } from 'lucide-react';
-import { exportMonthlyPresentation, getDefaultPresentationMonth, getPresentationButtonLabel } from '@/lib/monthlyPresentationExport';
+import { ChevronLeft, ChevronRight, Camera } from 'lucide-react';
 
 type Scope = 'weekly' | 'monthly' | 'quarterly' | 'annual';
 
@@ -48,7 +46,6 @@ function localQuarter(dateStr: string): string | null {
 
 export default function ForecastDashboard() {
   const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot, dealRegistrations, snapshots } = useForecast();
-  const presentationMonth = getDefaultPresentationMonth();
   const [scope, setScope] = useState<Scope>('monthly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
@@ -375,7 +372,6 @@ export default function ForecastDashboard() {
         </select>
         <div className="flex items-center gap-3 ml-auto">
           <ExecutiveReport quarter={anchorQuarter} selectedRep={selectedRep} />
-          <ExecutiveReportVisual quarter={anchorQuarter} selectedRep={selectedRep} />
           <button
             onClick={() => captureWeeklySnapshot()}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -383,14 +379,6 @@ export default function ForecastDashboard() {
           >
             <Camera size={12} />
             Snapshot
-          </button>
-          <button
-            onClick={() => exportMonthlyPresentation(presentationMonth, { reps, opportunities, monthlyRepCommits, dealRegistrations })}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            title="Download monthly management presentation"
-          >
-            <FileSpreadsheet size={14} />
-            {getPresentationButtonLabel(presentationMonth)}
           </button>
         </div>
       </div>
