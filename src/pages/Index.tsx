@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import ForecastDashboard from '@/components/ForecastDashboard';
 import RepGoalSetup from '@/components/RepGoalSetup';
 import ImportSheet from '@/components/ImportSheet';
 import ImportChangeLog from '@/components/ImportChangeLog';
-import DataBackup from '@/components/DataBackup';
+import { useDataBackup } from '@/components/DataBackup';
 import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
@@ -12,13 +12,43 @@ import DrCleanupPlanSection from '@/components/DrCleanupPlan';
 import { useForecast } from '@/context/ForecastContext';
 import SlipReport from '@/components/SlipReport';
 import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
-import SignOutButton from '@/components/SignOutButton';
 import RepScorecard from '@/components/RepScorecard';
 import DealRiskView from '@/components/DealRiskView';
 import DealView from '@/components/DealView';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search, Compass, MoreHorizontal, MoreVertical, Download, LogOut } from 'lucide-react';
 
 type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'deal' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
+
+const TAB_META: Record<Tab, { label: string; icon: React.ReactNode }> = {
+  forecast: { label: 'Forecast', icon: <BarChart3 size={14} /> },
+  goals: { label: 'Goals', icon: <Users size={14} /> },
+  scorecard: { label: '1:1s', icon: <Users size={14} /> },
+  'deal-risk': { label: 'Deal risk', icon: <AlertTriangle size={14} /> },
+  'dr-pipeline': { label: 'DR Pipeline', icon: <Layers size={14} /> },
+  'dr-cleanup': { label: 'Pipeline Cleanup', icon: <Sparkles size={14} /> },
+  deal: { label: 'Search', icon: <Search size={14} /> },
+  import: { label: 'Import', icon: <Upload size={14} /> },
+  lookback: { label: 'Lookback', icon: <History size={14} /> },
+  slips: { label: 'Slips', icon: <TrendingDown size={14} /> },
+  graveyard: { label: 'Graveyard', icon: <Skull size={14} /> },
+};
+
+// Visible nav, in three groups separated by dividers; the rest live under "More".
+const VISIBLE_GROUPS: Tab[][] = [
+  ['forecast', 'goals', 'scorecard'],
+  ['deal-risk', 'dr-pipeline', 'dr-cleanup'],
+  ['deal', 'import'],
+];
+const OVERFLOW_TABS: Tab[] = ['lookback', 'slips', 'graveyard'];
+
+const tabClass = (active: boolean) =>
+  `flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+    active ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+  }`;
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
@@ -45,46 +75,68 @@ const Index = () => {
     return () => window.removeEventListener('forecast:open-opportunity', handler);
   }, []);
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'forecast', label: 'Forecast', icon: <BarChart3 size={14} /> },
-    { id: 'goals', label: 'Goals', icon: <Users size={14} /> },
-    { id: 'scorecard', label: '1:1s', icon: <Users size={14} /> },
-    { id: 'deal-risk', label: 'Deal risk', icon: <AlertTriangle size={14} /> },
-    { id: 'deal', label: 'Search', icon: <Search size={14} /> },
-    { id: 'import', label: 'Import', icon: <Upload size={14} /> },
-    { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
-    { id: 'dr-pipeline', label: 'DR Pipeline', icon: <Layers size={14} /> },
-    { id: 'dr-cleanup', label: 'Pipeline Cleanup', icon: <Sparkles size={14} /> },
-    { id: 'slips', label: 'Slips', icon: <TrendingDown size={14} /> },
-    { id: 'graveyard', label: 'Graveyard', icon: <Skull size={14} /> },
-  ];
+  const { handleSave, openRestore, restoreInput } = useDataBackup();
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center w-[18px] h-[18px] rounded bg-foreground">
+            <Compass size={11} className="text-background" />
+          </span>
           <h1 className="text-sm font-semibold tracking-tight">FORECAST</h1>
-          <DataBackup />
-          <WeeklyBriefing />
         </div>
         <div className="flex items-center gap-3">
-          <nav className="flex gap-0.5 bg-secondary rounded-md p-0.5">
-            {tabs.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                  tab === t.id
-                    ? 'bg-foreground text-background'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {t.icon}
-                {t.label}
-              </button>
+          <nav className="flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
+            {VISIBLE_GROUPS.map((group, gi) => (
+              <Fragment key={gi}>
+                {gi > 0 && <span className="w-px h-4 bg-border mx-1" />}
+                {group.map(id => (
+                  <button key={id} onClick={() => setTab(id)} className={tabClass(tab === id)}>
+                    {TAB_META[id].icon}
+                    {TAB_META[id].label}
+                  </button>
+                ))}
+              </Fragment>
             ))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className={tabClass(OVERFLOW_TABS.includes(tab))}>
+                  <MoreHorizontal size={14} />
+                  More
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {OVERFLOW_TABS.map(id => (
+                  <DropdownMenuItem key={id} className="gap-2 text-xs" onSelect={() => setTab(id)}>
+                    {TAB_META[id].icon}
+                    {TAB_META[id].label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
-          <SignOutButton />
+          <WeeklyBriefing />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button title="More actions" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                <MoreVertical size={16} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="gap-2 text-xs" onSelect={handleSave}>
+                <Download size={14} /> Save backup
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onSelect={openRestore}>
+                <Upload size={14} /> Restore
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="gap-2 text-xs" onSelect={() => { void supabase.auth.signOut(); }}>
+                <LogOut size={14} /> Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {restoreInput}
         </div>
       </header>
 

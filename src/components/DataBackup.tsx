@@ -1,6 +1,4 @@
 import { useForecast } from '@/context/ForecastContext';
-import { Button } from '@/components/ui/button';
-import { Download, Upload } from 'lucide-react';
 import { useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
@@ -208,7 +206,7 @@ const backupSchema = z.object({
   exportedAt: z.string().optional(),
 });
 
-export default function DataBackup() {
+export function useDataBackup() {
   const {
     reps,
     opportunities,
@@ -259,7 +257,7 @@ export default function DataBackup() {
           const firstError = result.error.issues[0];
           toast({
             title: 'Invalid backup',
-            description: `Validation failed: ${firstError.path.join('.')} — ${firstError.message}`,
+            description: `Validation failed: ${firstError.path.join('.')}: ${firstError.message}`,
             variant: 'destructive',
           });
           return;
@@ -274,15 +272,10 @@ export default function DataBackup() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  return (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" size="sm" onClick={handleSave} className="text-xs gap-1.5">
-        <Download size={12} /> Save Backup
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="text-xs gap-1.5">
-        <Upload size={12} /> Restore
-      </Button>
-      <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />
-    </div>
-  );
+  // The hidden input must stay mounted in a stable spot in the tree (NOT inside a
+  // dropdown menu that unmounts on close), so callers render `restoreInput` directly.
+  const restoreInput = <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />;
+  const openRestore = () => fileRef.current?.click();
+
+  return { handleSave, openRestore, restoreInput };
 }
