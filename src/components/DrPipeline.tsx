@@ -13,21 +13,11 @@ import { computeAeRows, pipelineSum, closedWonSum, buildCohortRows, type AeRow, 
 import { sfdcOpportunityUrl, sfdcAccountUrl } from '@/lib/sfdc';
 import { openOpportunity } from '@/lib/openOpportunity';
 import { computeDealQualityCore, MIN_RESOLVED } from '@/lib/dealQuality';
+import { STATUS_CHIPS, statusBadgeCls, statusLabel } from '@/lib/drStatus';
 
 
 // ---------- Constants & helpers ----------
 const STAGE_ORDER = ['Unqualified', 'Qualified 5%', 'Discovery 25%', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%'];
-const STATUS_CHIPS: { key: DrStatus; label: string }[] = [
-  { key: 'active', label: 'Active' },
-  { key: 'sql', label: 'SQL' },
-  { key: 'stale', label: 'Stale' },
-  { key: 'padded', label: 'Padded' },
-  { key: 'converted', label: 'Converted' },
-  { key: 'closed_won', label: 'Closed Won' },
-  { key: 'closed_lost', label: 'Closed Lost' },
-  { key: 'rejected', label: 'Rejected' },
-  { key: 'withdrawn', label: 'Withdrawn' },
-];
 const DEFAULT_STATUSES: DrStatus[] = ['active', 'sql', 'stale', 'padded', 'converted', 'closed_won', 'closed_lost'];
 
 type Period = 'this-month' | 'last-month' | 'this-quarter' | 'last-quarter' | 'all';
@@ -92,23 +82,6 @@ function isStale(d: DealRegistration): boolean {
   if (d.probability < 0.1 && age > 30) return true;
   if (d.probability >= 0.25 && age > 45 && !d.lastActivity) return true;
   return false;
-}
-
-function statusBadgeCls(s: DrStatus): string {
-  switch (s) {
-    case 'sql': return 'bg-green-500/15 text-green-700 dark:text-green-400';
-    case 'active': return 'bg-blue-500/15 text-blue-700 dark:text-blue-400';
-    case 'stale': return 'bg-amber-500/15 text-amber-700 dark:text-amber-400';
-    case 'padded': return 'bg-red-500/15 text-red-700 dark:text-red-400';
-    case 'converted': return 'bg-teal-500/15 text-teal-700 dark:text-teal-400';
-    case 'closed_won': return 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold';
-    case 'closed_lost': return 'bg-red-500/10 text-red-700/70 dark:text-red-400/70';
-    case 'rejected': return 'bg-foreground/15 text-foreground/80';
-    case 'withdrawn': return 'bg-muted text-muted-foreground';
-  }
-}
-function statusLabel(s: DrStatus): string {
-  return STATUS_CHIPS.find(c => c.key === s)?.label || s;
 }
 
 // Sort priority for default sort

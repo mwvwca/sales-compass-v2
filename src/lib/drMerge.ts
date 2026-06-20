@@ -30,7 +30,7 @@ function isRejectedStage(stage: string): boolean {
  * forecast parser accept 15–18 char IDs, so normalize both sides to 15 before
  * joining to guard against a 15-vs-18 mismatch.
  */
-function normSfId(id: string | undefined): string {
+export function normSfId(id: string | undefined): string {
   return (id || '').trim().slice(0, 15);
 }
 

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Search, Plus } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
+import type { ChangeLogEntry } from '@/types/forecast';
 import { formatStageWithPct } from '@/lib/utils';
 import { sfdcOpportunityUrl } from '@/lib/sfdc';
 import { buildChangelogIndex, flagDeal } from '@/lib/dealRisk';
+import { normSfId } from '@/lib/drMerge';
+import { statusBadgeCls, statusLabel } from '@/lib/drStatus';
 import { qualityFor, type NextStepCache } from '@/lib/nextStepClassify';
 import { loadNextStepCache } from '@/lib/nextStepCacheApi';
 import { loadCurrentSignalsByOpp, loadTranscripts } from '@/lib/transcriptsApi';
@@ -14,6 +17,17 @@ import { TranscriptDialog } from '@/components/TranscriptDialog';
 import { Button } from '@/components/ui/button';
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+// Readable labels for changelog fields (not the raw keys).
+const FIELD_LABEL: Record<ChangeLogEntry['field'], string> = {
+  closeDate: 'Close date',
+  amount: 'Amount',
+  stage: 'Stage',
+  classification: 'Classification',
+  name: 'Name',
+  repName: 'Rep',
+  nextStep: 'Next step',
+};
 
 interface DealViewProps {
   selectedOppId: string | null;
@@ -42,7 +56,7 @@ function SectionCard({ title, action, children }: { title: string; action?: Reac
 }
 
 export default function DealView({ selectedOppId, onSelect }: DealViewProps) {
-  const { opportunities, changelog } = useForecast();
+  const { opportunities, changelog, dealRegistrations } = useForecast();
   const [query, setQuery] = useState('');
   const [cache, setCache] = useState<NextStepCache>({});
   const [signalsByOpp, setSignalsByOpp] = useState<Record<string, TranscriptSignals>>({});
@@ -91,13 +105,28 @@ export default function DealView({ selectedOppId, onSelect }: DealViewProps) {
     ).slice(0, 50);
   }, [opportunities, query]);
 
+  // One changelog index shared by the risk flags and the history timeline.
+  const changelogIndex = useMemo(() => buildChangelogIndex(changelog), [changelog]);
+
   // Risk flags — EXACTLY as DealRiskView computes them (qualityFor + per-opp signals).
   const flags = useMemo(() => {
     if (!opp) return [];
     const today = new Date();
-    const index = buildChangelogIndex(changelog);
-    return flagDeal(opp, index, today, qualityFor(opp, cache), signalsByOpp[opp.id]);
-  }, [opp, changelog, cache, signalsByOpp]);
+    return flagDeal(opp, changelogIndex, today, qualityFor(opp, cache), signalsByOpp[opp.id]);
+  }, [opp, changelogIndex, cache, signalsByOpp]);
+
+  // Change history for this deal, newest first.
+  const historyEntries = useMemo(() => {
+    if (!opp) return [];
+    return [...(changelogIndex.get(opp.id) ?? [])]
+      .sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+  }, [opp, changelogIndex]);
+
+  // Matched deal registration (joined on the normalized Salesforce id).
+  const reg = useMemo(() => {
+    if (!opp?.salesforceId) return undefined;
+    return dealRegistrations.find(r => normSfId(r.opportunityId) === normSfId(opp.salesforceId));
+  }, [opp, dealRegistrations]);
 
   const current = currentSignals(transcripts) ?? (opp ? signalsByOpp[opp.id] : null) ?? null;
 
@@ -237,8 +266,53 @@ export default function DealView({ selectedOppId, onSelect }: DealViewProps) {
             )}
           </SectionCard>
 
-          {/* v2 seams — close-date/slip history, per-opp changelog, and the DR-match
-              section slot in here later. */}
+          {/* 5. HISTORY */}
+          <SectionCard title="History">
+            {historyEntries.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No change history recorded for this deal.</p>
+            ) : (
+              <div className="space-y-2">
+                {(() => {
+                  const pushCount = historyEntries.filter(e => e.field === 'closeDate' && e.oldValue && e.newValue).length;
+                  return pushCount > 0
+                    ? <p className="text-xs text-muted-foreground">Close date pushed {pushCount} times</p>
+                    : null;
+                })()}
+                <ul className="divide-y divide-border">
+                  {historyEntries.map(e => (
+                    <li key={e.id} className="py-1.5 flex items-center gap-2 text-xs flex-wrap">
+                      <span className="font-mono text-muted-foreground">{e.importDate}</span>
+                      <span className="text-muted-foreground">{FIELD_LABEL[e.field]}:</span>
+                      <span className="font-mono text-muted-foreground line-through">{e.oldValue}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="font-mono font-medium">{e.newValue}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </SectionCard>
+
+          {/* 6. DEAL REGISTRATION */}
+          <SectionCard title="Deal registration">
+            {!reg ? (
+              <p className="text-xs text-muted-foreground">No matching deal registration.</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <HeaderField label="Status">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusBadgeCls(reg.status)}`}>{statusLabel(reg.status)}</span>
+                </HeaderField>
+                <HeaderField label="Registered">{reg.registeredDeal ? 'Yes' : 'No'}</HeaderField>
+                <HeaderField label="SQL">{reg.isSql ? (reg.sqlDate ? `Yes · ${reg.sqlDate}` : 'Yes') : 'No'}</HeaderField>
+                <HeaderField label="CAM">{reg.channelAccountManager || '(none)'}</HeaderField>
+                <HeaderField label="Reseller">{reg.resolvedReseller || reg.resellerName || '(none)'}</HeaderField>
+                <HeaderField label="Product">{reg.product || '(none)'}</HeaderField>
+                <HeaderField label="Age (days)">{reg.ageDays}</HeaderField>
+                <HeaderField label="Last activity">{reg.lastActivity || '(none)'}</HeaderField>
+                <HeaderField label="Created">{reg.createdDate}</HeaderField>
+              </div>
+            )}
+          </SectionCard>
         </div>
       )}
 
