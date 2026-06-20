@@ -19,6 +19,27 @@ export async function loadOneOnOne(repId: string, week: string): Promise<OneOnOn
   };
 }
 
+/** The latest 1:1 (max week) per rep, one per rep. RLS scopes rows to the user. */
+export async function loadLatestOneOnOnes(): Promise<OneOnOne[]> {
+  const { data, error } = await supabase
+    .from('one_on_ones')
+    .select('rep_id, week, notes, action_items')
+    .order('week', { ascending: false });
+  if (error) throw new Error(error.message);
+  const latestByRep = new Map<string, OneOnOne>();
+  // Rows are newest-first, so the first row seen per rep_id is its latest week.
+  for (const row of data ?? []) {
+    if (latestByRep.has(row.rep_id)) continue;
+    latestByRep.set(row.rep_id, {
+      repId: row.rep_id,
+      week: row.week,
+      notes: row.notes ?? '',
+      actionItems: Array.isArray(row.action_items) ? (row.action_items as unknown as ActionItem[]) : [],
+    });
+  }
+  return Array.from(latestByRep.values());
+}
+
 export async function saveOneOnOne(o: OneOnOne): Promise<void> {
   // Include user_id to satisfy the RLS with-check, then upsert on the composite key
   // (same shape as the app_state upsert in ForecastContext).

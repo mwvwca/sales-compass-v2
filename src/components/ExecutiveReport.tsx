@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import { Copy, Check, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { loadLatestOneOnOnes } from '@/lib/oneOnOnesApi';
+import type { OneOnOne } from '@/lib/oneOnOnes';
 import { toast } from 'sonner';
 
 interface Props {
@@ -14,6 +17,12 @@ interface Props {
 export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'all' }: Props = {}) {
   const { reps, opportunities } = useForecast();
   const [copied, setCopied] = useState(false);
+  const [includeOneOnOnes, setIncludeOneOnOnes] = useState(true);
+  const [oneOnOnes, setOneOnOnes] = useState<OneOnOne[]>([]);
+
+  useEffect(() => {
+    loadLatestOneOnOnes().then(setOneOnOnes).catch(() => setOneOnOnes([]));
+  }, []);
 
   const quarter = quarterProp || getCurrentQuarter();
   const months = getQuarterMonths(quarter);
@@ -65,7 +74,7 @@ export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'a
       if (m.closedWon > 0) parts.push(`Won ${fmt(m.closedWon)}`);
       if (m.commit > 0) parts.push(`Commit ${fmt(m.commit)}`);
       if (m.upside > 0) parts.push(`Upside ${fmt(m.upside)}`);
-      lines.push(`  ${m.label.padEnd(10)} ${parts.length > 0 ? parts.join(' · ') : '—'}`);
+      lines.push(`  ${m.label.padEnd(10)} ${parts.length > 0 ? parts.join(' · ') : '-'}`);
     }
     lines.push('');
 
@@ -113,8 +122,38 @@ export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'a
       }
     }
 
+    // 1:1 summaries & action items (notes verbatim): resolve repName -> rep.id -> latest 1:1.
+    if (includeOneOnOnes) {
+      const oneOnOneByRepId = new Map(oneOnOnes.map(o => [o.repId, o]));
+      const latestFor = (name: string) => {
+        const rep = reps.find(r => r.name === name);
+        return rep ? oneOnOneByRepId.get(rep.id) : undefined;
+      };
+      if (repNames.some(name => latestFor(name))) {
+        lines.push('');
+        lines.push('1:1 Summaries & Action Items');
+        lines.push('─'.repeat(35));
+        for (const name of repNames) {
+          const o = latestFor(name);
+          if (!o) continue; // skip reps with no 1:1
+          lines.push(`${name}  (week of ${o.week})`);
+          if (o.notes) lines.push(o.notes);
+          if (o.actionItems.length > 0) {
+            lines.push('Action items:');
+            for (const it of o.actionItems) {
+              let line = `  [${it.done ? 'x' : ' '}] ${it.text}`;
+              if (it.owner) line += ` (owner: ${it.owner})`;
+              if (it.due) line += ` (due: ${it.due})`;
+              lines.push(line);
+            }
+          }
+          lines.push('');
+        }
+      }
+    }
+
     return lines.join('\n');
-  }, [opportunities, reps, quarter, months, selectedRep]);
+  }, [opportunities, reps, quarter, months, selectedRep, includeOneOnOnes, oneOnOnes]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(report);
@@ -141,6 +180,10 @@ export default function ExecutiveReport({ quarter: quarterProp, selectedRep = 'a
             </Button>
           </DialogTitle>
         </DialogHeader>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <Checkbox checked={includeOneOnOnes} onCheckedChange={(v) => setIncludeOneOnOnes(v === true)} />
+          <span className="text-xs text-muted-foreground">Include 1:1 summaries</span>
+        </label>
         <pre className="bg-secondary rounded-lg p-4 text-xs font-mono whitespace-pre-wrap overflow-auto max-h-[60vh] text-foreground leading-relaxed">
           {report}
         </pre>
