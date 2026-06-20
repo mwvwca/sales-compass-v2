@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
-import { buildRepScorecard, type RepScorecard as RepScorecardData, type RiskFlagKind } from '@/lib/repScorecard';
+import { buildRepScorecard, type RepScorecard as RepScorecardData } from '@/lib/repScorecard';
 import {
   weekKey, addActionItem, toggleActionItem, updateActionItem, removeActionItem,
   type ActionItem,
 } from '@/lib/oneOnOnes';
 import { loadOneOnOne, saveOneOnOne } from '@/lib/oneOnOnesApi';
-import { sfdcOpportunityUrl } from '@/lib/sfdc';
 import { getQuarter } from '@/types/forecast';
-import { nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
+import { type NextStepCache } from '@/lib/nextStepClassify';
 import { loadNextStepCache } from '@/lib/nextStepCacheApi';
 import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
 import type { TranscriptSignals } from '@/lib/transcripts';
+import { FLAG_META, NextStepVerdictChip } from '@/components/riskChips';
+import { openOpportunity } from '@/lib/openOpportunity';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -27,16 +28,6 @@ function MetricCard({ label, value, sub, tone }: { label: string; value: string;
     </div>
   );
 }
-
-const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
-  pushed: { label: 'Pushed', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
-  stalled: { label: 'Stalled', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
-  under_qualified: { label: 'Under-qualified', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
-  no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
-  vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
-  single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
-  negative_sentiment: { label: 'Negative sentiment', tone: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
-};
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -260,9 +251,7 @@ export default function RepScorecard() {
                   <div key={d.id} className="px-3 py-2 flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium truncate">
-                        {d.salesforceId
-                          ? <a href={sfdcOpportunityUrl(d.salesforceId)} target="_blank" rel="noopener noreferrer" className="hover:underline">{d.name}</a>
-                          : d.name}
+                        <button type="button" onClick={() => openOpportunity(d.id)} className="text-left hover:underline">{d.name}</button>
                       </div>
                       <div className="text-[11px] text-muted-foreground">{d.stage} · {fmtMoney(d.amount)}</div>
                       <div className="flex flex-wrap gap-1 mt-1">
@@ -271,12 +260,7 @@ export default function RepScorecard() {
                             {FLAG_META[f.kind].label}{f.detail ? ` · ${f.detail}` : ''}
                           </span>
                         ))}
-                        {(() => {
-                          const v = nextStepVerdict(d.id, d.nextStep, nsCache);
-                          if (v === 'concrete') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-700 dark:text-green-400">Concrete next step</span>;
-                          if (v === 'unclassified') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary/40 text-muted-foreground">Next step — not yet classified</span>;
-                          return null;
-                        })()}
+                        <NextStepVerdictChip id={d.id} nextStep={d.nextStep} cache={nsCache} />
                       </div>
                     </div>
                     <div className="text-[11px] text-muted-foreground italic max-w-[45%] line-clamp-2 text-right" title={d.nextStep ?? undefined}>{d.nextStep ?? 'next step —'}</div>

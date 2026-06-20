@@ -1,0 +1,23 @@
+import type { RiskFlagKind } from '@/lib/dealRisk';
+import { nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
+
+// Shared risk-flag + next-step-verdict chip rendering, so the deal-risk view, the
+// rep scorecard, and the deal 360 all render the exact same labels, tones, and chips.
+
+export const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
+  pushed: { label: 'Pushed', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  stalled: { label: 'Stalled', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
+  under_qualified: { label: 'Under-qualified', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
+  no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
+  vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
+  single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
+  negative_sentiment: { label: 'Negative sentiment', tone: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
+};
+
+/** Concrete / not-yet-classified chip for a deal's next step (matches DealRiskView + RepScorecard). */
+export function NextStepVerdictChip({ id, nextStep, cache }: { id: string; nextStep: string | null | undefined; cache: NextStepCache }) {
+  const v = nextStepVerdict(id, nextStep, cache);
+  if (v === 'concrete') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-700 dark:text-green-400">Concrete next step</span>;
+  if (v === 'unclassified') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary/40 text-muted-foreground">Next step — not yet classified</span>;
+  return null;
+}

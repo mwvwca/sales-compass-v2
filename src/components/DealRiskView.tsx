@@ -2,27 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
 import { buildChangelogIndex, dealRiskSignals, flagDeal, type RiskFlag, type RiskFlagKind } from '@/lib/dealRisk';
-import { selectChangedDeals, mergeClassifications, qualityFor, nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
+import { selectChangedDeals, mergeClassifications, qualityFor, type NextStepCache } from '@/lib/nextStepClassify';
 import { classifyNextSteps } from '@/lib/nextStepClassifyApi';
 import { loadNextStepCache, saveNextStepCache } from '@/lib/nextStepCacheApi';
 import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
 import type { TranscriptSignals } from '@/lib/transcripts';
-import { sfdcOpportunityUrl } from '@/lib/sfdc';
+import { FLAG_META, NextStepVerdictChip } from '@/components/riskChips';
+import { openOpportunity } from '@/lib/openOpportunity';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const TERMINAL = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
 
 // Only the populated flag kinds are filterable.
 const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step', 'vague_next_step', 'single_threaded', 'negative_sentiment'];
-const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = {
-  pushed: { label: 'Pushed', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
-  stalled: { label: 'Stalled', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
-  under_qualified: { label: 'Under-qualified', tone: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
-  no_next_step: { label: 'No next step', tone: 'bg-secondary/40 text-muted-foreground' },
-  vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
-  single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
-  negative_sentiment: { label: 'Negative sentiment', tone: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
-};
 
 interface RiskRow {
   id: string;
@@ -182,9 +174,7 @@ export default function DealRiskView() {
                 <tr key={r.id} className="border-t border-border">
                   <td className="px-2 py-1.5">{r.rep}</td>
                   <td className="px-2 py-1.5 font-medium">
-                    {r.salesforceId
-                      ? <a href={sfdcOpportunityUrl(r.salesforceId)} target="_blank" rel="noopener noreferrer" className="hover:underline">{r.name}</a>
-                      : r.name}
+                    <button type="button" onClick={() => openOpportunity(r.id)} className="text-left hover:underline">{r.name}</button>
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono tabular-nums">{fmtMoney(r.amount)}</td>
                   <td className="px-2 py-1.5">{r.stage}</td>
@@ -197,12 +187,7 @@ export default function DealRiskView() {
                           {FLAG_META[f.kind].label}
                         </span>
                       ))}
-                      {(() => {
-                        const v = nextStepVerdict(r.id, r.nextStep, cache);
-                        if (v === 'concrete') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-700 dark:text-green-400">Concrete next step</span>;
-                        if (v === 'unclassified') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary/40 text-muted-foreground">Next step — not yet classified</span>;
-                        return null;
-                      })()}
+                      <NextStepVerdictChip id={r.id} nextStep={r.nextStep} cache={cache} />
                     </div>
                   </td>
                 </tr>

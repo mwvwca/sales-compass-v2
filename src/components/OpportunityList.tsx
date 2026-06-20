@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
 import { getMonthKey, type Quarter } from '@/types/forecast';
-import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle, ExternalLink, FileText } from 'lucide-react';
+import { ArrowRightLeft, Check, X, Pencil, Search, ChevronUp, ChevronDown, ChevronsUpDown, History, StickyNote, EyeOff, Eye, AlertTriangle, FileText } from 'lucide-react';
 import { getStagePercentage, formatStageWithPct } from '@/lib/utils';
-import { sfdcOpportunityUrl, buildAccountUrlMap, accountUrlForOpportunity } from '@/lib/sfdc';
+import { buildAccountUrlMap, accountUrlForOpportunity } from '@/lib/sfdc';
+import { openOpportunity } from '@/lib/openOpportunity';
 import OpportunityHistory from './OpportunityHistory';
 import { TranscriptDialog } from './TranscriptDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -356,19 +357,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                         <input value={editState.name} onChange={e => setEditState(s => ({ ...s, name: e.target.value }))} onKeyDown={e => handleKey(e, opp.id)} className={`${inputClass} w-full`} autoFocus />
                       ) : (
                         <>
-                          <span className="font-medium">{opp.name}</span>
-                          {opp.salesforceId && (
-                            <a
-                              href={sfdcOpportunityUrl(opp.salesforceId)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              title="Open in Salesforce"
-                              className="ml-1.5 inline-flex align-middle text-muted-foreground hover:text-foreground"
-                            >
-                              <ExternalLink size={12} />
-                            </a>
-                          )}
+                          <button type="button" onClick={() => openOpportunity(opp.id)} className="font-medium text-left hover:underline">{opp.name}</button>
                           {opp.previousClassification && opp.previousClassification !== opp.classification && (
                             <span className="ml-2 text-xs text-upside">{opp.previousClassification} → {opp.classification}</span>
                           )}

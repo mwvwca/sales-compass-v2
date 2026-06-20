@@ -15,12 +15,14 @@ import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBri
 import SignOutButton from '@/components/SignOutButton';
 import RepScorecard from '@/components/RepScorecard';
 import DealRiskView from '@/components/DealRiskView';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle } from 'lucide-react';
+import DealView from '@/components/DealView';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'deal' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
 
 const Index = () => {
   const [tab, setTab] = useState<Tab>('forecast');
+  const [selectedOppId, setSelectedOppId] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -31,11 +33,24 @@ const Index = () => {
     return () => window.removeEventListener('forecast:navigate-tab', handler);
   }, []);
 
+  // Clicking a deal anywhere in the app opens its 360 in the Search tab.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (!detail) return;
+      setSelectedOppId(detail);
+      setTab('deal');
+    };
+    window.addEventListener('forecast:open-opportunity', handler);
+    return () => window.removeEventListener('forecast:open-opportunity', handler);
+  }, []);
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'forecast', label: 'Forecast', icon: <BarChart3 size={14} /> },
     { id: 'goals', label: 'Goals', icon: <Users size={14} /> },
     { id: 'scorecard', label: '1:1s', icon: <Users size={14} /> },
     { id: 'deal-risk', label: 'Deal risk', icon: <AlertTriangle size={14} /> },
+    { id: 'deal', label: 'Search', icon: <Search size={14} /> },
     { id: 'import', label: 'Import', icon: <Upload size={14} /> },
     { id: 'lookback', label: 'Lookback', icon: <History size={14} /> },
     { id: 'dr-pipeline', label: 'DR Pipeline', icon: <Layers size={14} /> },
@@ -136,6 +151,15 @@ const Index = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Every open deal across all reps that's flagged at risk — pushed, stalled, or under-qualified.</p>
             </div>
             <DealRiskView />
+          </div>
+        )}
+        {tab === 'deal' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">Deal 360</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Search for a deal to see its overview, risk, next step, and call history in one place.</p>
+            </div>
+            <DealView selectedOppId={selectedOppId} onSelect={setSelectedOppId} />
           </div>
         )}
         {tab === 'slips' && (
