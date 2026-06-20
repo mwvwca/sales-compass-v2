@@ -14,6 +14,7 @@ import { sfdcOpportunityUrl, sfdcAccountUrl } from '@/lib/sfdc';
 import { openOpportunity } from '@/lib/openOpportunity';
 import { computeDealQualityCore, MIN_RESOLVED } from '@/lib/dealQuality';
 import { STATUS_CHIPS, statusBadgeCls, statusLabel } from '@/lib/drStatus';
+import { useSortableRows, SortHeader } from '@/components/sortableTable';
 
 
 // ---------- Constants & helpers ----------
@@ -304,6 +305,31 @@ export default function DrPipeline() {
     [scopeNoStatus, oppMap, showInactiveReps, inactiveRepNameSet],
   );
 
+  type AeSortKey = 'rep' | 'assigned' | 'rejected' | 'sqls' | 'sqlRate' | 'stale' | 'noActivity'
+    | 'unworked' | 'unworkedPct' | 'avgAge' | 'converted' | 'closedWon' | 'convRate'
+    | 'cohortRate' | 'pipelineAmount' | 'closedWonAmount' | 'avgCycle';
+  const aeComparators: Record<AeSortKey, (a: AeRow, b: AeRow) => number> = useMemo(() => ({
+    rep: (a, b) => a.rep.localeCompare(b.rep),
+    assigned: (a, b) => a.assigned - b.assigned,
+    rejected: (a, b) => a.rejected - b.rejected,
+    sqls: (a, b) => a.sqls - b.sqls,
+    sqlRate: (a, b) => a.sqlRate - b.sqlRate,
+    stale: (a, b) => a.stale - b.stale,
+    noActivity: (a, b) => a.noActivity - b.noActivity,
+    unworked: (a, b) => a.unworked - b.unworked,
+    unworkedPct: (a, b) => a.unworkedPct - b.unworkedPct,
+    avgAge: (a, b) => a.avgAge - b.avgAge,
+    converted: (a, b) => a.converted - b.converted,
+    closedWon: (a, b) => a.closedWon - b.closedWon,
+    convRate: (a, b) => a.convRate - b.convRate,
+    cohortRate: (a, b) => a.cohortRate - b.cohortRate,
+    pipelineAmount: (a, b) => a.pipelineAmount - b.pipelineAmount,
+    closedWonAmount: (a, b) => a.closedWonAmount - b.closedWonAmount,
+    avgCycle: (a, b) => (a.avgCycle ?? -1) - (b.avgCycle ?? -1),
+  }), []);
+  const { sorted: aeRowsSorted, sortKey: aeSortKey, sortDir: aeSortDir, toggleSort: toggleAeSort } =
+    useSortableRows(aeRows, aeComparators); // no initial sort: preserve current order until clicked
+
   const hiddenInactiveCount = useMemo(() => {
     if (showInactiveReps) return 0;
     const reps = new Set<string>();
@@ -358,12 +384,12 @@ export default function DrPipeline() {
     inPeriodWon: number; withdrawn: number; withdrawnRate: number;
     cohort: CohortRow[];
   };
+  type CamSortKey = 'cam' | 'totalDrs' | 'sqlRate' | 'pipelineAmount' | 'closedWonAmount'
+    | 'closedWon' | 'cohortRate' | 'avgCycle' | 'fastest' | 'slowest' | 'inPeriodWon' | 'withdrawnRate';
 
-  const [camSortKey, setCamSortKey] = useState<keyof CamRow>('cohortRate');
-  const [camSortDir, setCamSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedCam, setExpandedCam] = useState<string | null>(null);
 
-  const camRows: CamRow[] = useMemo(() => {
+  const computedCamRows: CamRow[] = useMemo(() => {
     const byCam = new Map<string, DealRegistration[]>();
     for (const d of scopeNoStatus) {
       if (d.status === 'rejected') continue; // CAM table excludes rejected (AE action)
@@ -372,7 +398,7 @@ export default function DrPipeline() {
       arr.push(d);
       byCam.set(k, arr);
     }
-    const rows = Array.from(byCam.entries()).map(([cam, deals]) => {
+    return Array.from(byCam.entries()).map(([cam, deals]) => {
       const totalDrs = deals.length;
       const sqls = deals.filter(d => d.isSql).length;
       const sqlRate = totalDrs ? sqls / totalDrs : 0;
@@ -391,14 +417,24 @@ export default function DrPipeline() {
       const cohort = buildCohortRows(deals);
       return { cam, totalDrs, sqls, sqlRate, closedWon, cohortRate, pipelineAmount, closedWonAmount, avgCycle, fastest, slowest, inPeriodWon, withdrawn, withdrawnRate, cohort };
     });
-    rows.sort((a, b) => {
-      const dir = camSortDir === 'asc' ? 1 : -1;
-      const av = a[camSortKey] as any; const bv = b[camSortKey] as any;
-      if (typeof av === 'string') return av.localeCompare(bv) * dir;
-      return ((av ?? -1) - (bv ?? -1)) * dir;
-    });
-    return rows;
-  }, [scopeNoStatus, camSortKey, camSortDir, oppMap]);
+  }, [scopeNoStatus, oppMap]);
+
+  const camComparators: Record<CamSortKey, (a: CamRow, b: CamRow) => number> = useMemo(() => ({
+    cam: (a, b) => a.cam.localeCompare(b.cam),
+    totalDrs: (a, b) => a.totalDrs - b.totalDrs,
+    sqlRate: (a, b) => a.sqlRate - b.sqlRate,
+    pipelineAmount: (a, b) => a.pipelineAmount - b.pipelineAmount,
+    closedWonAmount: (a, b) => a.closedWonAmount - b.closedWonAmount,
+    closedWon: (a, b) => a.closedWon - b.closedWon,
+    cohortRate: (a, b) => a.cohortRate - b.cohortRate,
+    avgCycle: (a, b) => (a.avgCycle ?? -1) - (b.avgCycle ?? -1),
+    fastest: (a, b) => (a.fastest ?? -1) - (b.fastest ?? -1),
+    slowest: (a, b) => (a.slowest ?? -1) - (b.slowest ?? -1),
+    inPeriodWon: (a, b) => a.inPeriodWon - b.inPeriodWon,
+    withdrawnRate: (a, b) => a.withdrawnRate - b.withdrawnRate,
+  }), []);
+  const { sorted: camRows, sortKey: camSortKey, sortDir: camSortDir, toggleSort: toggleCamSort } =
+    useSortableRows(computedCamRows, camComparators, { key: 'cohortRate', dir: 'desc' });
 
   const camTotals = useMemo(() => {
     const t = camRows.reduce((acc, r) => {
@@ -469,13 +505,13 @@ export default function DrPipeline() {
     repBreakdown: { rep: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
     camBreakdown: { cam: string; drs: number; sqls: number; closedWon: number; cohortRate: number }[];
   };
+  type ResellerSortKey = 'reseller' | 'totalDrs' | 'sqlRate' | 'pipelineAmount' | 'closedWonAmount'
+    | 'cohortRate' | 'avgCycle' | 'fastest' | 'slowest' | 'activeReps' | 'topCam' | 'paddedAccts' | 'paddingRate';
 
   const [showReseller, setShowReseller] = useState(false);
-  const [resellerSortKey, setResellerSortKey] = useState<keyof ResellerRow>('cohortRate');
-  const [resellerSortDir, setResellerSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedReseller, setExpandedReseller] = useState<string | null>(null);
 
-  const resellerRows: ResellerRow[] = useMemo(() => {
+  const computedResellerRows: ResellerRow[] = useMemo(() => {
     const byReseller = new Map<string, DealRegistration[]>();
     for (const d of scopeNoStatus) {
       if (d.status === 'rejected') continue;
@@ -556,14 +592,26 @@ export default function DrPipeline() {
 
       rows.push({ reseller, totalDrs, sqls, sqlRate, closedWon, cohortRate, pipelineAmount, closedWonAmount, avgCycle, fastest, slowest, activeReps, topCam, paddedAccts, paddingRate, paddedAccountsList, cohort, repBreakdown, camBreakdown });
     }
-    rows.sort((a, b) => {
-      const dir = resellerSortDir === 'asc' ? 1 : -1;
-      const av = a[resellerSortKey] as any; const bv = b[resellerSortKey] as any;
-      if (typeof av === 'string') return av.localeCompare(bv) * dir;
-      return ((av ?? -1) - (bv ?? -1)) * dir;
-    });
     return rows;
-  }, [scopeNoStatus, resellerSortKey, resellerSortDir, oppMap]);
+  }, [scopeNoStatus, oppMap]);
+
+  const resellerComparators: Record<ResellerSortKey, (a: ResellerRow, b: ResellerRow) => number> = useMemo(() => ({
+    reseller: (a, b) => a.reseller.localeCompare(b.reseller),
+    totalDrs: (a, b) => a.totalDrs - b.totalDrs,
+    sqlRate: (a, b) => a.sqlRate - b.sqlRate,
+    pipelineAmount: (a, b) => a.pipelineAmount - b.pipelineAmount,
+    closedWonAmount: (a, b) => a.closedWonAmount - b.closedWonAmount,
+    cohortRate: (a, b) => a.cohortRate - b.cohortRate,
+    avgCycle: (a, b) => (a.avgCycle ?? -1) - (b.avgCycle ?? -1),
+    fastest: (a, b) => (a.fastest ?? -1) - (b.fastest ?? -1),
+    slowest: (a, b) => (a.slowest ?? -1) - (b.slowest ?? -1),
+    activeReps: (a, b) => a.activeReps - b.activeReps,
+    topCam: (a, b) => a.topCam.localeCompare(b.topCam),
+    paddedAccts: (a, b) => a.paddedAccts - b.paddedAccts,
+    paddingRate: (a, b) => a.paddingRate - b.paddingRate,
+  }), []);
+  const { sorted: resellerRows, sortKey: resellerSortKey, sortDir: resellerSortDir, toggleSort: toggleResellerSort } =
+    useSortableRows(computedResellerRows, resellerComparators, { key: 'cohortRate', dir: 'desc' });
 
   const resellerTotals = useMemo(() => {
     const t = resellerRows.reduce((acc, r) => {
@@ -1508,23 +1556,23 @@ export default function DrPipeline() {
               <table className="w-full text-xs">
                 <thead className="bg-secondary/40 text-muted-foreground">
                   <tr>
-                    <th className="text-left px-2 py-1.5 font-medium">Rep</th>
-                    <th className="text-right px-2 py-1.5 font-medium" title="Total DRs including rejected">Assigned</th>
-                    <th className="text-right px-2 py-1.5 font-medium" title="DRs this rep explicitly rejected in Salesforce">Rejected</th>
-                    <th className="text-right px-2 py-1.5 font-medium">SQL Rate</th>
-                    <th className="text-right px-2 py-1.5 font-medium" title="Sum of amount on SQL'd, open DRs with amount > 0">Pipeline $</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Converted</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Closed Won</th>
-                    <th className="text-right px-2 py-1.5 font-medium" title="Lifetime closed won revenue">Closed Won $</th>
-                    <th className="text-right px-2 py-1.5 font-semibold" title="Closed Won / Assigned (excl. rejected)">Cohort Rate</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Avg Cycle</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Stale</th>
-                    <th className="text-right px-2 py-1.5 font-medium">No Activity</th>
-                    <th className="text-right px-2 py-1.5 font-medium" title="Non-terminal, not currently SQL, no activity, created > 15d ago — partner has not been engaged">Unworked</th>
+                    <SortHeader field="rep" label="Rep" align="left" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="assigned" label="Assigned" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} title="Total DRs including rejected" className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="rejected" label="Rejected" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} title="DRs this rep explicitly rejected in Salesforce" className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="sqlRate" label="SQL Rate" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="pipelineAmount" label="Pipeline $" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} title="Sum of amount on SQL'd, open DRs with amount > 0" className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="converted" label="Converted" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="closedWon" label="Closed Won" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="closedWonAmount" label="Closed Won $" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} title="Lifetime closed won revenue" className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="cohortRate" label="Cohort Rate" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} title="Closed Won / Assigned (excl. rejected)" className="px-2 py-1.5 font-semibold" />
+                    <SortHeader field="avgCycle" label="Avg Cycle" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="stale" label="Stale" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="noActivity" label="No Activity" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="unworked" label="Unworked" align="right" sortKey={aeSortKey} sortDir={aeSortDir} onSort={toggleAeSort} title="Non-terminal, not currently SQL, no activity, created > 15d ago — partner has not been engaged" className="px-2 py-1.5 font-medium" />
                   </tr>
                 </thead>
                 <tbody>
-                  {aeRows.map(r => (
+                  {aeRowsSorted.map(r => (
                     <Fragment key={r.rep}>
                       <tr
                         onClick={() => setExpandedRep(expandedRep === r.rep ? null : r.rep)}
@@ -1654,21 +1702,17 @@ export default function DrPipeline() {
                           ['slowest','Slowest','right'],
                           ['inPeriodWon','In-Period Won','right'],
                           ['withdrawnRate','Withdrawn %','right'],
-                        ] as [keyof CamRow, string, 'left'|'right'][]).map(([k, label, align]) => {
+                        ] as [CamSortKey, string, 'left'|'right'][]).map(([k, label, align]) => {
                           const tooltip =
                             k === 'cohortRate' ? '% of all DRs this CAM registered that closed won, regardless of timeframe' :
                             k === 'inPeriodWon' ? 'DRs created and closed won within the same quarter' :
                             k === 'withdrawnRate' ? 'DRs that disappeared from the report without converting or being explicitly rejected — possible CAM disengagement' :
                             undefined;
                           return (
-                            <th key={k} title={tooltip}
-                              className={`px-2 py-1.5 font-medium cursor-pointer select-none hover:text-foreground ${align === 'right' ? 'text-right' : 'text-left'} ${k === 'cohortRate' ? 'font-semibold' : ''}`}
-                              onClick={() => {
-                                if (camSortKey === k) setCamSortDir(d => d === 'asc' ? 'desc' : 'asc');
-                                else { setCamSortKey(k); setCamSortDir('desc'); }
-                              }}>
-                              {label}{camSortKey === k ? (camSortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                            </th>
+                            <SortHeader key={k} field={k} label={label} align={align}
+                              sortKey={camSortKey} sortDir={camSortDir} onSort={toggleCamSort}
+                              title={tooltip}
+                              className={`px-2 py-1.5 font-medium ${k === 'cohortRate' ? 'font-semibold' : ''}`} />
                           );
                         })}
                       </tr>
@@ -1797,17 +1841,13 @@ export default function DrPipeline() {
                           ['topCam','Top CAM','left'],
                           ['paddedAccts','Padded Accts','right'],
                           ['paddingRate','Padding %','right'],
-                        ] as [keyof ResellerRow, string, 'left'|'right'][]).map(([k, label, align]) => {
+                        ] as [ResellerSortKey, string, 'left'|'right'][]).map(([k, label, align]) => {
                           const tooltip = k === 'cohortRate' ? "% of this reseller's DRs that closed won, all time" : undefined;
                           return (
-                            <th key={k} title={tooltip}
-                              className={`px-2 py-1.5 font-medium cursor-pointer select-none hover:text-foreground ${align === 'right' ? 'text-right' : 'text-left'} ${k === 'cohortRate' ? 'font-semibold' : ''}`}
-                              onClick={() => {
-                                if (resellerSortKey === k) setResellerSortDir(d => d === 'asc' ? 'desc' : 'asc');
-                                else { setResellerSortKey(k); setResellerSortDir('desc'); }
-                              }}>
-                              {label}{resellerSortKey === k ? (resellerSortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-                            </th>
+                            <SortHeader key={k} field={k} label={label} align={align}
+                              sortKey={resellerSortKey} sortDir={resellerSortDir} onSort={toggleResellerSort}
+                              title={tooltip}
+                              className={`px-2 py-1.5 font-medium ${k === 'cohortRate' ? 'font-semibold' : ''}`} />
                           );
                         })}
                       </tr>
