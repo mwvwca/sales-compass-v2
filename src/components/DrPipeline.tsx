@@ -170,8 +170,6 @@ export default function DrPipeline() {
   const [statuses, setStatuses] = useState<Set<DrStatus>>(() => new Set(DEFAULT_STATUSES));
 
   // Detail table
-  const [sortKey, setSortKey] = useState<string>('default');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   // Section B
@@ -743,36 +741,35 @@ export default function DrPipeline() {
   // ---------- Section E: Detail table ----------
 
 
-  const detailRows = useMemo(() => {
+  // Pre-sorted by the existing 'default' ordering (status priority, then ageDays desc),
+  // so the initial table view is identical. The sort hook takes it from here.
+  type DrSortKey = 'account' | 'opportunity' | 'rep' | 'cam' | 'stage' | 'age'
+    | 'lastActivity' | 'amount' | 'status' | 'reseller';
+  const defaultOrderedDrRows = useMemo(() => {
     let rows = filtered.slice();
     if (expandedRep) rows = rows.filter(r => r.repName === expandedRep);
     rows.sort((a, b) => {
-      const dir = sortDir === 'asc' ? 1 : -1;
-      if (sortKey === 'default') {
-        const ap = STATUS_SORT_PRIORITY[a.status] ?? 99;
-        const bp = STATUS_SORT_PRIORITY[b.status] ?? 99;
-        if (ap !== bp) return ap - bp;
-        return b.ageDays - a.ageDays;
-      }
-      let av: any, bv: any;
-      switch (sortKey) {
-        case 'account': av = a.accountName; bv = b.accountName; break;
-        case 'opportunity': av = a.opportunityName; bv = b.opportunityName; break;
-        case 'rep': av = a.repName; bv = b.repName; break;
-        case 'cam': av = a.channelAccountManager || ''; bv = b.channelAccountManager || ''; break;
-        case 'stage': av = a.stage; bv = b.stage; break;
-        case 'age': av = a.ageDays; bv = b.ageDays; break;
-        case 'lastActivity': av = a.lastActivity || ''; bv = b.lastActivity || ''; break;
-        case 'amount': av = a.amount || 0; bv = b.amount || 0; break;
-        case 'status': av = STATUS_SORT_PRIORITY[a.status]; bv = STATUS_SORT_PRIORITY[b.status]; break;
-        case 'reseller': av = a.resellerName || ''; bv = b.resellerName || ''; break;
-        default: av = a.ageDays; bv = b.ageDays;
-      }
-      if (typeof av === 'string') return av.localeCompare(bv) * dir;
-      return (av - bv) * dir;
+      const ap = STATUS_SORT_PRIORITY[a.status] ?? 99, bp = STATUS_SORT_PRIORITY[b.status] ?? 99;
+      if (ap !== bp) return ap - bp;
+      return b.ageDays - a.ageDays;
     });
     return rows;
-  }, [filtered, sortKey, sortDir, expandedRep]);
+  }, [filtered, expandedRep]);
+
+  const drComparators: Record<DrSortKey, (a: DealRegistration, b: DealRegistration) => number> = useMemo(() => ({
+    account: (a, b) => a.accountName.localeCompare(b.accountName),
+    opportunity: (a, b) => a.opportunityName.localeCompare(b.opportunityName),
+    rep: (a, b) => a.repName.localeCompare(b.repName),
+    cam: (a, b) => (a.channelAccountManager || '').localeCompare(b.channelAccountManager || ''),
+    stage: (a, b) => a.stage.localeCompare(b.stage),
+    lastActivity: (a, b) => (a.lastActivity || '').localeCompare(b.lastActivity || ''),
+    reseller: (a, b) => (a.resellerName || '').localeCompare(b.resellerName || ''),
+    age: (a, b) => a.ageDays - b.ageDays,
+    amount: (a, b) => (a.amount || 0) - (b.amount || 0),
+    status: (a, b) => STATUS_SORT_PRIORITY[a.status] - STATUS_SORT_PRIORITY[b.status],
+  }), []);
+  const { sorted: drRows, sortKey: drSortKey, sortDir: drSortDir, toggleSort: toggleDrSort } =
+    useSortableRows<DealRegistration, DrSortKey>(defaultOrderedDrRows, drComparators);
 
   // ---------- Section F: Account Padding (excludes rejected DRs) ----------
   const accountRows = useMemo(() => {
@@ -1084,14 +1081,6 @@ export default function DrPipeline() {
   const hasData = dealRegistrations.length > 0;
   const activeCount = dealRegistrations.filter(d => d.status === 'active' || d.status === 'sql').length;
 
-  const sortHeader = (key: string, label: string, align: 'left' | 'right' = 'left') => (
-    <th
-      className={`px-2 py-1.5 font-medium cursor-pointer hover:text-foreground select-none ${align === 'right' ? 'text-right' : 'text-left'}`}
-      onClick={() => { if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(key); setSortDir('desc'); } }}
-    >
-      {label} {sortKey === key ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-    </th>
-  );
 
   const colorRate = (r: number, good = 0.4, ok = 0.2) =>
     r >= good ? 'text-green-600 dark:text-green-400' : r >= ok ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
@@ -2146,29 +2135,29 @@ export default function DrPipeline() {
           <section className="border border-border rounded-md">
             <div className="px-3 py-2 border-b border-border flex items-center gap-3">
               <h3 className="text-xs font-semibold">Deal Detail</h3>
-              <span className="text-xs text-muted-foreground ml-auto">{detailRows.length} shown</span>
+              <span className="text-xs text-muted-foreground ml-auto">{drRows.length} shown</span>
             </div>
             <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-secondary/40 text-muted-foreground sticky top-0">
                   <tr>
                     <th className="w-6"></th>
-                    {sortHeader('account', 'Account')}
-                    {sortHeader('opportunity', 'Opportunity')}
-                    {sortHeader('rep', 'Rep')}
-                    {sortHeader('cam', 'CAM')}
-                    {sortHeader('stage', 'Stage')}
-                    {sortHeader('age', 'Age', 'right')}
-                    {sortHeader('lastActivity', 'Last Activity')}
-                    {sortHeader('amount', 'Amount', 'right')}
-                    {sortHeader('status', 'Status')}
-                    {sortHeader('reseller', 'Reseller')}
+                    <SortHeader field="account" label="Account" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="opportunity" label="Opportunity" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="rep" label="Rep" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="cam" label="CAM" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="stage" label="Stage" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="age" label="Age" align="right" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="lastActivity" label="Last Activity" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="amount" label="Amount" align="right" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="status" label="Status" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
+                    <SortHeader field="reseller" label="Reseller" align="left" sortKey={drSortKey} sortDir={drSortDir} onSort={toggleDrSort} className="px-2 py-1.5 font-medium" />
                     <th className="text-right px-2 py-1.5 font-medium">Cycle</th>
                     <th className="text-center px-2 py-1.5 font-medium" title="Created and closed in the same quarter">In-Period</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {detailRows.map(d => {
+                  {drRows.map(d => {
                     const isOpen = expandedRow === d.opportunityId;
                     const matchOpp: Opportunity | undefined = oppMap.get(d.opportunityId);
                     return (
@@ -2267,7 +2256,7 @@ export default function DrPipeline() {
                   })}
                 </tbody>
               </table>
-              {detailRows.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No deals match filters.</p>}
+              {drRows.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No deals match filters.</p>}
             </div>
           </section>
 
