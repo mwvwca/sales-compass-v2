@@ -3,14 +3,14 @@ import { useForecast } from '@/context/ForecastContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Upload, FileSpreadsheet, Download, RefreshCw, X, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, RefreshCw, X, ChevronDown, ChevronRight, Info, ExternalLink } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { parseDrExport } from '@/lib/drParser';
 import { mergeDrBatch } from '@/lib/drMerge';
 import type { DealRegistration, RawDrRecord, DrStatus, Opportunity } from '@/types/forecast';
 import { currentlySql, everReachedSql, daysSinceActivity } from '@/lib/drSql';
 import { computeAeRows, pipelineSum, closedWonSum, buildCohortRows, type AeRow, type CohortRow } from '@/lib/aeAccountability';
-import { sfdcAccountUrl } from '@/lib/sfdc';
+import { sfdcOpportunityUrl, sfdcAccountUrl } from '@/lib/sfdc';
 import { openOpportunity } from '@/lib/openOpportunity';
 import { computeDealQualityCore, MIN_RESOLVED } from '@/lib/dealQuality';
 
@@ -2174,9 +2174,21 @@ export default function DrPipeline() {
                             })()}
                           </td>
                           <td className="px-2 py-1.5">
-                            <button type="button" onClick={e => { e.stopPropagation(); openOpportunity(d.opportunityId); }} className="text-left hover:underline">
-                              {d.opportunityName}
-                            </button>
+                            <span className="inline-flex items-center gap-1">
+                              <button type="button" onClick={e => { e.stopPropagation(); openOpportunity(d.opportunityId); }} className="text-left hover:underline">
+                                {d.opportunityName}
+                              </button>
+                              <a
+                                href={sfdcOpportunityUrl(d.opportunityId)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                title="Open in Salesforce"
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            </span>
                           </td>
                           <td className="px-2 py-1.5">{d.repName}</td>
                           <td className="px-2 py-1.5">{d.channelAccountManager || '—'}</td>
