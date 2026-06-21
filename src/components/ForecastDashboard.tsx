@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
+import { buildChangelogIndex, flagDeal } from '@/lib/dealRisk';
 import { normalizeRepName } from '@/lib/repUtils';
 import {
   getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter,
@@ -144,6 +145,20 @@ export default function ForecastDashboard() {
   const totalWon = hudOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
   const totalCommit = hudOpps.filter(o => o.classification === 'commit').reduce((s, o) => s + o.amount, 0);
   const totalUpside = hudOpps.filter(o => o.classification === 'upside').reduce((s, o) => s + o.amount, 0);
+
+  // Commit integrity: how much of the in-scope commit carries a deterministic risk flag
+  // (stalled, under-qualified, repeatedly pushed, weak next step). A "commit" that is
+  // also flagged is the forecast-integrity signal a manager wants surfaced.
+  const commitChangelogIndex = useMemo(() => buildChangelogIndex(changelog), [changelog]);
+  const commitAtRisk = useMemo(() => {
+    const today = new Date();
+    let amt = 0, n = 0;
+    for (const o of hudOpps) {
+      if (o.classification !== 'commit') continue;
+      if (flagDeal(o, commitChangelogIndex, today).length > 0) { amt += o.amount; n += 1; }
+    }
+    return { amt, n };
+  }, [hudOpps, commitChangelogIndex]);
 
   const activeYear = anchor.getUTCFullYear();
   const managerQuotaRecord = getManagerQuota(activeYear);
@@ -418,14 +433,15 @@ export default function ForecastDashboard() {
           </div>
           {/* Row 2: Total Pipe, Commit, Upside, Pace Variance */}
           {[
-            { label: 'Total Pipe', value: fmt(totalPipe), sub: `${pct(totalPipe, totalGoal)} of goal`, color: 'text-foreground' },
-            { label: 'Commit', value: fmt(totalCommit), sub: `${pct(totalCommit, totalGoal)} of goal`, color: 'text-commit' },
-            { label: 'Upside', value: fmt(totalUpside), sub: `${pct(totalUpside, totalGoal)} of goal`, color: 'text-upside' },
+            { label: 'Total Pipe', value: fmt(totalPipe), sub: `${pct(totalPipe, totalGoal)} of goal`, color: 'text-foreground', note: undefined as string | undefined },
+            { label: 'Commit', value: fmt(totalCommit), sub: `${pct(totalCommit, totalGoal)} of goal`, color: 'text-commit', note: commitAtRisk.amt > 0 ? `${fmt(commitAtRisk.amt)} at risk · ${commitAtRisk.n} flagged` : undefined },
+            { label: 'Upside', value: fmt(totalUpside), sub: `${pct(totalUpside, totalGoal)} of goal`, color: 'text-upside', note: undefined },
           ].map(c => (
             <div key={c.label} className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
               <p className={`text-xl font-mono font-semibold ${c.color}`}>{c.value}</p>
               <p className={`text-xs font-mono mt-0.5 ${c.color}`}>{c.sub}</p>
+              {c.note && <p className="text-[11px] font-mono mt-0.5 text-negative">{c.note}</p>}
             </div>
           ))}
 
