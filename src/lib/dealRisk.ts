@@ -75,6 +75,40 @@ export function dealRiskSignals(
   return { pushCount, daysSinceMovement };
 }
 
+export interface SlipProfile {
+  changes: number;        // total close-date changes logged
+  slips: number;          // moves to a later date (the deal slipping)
+  pulls: number;          // moves to an earlier date
+  firstClose?: string;    // earliest close date on record
+  currentClose?: string;  // latest close date on record
+  slipDays: number;       // net days from first to current close (positive = slipped later)
+}
+
+/**
+ * Close-date trajectory from the changelog: not just how many times a deal moved,
+ * but how many of those were slips (later) vs pulls (earlier) and the net drift in
+ * days. Turns a blunt "pushed Nx" into "slipped 5x, Apr 30 to Jun 26".
+ */
+export function slipProfile(opp: Opportunity, index: Map<string, ChangeLogEntry[]>): SlipProfile {
+  const entries = (index.get(opp.id) ?? [])
+    .filter(e => e.field === 'closeDate' && e.oldValue && e.newValue)
+    .sort((a, b) => (a.importDate ?? '').localeCompare(b.importDate ?? ''));
+  let slips = 0, pulls = 0;
+  for (const e of entries) {
+    const o = Date.parse(e.oldValue as string), n = Date.parse(e.newValue as string);
+    if (isNaN(o) || isNaN(n)) continue;
+    if (n > o) slips += 1; else if (n < o) pulls += 1;
+  }
+  const firstClose = entries[0]?.oldValue ?? undefined;
+  const currentClose = entries[entries.length - 1]?.newValue ?? opp.closeDate ?? undefined;
+  let slipDays = 0;
+  if (firstClose && currentClose) {
+    const f = Date.parse(firstClose), c = Date.parse(currentClose);
+    if (!isNaN(f) && !isNaN(c)) slipDays = Math.round((c - f) / 86_400_000);
+  }
+  return { changes: entries.length, slips, pulls, firstClose, currentClose, slipDays };
+}
+
 /** Compute the populated risk flags for a deal: pushed / stalled / under_qualified. */
 /**
  * Risk flags for a deal. `nextStepQuality` (optional) is the AI classification of
@@ -93,7 +127,11 @@ export function flagDeal(
   const { pushCount, daysSinceMovement } = dealRiskSignals(opp, index, today);
   const flags: RiskFlag[] = [];
   if (pushCount >= PUSH_FLAG_MIN) {
-    flags.push({ kind: 'pushed', detail: `close date pushed ${pushCount}×`, why: `Close date pushed ${pushCount}× — repeated slips mean it is not progressing as forecast.` });
+    const sp = slipProfile(opp, index);
+    const detail = sp.slips >= 1 && sp.firstClose && sp.currentClose
+      ? `slipped ${sp.slips}×, ${sp.firstClose} → ${sp.currentClose}`
+      : `close date changed ${pushCount}×`;
+    flags.push({ kind: 'pushed', detail, why: `Close date changed ${pushCount}× (${sp.slips} slip${sp.slips !== 1 ? 's' : ''}, net ${sp.slipDays >= 0 ? '+' : ''}${sp.slipDays}d) — repeated slips mean it is not progressing as forecast.` });
   }
   if (daysSinceMovement >= STALE_DAYS) {
     flags.push({ kind: 'stalled', detail: `${daysSinceMovement}d no movement`, why: `No changelog movement in ${daysSinceMovement}d — the deal has gone quiet.` });

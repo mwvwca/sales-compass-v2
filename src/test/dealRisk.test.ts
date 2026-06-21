@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildChangelogIndex, dealRiskSignals, flagDeal, STALE_DAYS, PUSH_FLAG_MIN,
+  buildChangelogIndex, dealRiskSignals, flagDeal, slipProfile, STALE_DAYS, PUSH_FLAG_MIN,
 } from '@/lib/dealRisk';
 import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
 
@@ -44,6 +44,23 @@ describe('dealRisk signals', () => {
     expect(dealRiskSignals(opp({ importDate: daysAgo(12) }), buildChangelogIndex([]), TODAY).daysSinceMovement).toBe(12);
     const idx = buildChangelogIndex([cl({ importDate: daysAgo(40) }), cl({ importDate: daysAgo(3) })]);
     expect(dealRiskSignals(opp({ importDate: daysAgo(100) }), idx, TODAY).daysSinceMovement).toBe(3);
+  });
+});
+
+describe('slipProfile', () => {
+  it('counts slips vs pulls and net drift from the close-date changelog', () => {
+    const idx = buildChangelogIndex([
+      cl({ field: 'closeDate', oldValue: '2026-04-30', newValue: '2026-03-31', importDate: daysAgo(90) }),
+      cl({ field: 'closeDate', oldValue: '2026-03-31', newValue: '2026-05-27', importDate: daysAgo(60) }),
+      cl({ field: 'closeDate', oldValue: '2026-05-27', newValue: '2026-06-26', importDate: daysAgo(2) }),
+    ]);
+    const sp = slipProfile(opp(), idx);
+    expect(sp.changes).toBe(3);
+    expect(sp.slips).toBe(2);
+    expect(sp.pulls).toBe(1);
+    expect(sp.firstClose).toBe('2026-04-30');
+    expect(sp.currentClose).toBe('2026-06-26');
+    expect(sp.slipDays).toBe(57);
   });
 });
 
