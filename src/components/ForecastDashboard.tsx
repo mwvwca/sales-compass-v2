@@ -582,7 +582,12 @@ export default function ForecastDashboard() {
                   const bucketGoals = getBucketGoals(data.goal, data.byBucket);
                   return (
                     <tr key={name} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                      <td className="px-4 py-2.5 font-medium">{name}</td>
+                      <td className="px-4 py-2.5 font-medium">
+                        {name}
+                        {data.commit === 0 && data.goal > 0 && paceData.pctElapsed > 0.5 && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 align-middle" title="No commit this period with the period more than half elapsed.">no commit</span>
+                        )}
+                      </td>
                       {buckets.map(b => {
                         const bGoal = bucketGoals?.[b.key] || 0;
                         const bb = data.byBucket[b.key] || { total: 0, commit: 0, upside: 0, closed_won: 0 };
