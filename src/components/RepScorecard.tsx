@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Check, Loader2, Plus, Trash2, Sparkles } from 'lucide-react';
 import { useForecast } from '@/context/ForecastContext';
 import { buildRepScorecard, type RepScorecard as RepScorecardData } from '@/lib/repScorecard';
 import {
@@ -14,10 +14,19 @@ import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
 import type { TranscriptSignals } from '@/lib/transcripts';
 import { FLAG_META, NextStepVerdictChip } from '@/components/riskChips';
 import { openOpportunity } from '@/lib/openOpportunity';
+import { coachOneOnOne } from '@/lib/coach1on1Api';
+import type { CoachResult, CoachVerdict, CoachPayload } from '@/lib/coach1on1';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
 const fmtX = (n: number) => `${n.toFixed(1)}×`;
+
+const VERDICT_META: Record<CoachVerdict, { label: string; tone: string }> = {
+  'advances': { label: 'Advances', tone: 'bg-green-500/15 text-green-700 dark:text-green-400' },
+  'activity': { label: 'Activity only', tone: 'bg-secondary/60 text-muted-foreground' },
+  'missing-discovery': { label: 'Missing discovery', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  'unaddressed-risk': { label: 'Unaddressed risk', tone: 'bg-red-500/15 text-red-700 dark:text-red-400' },
+};
 
 function MetricCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
   return (
@@ -174,6 +183,39 @@ export default function RepScorecard() {
     });
   }, [sc, atRiskQuarter]);
 
+  // ---- "Coach this 1:1": on-demand AI deal inspection (replaces the rule-based points) ----
+  const [coach, setCoach] = useState<CoachResult | null>(null);
+  const [coachStatus, setCoachStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  useEffect(() => { setCoach(null); setCoachStatus('idle'); }, [repId]);
+
+  const runCoach = async () => {
+    if (!sc) return;
+    setCoachStatus('loading');
+    const payload: CoachPayload = {
+      rep: pickReps.find(r => r.id === repId)?.name ?? '',
+      attainment: { quota: sc.attainment.quota, closedWon: sc.attainment.closedWon, gap: sc.attainment.gap, coverage: sc.attainment.coverage },
+      forecast: { commit: sc.forecast.commit, bestCase: sc.forecast.bestCase, commitAccuracy: sc.forecast.commitAccuracy },
+      deals: sc.atRisk.map(d => ({
+        id: d.id,
+        name: d.name,
+        amount: d.amount,
+        stage: d.stage,
+        closeDate: d.closeDate ?? null,
+        nextStep: d.nextStep,
+        flags: d.flags.map(f => f.detail || f.kind),
+        description: d.description ?? '',
+        signals: signalsByOpp[d.id] ?? null,
+      })),
+    };
+    try {
+      const r = await coachOneOnOne(payload);
+      setCoach(r);
+      setCoachStatus('idle');
+    } catch {
+      setCoachStatus('error');
+    }
+  };
+
   if (pickReps.length === 0) {
     return <p className="text-xs text-muted-foreground py-6 text-center">No reps yet — add reps in Goals to build scorecards.</p>;
   }
@@ -282,14 +324,66 @@ export default function RepScorecard() {
             </div>
           </Section>
 
-          {/* Talking points */}
-          <Section title="Talking Points">
-            {sc.talkingPoints.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nothing flagged — no prep points generated.</p>
+          {/* 1:1 Coaching (on-demand AI deal inspection; replaces the rule-based points) */}
+          <Section title="1:1 Coaching">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground">
+                {coach ? 'Crux, next-step verdict, and a challenge per at-risk deal.' : 'Inspect the at-risk book: crux, next-step verdict, and a challenge per deal.'}
+              </span>
+              <button
+                type="button"
+                onClick={runCoach}
+                disabled={coachStatus === 'loading' || sc.atRisk.length === 0}
+                className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+              >
+                {coachStatus === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                {coach ? 'Regenerate' : 'Coach this 1:1'}
+              </button>
+            </div>
+
+            {coachStatus === 'error' && <p className="text-xs text-negative">Coaching failed to generate. Try again.</p>}
+
+            {coach ? (
+              <div className="space-y-3">
+                {coach.themes.length > 0 && (
+                  <div className="border border-border rounded-md p-3 space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Patterns</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {coach.themes.map((t, i) => <li key={i} className="text-xs">{t}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {(() => {
+                  const byId = new Map(coach.deals.map(d => [d.id, d]));
+                  const rows = sc.atRisk.filter(d => byId.has(d.id));
+                  if (rows.length === 0) return <p className="text-xs text-muted-foreground">No per-deal coaching returned.</p>;
+                  return (
+                    <div className="space-y-2">
+                      {rows.map(d => {
+                        const c = byId.get(d.id)!;
+                        return (
+                          <div key={d.id} className="border border-border rounded-md p-3 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <button type="button" onClick={() => openOpportunity(d.id)} className="text-xs font-medium text-left hover:underline truncate">{d.name}</button>
+                              <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] ${VERDICT_META[c.verdict].tone}`}>{VERDICT_META[c.verdict].label}</span>
+                            </div>
+                            {c.crux && <p className="text-xs"><span className="text-muted-foreground">Crux: </span>{c.crux}</p>}
+                            {c.challenge && <p className="text-xs"><span className="text-muted-foreground">Challenge: </span>{c.challenge}</p>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
             ) : (
-              <ul className="list-disc pl-5 space-y-1">
-                {sc.talkingPoints.map((p, i) => <li key={i} className="text-xs">{p}</li>)}
-              </ul>
+              sc.talkingPoints.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nothing flagged yet. Run the coach for deal-level prep.</p>
+              ) : (
+                <ul className="list-disc pl-5 space-y-1">
+                  {sc.talkingPoints.map((p, i) => <li key={i} className="text-xs">{p}</li>)}
+                </ul>
+              )
             )}
           </Section>
 

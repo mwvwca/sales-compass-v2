@@ -37,6 +37,8 @@ export interface AtRiskDeal {
   flags: RiskFlag[];
   /** Stage 2 (notes capture) — defined but unpopulated for now. */
   nextStep: string | null;
+  /** Imported Salesforce description (rep narrative); evidence for the 1:1 coach. */
+  description?: string;
 }
 
 /** Group changelog entries by opportunity id (one pass, reused across opps). */
