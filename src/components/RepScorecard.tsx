@@ -195,7 +195,7 @@ export default function RepScorecard() {
       rep: pickReps.find(r => r.id === repId)?.name ?? '',
       attainment: { quota: sc.attainment.quota, closedWon: sc.attainment.closedWon, gap: sc.attainment.gap, coverage: sc.attainment.coverage },
       forecast: { commit: sc.forecast.commit, bestCase: sc.forecast.bestCase, commitAccuracy: sc.forecast.commitAccuracy },
-      deals: sc.atRisk.map(d => ({
+      deals: sc.atRisk.slice(0, 12).map(d => ({
         id: d.id,
         name: d.name,
         amount: d.amount,

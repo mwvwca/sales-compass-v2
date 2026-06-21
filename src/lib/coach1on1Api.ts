@@ -9,7 +9,7 @@ import {
 export async function coachOneOnOne(payload: CoachPayload): Promise<CoachResult> {
   const text = await callBriefingApi(COACH_SYSTEM_PROMPT, buildCoachUserMessage(payload), {
     model: 'claude-sonnet-4-6',
-    maxTokens: 2000,
+    maxTokens: 4000,
   });
   return parseCoachResponse(text, new Set(payload.deals.map(d => d.id)));
 }

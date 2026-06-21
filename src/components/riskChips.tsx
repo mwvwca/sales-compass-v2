@@ -17,7 +17,7 @@ export const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = 
 /** Concrete / not-yet-classified chip for a deal's next step (matches DealRiskView + RepScorecard). */
 export function NextStepVerdictChip({ id, nextStep, cache }: { id: string; nextStep: string | null | undefined; cache: NextStepCache }) {
   const v = nextStepVerdict(id, nextStep, cache);
-  if (v === 'concrete') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-700 dark:text-green-400">Concrete next step</span>;
-  if (v === 'unclassified') return <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary/40 text-muted-foreground">Next step — not yet classified</span>;
+  if (v === 'concrete') return null;
+  if (v === 'unclassified') return null;
   return null;
 }
