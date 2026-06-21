@@ -137,7 +137,7 @@ const Index = () => {
           <span className="flex items-center justify-center w-[18px] h-[18px] rounded bg-foreground">
             <Compass size={11} className="text-background" />
           </span>
-          <h1 className="text-sm font-semibold tracking-tight">FORECAST</h1>
+          <h1 className="text-sm font-semibold tracking-tight">Sales Compass</h1>
         </div>
         <div className="flex items-center gap-3">
           <nav className="hidden md:flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
