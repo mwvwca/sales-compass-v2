@@ -349,6 +349,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
               <TrendingDown size={12} /> Win/Loss Analysis
             </h4>
+            <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border">
@@ -379,6 +380,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
@@ -388,6 +390,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
               <Calendar size={12} /> Close Date Predictions
             </h4>
+            <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border">
@@ -417,6 +420,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
                 ))}
               </tbody>
             </table>
+            </div>
             <p className="text-[10px] text-muted-foreground mt-2">
               hist = based on historical win data · est = estimated from stage progression
             </p>

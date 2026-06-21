@@ -75,6 +75,7 @@ export default function OpportunityHistory({ opportunityId, opportunityName, onC
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Import Snapshots ({snapshots.length})</p>
               <div className="border border-border rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border bg-secondary/50">
@@ -114,6 +115,7 @@ export default function OpportunityHistory({ opportunityId, opportunityName, onC
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}

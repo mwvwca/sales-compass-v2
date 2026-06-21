@@ -60,6 +60,7 @@ export default function PipelineCoverage({ opportunities, allOpportunities, tota
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="mt-3 border border-border rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-secondary/50">
@@ -82,6 +83,7 @@ export default function PipelineCoverage({ opportunities, allOpportunities, tota
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </CollapsibleContent>
     </Collapsible>

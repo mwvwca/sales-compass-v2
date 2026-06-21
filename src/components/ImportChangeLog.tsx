@@ -50,6 +50,7 @@ export default function ImportChangeLog() {
               <span className="text-xs font-medium">{first.fileName}</span>
               <span className="text-xs text-muted-foreground font-mono">{label}</span>
             </div>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
@@ -88,6 +89,7 @@ export default function ImportChangeLog() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         );
       })}

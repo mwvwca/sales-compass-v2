@@ -266,6 +266,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
       </div>
 
       <div className="border border-border rounded-lg overflow-hidden max-h-96 overflow-y-auto">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0">
             <tr className="border-b border-border bg-secondary/50">
@@ -323,6 +324,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="flex items-center justify-between pt-2">

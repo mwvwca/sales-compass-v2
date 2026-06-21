@@ -81,7 +81,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-border px-4 md:px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="md:hidden">
             <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -197,7 +197,7 @@ const Index = () => {
 
       <PostImportBriefingBanner />
 
-      <main className="max-w-6xl mx-auto px-6 py-6">
+      <main className="max-w-6xl mx-auto px-4 md:px-6 py-6">
         {tab === 'forecast' && <ForecastDashboard />}
         {tab === 'goals' && (
           <div>
