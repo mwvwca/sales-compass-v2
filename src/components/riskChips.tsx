@@ -11,5 +11,7 @@ export const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = 
   vague_next_step: { label: 'Vague next step', tone: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   single_threaded: { label: 'Single-threaded', tone: 'bg-secondary/40 text-muted-foreground' },
   negative_sentiment: { label: 'Negative sentiment', tone: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
+  competitor_present: { label: 'Competitor', tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  risk_flagged: { label: 'Risk flagged', tone: 'bg-orange-500/15 text-orange-700 dark:text-orange-400' },
 };
 

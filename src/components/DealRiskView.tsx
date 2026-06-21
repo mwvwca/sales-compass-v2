@@ -14,7 +14,7 @@ const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`
 const TERMINAL = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
 
 // Only the populated flag kinds are filterable.
-const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step', 'vague_next_step', 'single_threaded', 'negative_sentiment'];
+const FILTER_KINDS: RiskFlagKind[] = ['pushed', 'stalled', 'under_qualified', 'no_next_step', 'vague_next_step', 'single_threaded', 'negative_sentiment', 'competitor_present', 'risk_flagged'];
 
 interface RiskRow {
   id: string;

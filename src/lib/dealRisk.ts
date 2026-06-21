@@ -7,7 +7,8 @@ export const STALE_DAYS = 30;      // open deal with no changelog movement in th
 export const PUSH_FLAG_MIN = 2;    // close-date pushes before a deal is flagged "pushed"
 
 /**
- * Risk flag kinds. `single_threaded` and `negative_sentiment` are populated only
+ * Risk flag kinds. The transcript-signal flags (`single_threaded`,
+ * `negative_sentiment`, `competitor_present`, `risk_flagged`) are populated only
  * when transcript signals are supplied to flagDeal — never fabricated otherwise.
  * `vague_next_step` is populated only when an AI quality classification is supplied.
  */
@@ -18,7 +19,9 @@ export type RiskFlagKind =
   | 'no_next_step'
   | 'vague_next_step'
   | 'single_threaded'
-  | 'negative_sentiment';
+  | 'negative_sentiment'
+  | 'competitor_present'
+  | 'risk_flagged';
 
 export interface RiskFlag {
   kind: RiskFlagKind;
@@ -109,6 +112,12 @@ export function flagDeal(
   }
   if (signals?.sentiment === 'negative') {
     flags.push({ kind: 'negative_sentiment', detail: 'negative sentiment', why: 'Latest call sentiment read as negative.' });
+  }
+  if (signals && signals.competitors.length > 0) {
+    flags.push({ kind: 'competitor_present', detail: signals.competitors.join(', '), why: `Competitor named on recent calls: ${signals.competitors.join(', ')}.` });
+  }
+  if (signals && signals.risks.length > 0) {
+    flags.push({ kind: 'risk_flagged', detail: `${signals.risks.length} risk${signals.risks.length > 1 ? 's' : ''} noted`, why: `Risks raised on recent calls: ${signals.risks.join('; ')}.` });
   }
   return flags;
 }

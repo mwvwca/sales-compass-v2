@@ -80,4 +80,14 @@ describe('flagDeal thresholds', () => {
   it('emits no populated flags for a fresh, qualified, never-pushed deal with a next step', () => {
     expect(flagDeal(opp({ probability: 0.6, importDate: daysAgo(1), nextStep: 'Schedule demo' }), empty, TODAY)).toEqual([]);
   });
+
+  it('competitor_present and risk_flagged fire from transcript signals, and not when empty', () => {
+    const signals = { stakeholders: [{ name: 'A', role: 'IT' }, { name: 'B', role: 'Sec' }], sentiment: 'neutral' as const, competitors: ['Arctic Wolf'], commitments: [], risks: ['budget not confirmed'] };
+    const kinds = flagDeal(opp({ nextStep: 'x' }), empty, TODAY, undefined, signals).map(f => f.kind);
+    expect(kinds).toContain('competitor_present');
+    expect(kinds).toContain('risk_flagged');
+    const none = flagDeal(opp({ nextStep: 'x' }), empty, TODAY, undefined, { ...signals, competitors: [], risks: [] }).map(f => f.kind);
+    expect(none).not.toContain('competitor_present');
+    expect(none).not.toContain('risk_flagged');
+  });
 });
