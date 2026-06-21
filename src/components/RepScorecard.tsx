@@ -8,11 +8,9 @@ import {
 } from '@/lib/oneOnOnes';
 import { loadOneOnOne, saveOneOnOne } from '@/lib/oneOnOnesApi';
 import { getQuarter } from '@/types/forecast';
-import { type NextStepCache } from '@/lib/nextStepClassify';
-import { loadNextStepCache } from '@/lib/nextStepCacheApi';
 import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
 import type { TranscriptSignals } from '@/lib/transcripts';
-import { FLAG_META, NextStepVerdictChip } from '@/components/riskChips';
+import { FLAG_META } from '@/components/riskChips';
 import { openOpportunity } from '@/lib/openOpportunity';
 import { coachOneOnOne } from '@/lib/coach1on1Api';
 import type { CoachResult, CoachVerdict, CoachPayload } from '@/lib/coach1on1';
@@ -157,13 +155,6 @@ export default function RepScorecard() {
     return buildRepScorecard(repId, { opportunities, changelog, dealRegistrations, managerQuotas, reps }, { signalsByOpp });
   }, [repId, opportunities, changelog, dealRegistrations, managerQuotas, reps, signalsByOpp]);
 
-  // Next-step classification cache (read-only here; classified from the Deal Risk view).
-  const [nsCache, setNsCache] = useState<NextStepCache>({});
-  useEffect(() => {
-    let cancelled = false;
-    loadNextStepCache().then(c => { if (!cancelled) setNsCache(c); }).catch(() => { /* offline → empty */ });
-    return () => { cancelled = true; };
-  }, []);
 
   // At-risk quarter filter (distinct close-date quarters present in the list).
   const [atRiskQuarter, setAtRiskQuarter] = useState<string>('all');
@@ -302,7 +293,6 @@ export default function RepScorecard() {
                             {FLAG_META[f.kind].label}{f.detail ? ` · ${f.detail}` : ''}
                           </span>
                         ))}
-                        <NextStepVerdictChip id={d.id} nextStep={d.nextStep} cache={nsCache} />
                       </div>
                     </div>
                     <div className="text-[11px] text-muted-foreground italic max-w-[45%] line-clamp-2 text-right" title={d.nextStep ?? undefined}>{d.nextStep ?? 'next step —'}</div>

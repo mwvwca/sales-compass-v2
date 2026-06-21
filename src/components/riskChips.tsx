@@ -1,5 +1,4 @@
 import type { RiskFlagKind } from '@/lib/dealRisk';
-import { nextStepVerdict, type NextStepCache } from '@/lib/nextStepClassify';
 
 // Shared risk-flag + next-step-verdict chip rendering, so the deal-risk view, the
 // rep scorecard, and the deal 360 all render the exact same labels, tones, and chips.
@@ -14,10 +13,3 @@ export const FLAG_META: Record<RiskFlagKind, { label: string; tone: string }> = 
   negative_sentiment: { label: 'Negative sentiment', tone: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
 };
 
-/** Concrete / not-yet-classified chip for a deal's next step (matches DealRiskView + RepScorecard). */
-export function NextStepVerdictChip({ id, nextStep, cache }: { id: string; nextStep: string | null | undefined; cache: NextStepCache }) {
-  const v = nextStepVerdict(id, nextStep, cache);
-  if (v === 'concrete') return null;
-  if (v === 'unclassified') return null;
-  return null;
-}

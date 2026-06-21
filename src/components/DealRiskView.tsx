@@ -7,7 +7,7 @@ import { classifyNextSteps } from '@/lib/nextStepClassifyApi';
 import { loadNextStepCache, saveNextStepCache } from '@/lib/nextStepCacheApi';
 import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
 import type { TranscriptSignals } from '@/lib/transcripts';
-import { FLAG_META, NextStepVerdictChip } from '@/components/riskChips';
+import { FLAG_META } from '@/components/riskChips';
 import { openOpportunity } from '@/lib/openOpportunity';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
@@ -187,7 +187,6 @@ export default function DealRiskView() {
                           {FLAG_META[f.kind].label}
                         </span>
                       ))}
-                      <NextStepVerdictChip id={r.id} nextStep={r.nextStep} cache={cache} />
                     </div>
                   </td>
                 </tr>

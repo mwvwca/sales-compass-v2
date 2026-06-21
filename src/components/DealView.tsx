@@ -11,7 +11,7 @@ import { qualityFor, type NextStepCache } from '@/lib/nextStepClassify';
 import { loadNextStepCache } from '@/lib/nextStepCacheApi';
 import { loadCurrentSignalsByOpp, loadTranscripts } from '@/lib/transcriptsApi';
 import { currentSignals, type Transcript, type TranscriptSignals } from '@/lib/transcripts';
-import { FLAG_META, NextStepVerdictChip } from '@/components/riskChips';
+import { FLAG_META } from '@/components/riskChips';
 import { SignalsView } from '@/components/SignalsView';
 import { TranscriptDialog } from '@/components/TranscriptDialog';
 import { Button } from '@/components/ui/button';
@@ -224,7 +224,6 @@ export default function DealView({ selectedOppId, onSelect }: DealViewProps) {
           <SectionCard title="Next step">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-xs flex-1 min-w-0">{opp.nextStep?.trim() || <span className="text-muted-foreground italic">No next step set.</span>}</p>
-              <NextStepVerdictChip id={opp.id} nextStep={opp.nextStep} cache={cache} />
             </div>
           </SectionCard>
 
