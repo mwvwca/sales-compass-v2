@@ -19,6 +19,22 @@ export async function loadTranscripts(oppId: string): Promise<Transcript[]> {
   }));
 }
 
+/** Every transcript for the signed-in user, newest first. Used by the backup export. */
+export async function loadAllTranscripts(): Promise<Transcript[]> {
+  const { data, error } = await supabase
+    .from('transcripts')
+    .select('id, opp_id, created_at, raw_text, signals')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(r => ({
+    id: r.id,
+    oppId: r.opp_id,
+    createdAt: r.created_at,
+    rawText: r.raw_text,
+    signals: r.signals as unknown as TranscriptSignals,
+  }));
+}
+
 /** Append a transcript + its extracted signals (user_id stamped from the session). */
 export async function saveTranscript(oppId: string, rawText: string, signals: TranscriptSignals): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();

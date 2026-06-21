@@ -3,6 +3,8 @@ import { useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { downloadBackupNow } from '@/lib/backupUtils';
+import { loadCurrentSignalsByOpp, loadAllTranscripts } from '@/lib/transcriptsApi';
+import type { Transcript, TranscriptSignals } from '@/lib/transcripts';
 
 const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted', 'rejected']);
 
@@ -226,21 +228,17 @@ export function useDataBackup() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Transcripts and signals live in Supabase, not app_state, so pull them in
+    // at export time. Fail soft: a backup is still useful without them offline.
+    let signals: Record<string, TranscriptSignals> = {};
+    let transcripts: Transcript[] = [];
+    try { signals = await loadCurrentSignalsByOpp(); } catch { /* omit signals offline */ }
+    try { transcripts = await loadAllTranscripts(); } catch { /* omit transcripts offline */ }
     downloadBackupNow({
-      reps,
-      opportunities,
-      imports,
-      changelog,
-      snapshots,
-      monthlyRepCommits,
-      monthlyManagerCommits,
-      forecastPromotions,
-      forecastSnapshots,
-      managerQuotas,
-      weeklySnapshots,
-      dealRegistrations,
-      drBatches,
+      reps, opportunities, imports, changelog, snapshots, monthlyRepCommits,
+      monthlyManagerCommits, forecastPromotions, forecastSnapshots, managerQuotas,
+      weeklySnapshots, dealRegistrations, drBatches, signals, transcripts,
     });
     toast({ title: 'Backup saved', description: 'Your data has been downloaded as a JSON file.' });
   };

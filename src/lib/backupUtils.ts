@@ -13,6 +13,7 @@ import type {
   DealRegistration,
   DrBatch,
 } from '@/types/forecast';
+import type { Transcript, TranscriptSignals } from '@/lib/transcripts';
 
 export interface BackupPayload {
   reps: Rep[];
@@ -28,6 +29,10 @@ export interface BackupPayload {
   weeklySnapshots?: WeeklySnapshot[];
   dealRegistrations: DealRegistration[];
   drBatches: DrBatch[];
+  /** Latest extracted signals per opportunity (sourced from the transcripts table). */
+  signals?: Record<string, TranscriptSignals>;
+  /** Full call transcripts so the coaching picture is reconstructable from a backup. */
+  transcripts?: Transcript[];
 }
 
 export function downloadBackupNow(data: BackupPayload, fileNamePrefix = 'forecast-backup'): void {
