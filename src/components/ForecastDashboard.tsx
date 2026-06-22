@@ -402,6 +402,24 @@ export default function ForecastDashboard() {
       {/* Summary Cards */}
       <div className="space-y-2">
         <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{scopeLabel} View</span>
+        {totalGoal > 0 && (() => {
+          const bestCase = totalWon + totalCommit;
+          const attain = totalWon / totalGoal;
+          const bestPct = bestCase / totalGoal;
+          const gap = totalGoal - bestCase;
+          const tone = bestPct >= 0.95 ? 'text-positive' : bestPct >= 0.8 ? 'text-upside' : 'text-negative';
+          return (
+            <div className="bg-card border border-border rounded-lg px-4 py-2.5">
+              <p className="text-[11px] font-mono leading-relaxed">
+                <span className={tone}>{fmt(totalWon)} won · {Math.round(attain * 100)}% of {fmt(totalGoal)} goal</span>
+                <span className="text-muted-foreground"> · best case </span>
+                <span className={tone}>{fmt(bestCase)} ({Math.round(bestPct * 100)}%)</span>
+                <span className="text-muted-foreground"> with all commit · </span>
+                <span className={gap > 0 ? 'text-negative' : 'text-positive'}>{gap > 0 ? `${fmt(gap)} gap after commit` : 'goal covered by commit'}</span>
+              </p>
+            </div>
+          );
+        })()}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {/* Row 1: AE Quota, Mgmt Commit, Stretch, Closed Won */}
           <div className="bg-card border border-border rounded-lg p-4">
