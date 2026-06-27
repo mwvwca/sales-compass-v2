@@ -42,6 +42,13 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
   const currentQuarter = getCurrentQuarter();
 
   const allOpps = opportunities;
+
+  const TERMINAL_STAGES = new Set(['closed won', 'closed lost', 'rejected']);
+  const isResolved = (o: Opportunity): boolean =>
+    TERMINAL_STAGES.has((o.stage ?? '').trim().toLowerCase())
+    || o.classification === 'closed_won'
+    || o.classification === 'lost';
+
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
   // ─── Deal Risk Scoring ───
@@ -50,7 +57,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
     const now = new Date();
 
     for (const opp of allOpps) {
-      if (opp.classification === 'closed_won' || opp.classification === 'lost') continue;
+      if (isResolved(opp)) continue;
       const reasons: string[] = [];
 
       // 1. Close date in the past
@@ -157,7 +164,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
   // ─── Pipeline Health Recommendations ───
   const recommendations = useMemo((): PipelineRec[] => {
     const recs: PipelineRec[] = [];
-    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted');
+    const activeOpps = allOpps.filter(o => !isResolved(o) && o.classification !== 'omitted');
 
     // Check coverage per rep
     for (const stat of winLossStats) {
@@ -214,7 +221,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
 
   // ─── Close Date Prediction ───
   const closeDatePredictions = useMemo(() => {
-    const activeOpps = allOpps.filter(o => o.classification !== 'closed_won' && o.classification !== 'lost' && o.classification !== 'omitted');
+    const activeOpps = allOpps.filter(o => !isResolved(o) && o.classification !== 'omitted');
     
     // Calculate avg days per stage from won deals
     const stageTimings = new Map<string, number[]>();
