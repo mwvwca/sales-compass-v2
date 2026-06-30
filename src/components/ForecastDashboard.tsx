@@ -262,6 +262,25 @@ export default function ForecastDashboard() {
   }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyRepCommits, monthlyManagerCommits, selectedRep]);
   const mgmtCommitTotal = mgmtCommit?.value ?? null;
 
+  // Per-rep commit the rep actually set in the Goals tab (monthlyRepCommits),
+  // summed across the months in the current forecast scope. The "no commit" badge
+  // keys off THIS — what the rep committed in Goals — not forecast Commit-category
+  // dollars, which go to zero once the committed amount is won.
+  const goalsCommitByRep = useMemo(() => {
+    const yr = anchor.getUTCFullYear();
+    let monthKeys: string[] = [];
+    if (scope === 'monthly' || scope === 'weekly') monthKeys = [anchorMonthKey];
+    else if (scope === 'quarterly') monthKeys = getQuarterMonths(anchorQuarter);
+    else monthKeys = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+    const byRep: Record<string, number> = {};
+    for (const m of monthlyRepCommits) {
+      if (!monthKeys.includes(m.monthKey)) continue;
+      const k = normalizeRepName(m.repName);
+      byRep[k] = (byRep[k] ?? 0) + m.commitAmount;
+    }
+    return byRep;
+  }, [scope, anchor, anchorMonthKey, anchorQuarter, monthlyRepCommits]);
+
 
 
   const goToGoals = () => {
@@ -602,7 +621,7 @@ export default function ForecastDashboard() {
                     <tr key={name} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
                       <td className="px-4 py-2.5 font-medium">
                         {name}
-                        {data.commit === 0 && data.goal > 0 && paceData.pctElapsed > 0.5 && (
+                        {(goalsCommitByRep[normalizeRepName(name)] ?? 0) === 0 && data.goal > 0 && paceData.pctElapsed > 0.5 && (
                           <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 align-middle" title="No commit this period with the period more than half elapsed.">no commit</span>
                         )}
                       </td>
