@@ -1,4 +1,5 @@
 import { getQuarter, type Quarter, type ChangeLogEntry, type Opportunity } from '@/types/forecast';
+import { rowsForOpportunity } from './historyKey';
 
 export type SlipReason = 'date_pushed' | 'classification_dropped';
 
@@ -51,7 +52,7 @@ export function computeSlips(
   const records: SlipRecord[] = [];
   for (const opp of opps) {
     if (opp.classification === 'rejected') continue;
-    const entries = byOpp.get(opp.id) || [];
+    const entries = rowsForOpportunity(byOpp, opp);
     const dateChanges = entries.filter(e => e.field === 'closeDate' && e.oldValue && e.newValue);
     const classChanges = entries.filter(e => e.field === 'classification');
 

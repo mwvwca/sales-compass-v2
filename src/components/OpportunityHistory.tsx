@@ -4,6 +4,7 @@ import { X, TrendingUp, TrendingDown, Minus, Calendar, DollarSign, Layers } from
 
 interface Props {
   opportunityId: string;
+  salesforceId?: string;
   opportunityName: string;
   onClose: () => void;
 }
@@ -48,11 +49,11 @@ function HealthIndicator({ snapshots }: { snapshots: OpportunitySnapshot[] }) {
   );
 }
 
-export default function OpportunityHistory({ opportunityId, opportunityName, onClose }: Props) {
+export default function OpportunityHistory({ opportunityId, salesforceId, opportunityName, onClose }: Props) {
   const { getOpportunityHistory, changelog } = useForecast();
   const snapshots = getOpportunityHistory(opportunityId);
   const oppChangelog = changelog
-    .filter(c => c.opportunityId === opportunityId)
+    .filter(c => c.opportunityId === opportunityId || (salesforceId && c.opportunityId === salesforceId))
     .sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
 
   return (

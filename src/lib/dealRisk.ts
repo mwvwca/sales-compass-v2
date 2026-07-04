@@ -1,5 +1,6 @@
 import type { Opportunity, ChangeLogEntry } from '@/types/forecast';
 import { currentlySql } from './drSql';
+import { rowsForOpportunity } from './historyKey';
 import type { TranscriptSignals } from './transcripts';
 
 // ---- Tunables ----
@@ -64,7 +65,7 @@ export function dealRiskSignals(
   index: Map<string, ChangeLogEntry[]>,
   today: Date,
 ): { pushCount: number; daysSinceMovement: number } {
-  const entries = index.get(opp.id) ?? [];
+  const entries = rowsForOpportunity(index, opp);
   const pushCount = entries.filter(e => e.field === 'closeDate' && e.oldValue && e.newValue).length;
   const dates = entries.map(e => e.importDate).filter(Boolean);
   const last = dates.length ? dates.sort()[dates.length - 1] : opp.importDate;
@@ -90,7 +91,7 @@ export interface SlipProfile {
  * days. Turns a blunt "pushed Nx" into "slipped 5x, Apr 30 to Jun 26".
  */
 export function slipProfile(opp: Opportunity, index: Map<string, ChangeLogEntry[]>): SlipProfile {
-  const entries = (index.get(opp.id) ?? [])
+  const entries = rowsForOpportunity(index, opp)
     .filter(e => e.field === 'closeDate' && e.oldValue && e.newValue)
     .sort((a, b) => (a.importDate ?? '').localeCompare(b.importDate ?? ''));
   let slips = 0, pulls = 0;

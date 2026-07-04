@@ -23,6 +23,7 @@ import type {
 } from '@/types/forecast';
 import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, quarterStart, quarterEnd } from '@/types/forecast';
 import { mergeDrBatch } from '@/lib/drMerge';
+import { normalizeProbability } from '@/lib/probability';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
 
@@ -79,7 +80,7 @@ function migrateOppClassification(o: Opportunity): Opportunity {
   if (stageNorm === 'closed lost' && o.classification !== 'lost' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'rejected') {
     return { ...o, previousClassification: o.classification, classification: 'lost' as const, lostDate: o.lostDate || new Date().toISOString(), lostReason: o.lostReason || 'Closed Lost in Salesforce', movedAt: new Date().toISOString() };
   }
-  if (stageNorm === 'rejected' && o.classification !== 'rejected' && o.classification !== 'omitted' && o.classification !== 'closed_won' && o.classification !== 'lost') {
+  if (stageNorm === 'rejected' && o.classification !== 'rejected' && o.classification !== 'omitted' && o.classification !== 'closed_won') {
     return { ...o, previousClassification: o.classification, classification: 'rejected' as const, lostDate: o.lostDate || new Date().toISOString(), lostReason: o.lostReason || 'Rejected in Salesforce', movedAt: new Date().toISOString() };
   }
   return o;
@@ -93,6 +94,8 @@ function cleanOpportunities(raw: unknown): Opportunity[] {
     .map((o: any) => ({
       ...o,
       salesforceId: o.salesforceId ?? (typeof o.id === 'string' && /^[0-9a-zA-Z]{15,18}$/.test(o.id) ? o.id : undefined),
+      // Migrate percent-scale probabilities (e.g. 25) to fractions (0.25).
+      probability: normalizeProbability(o.probability),
     }) as Opportunity)
     .map(migrateOppClassification);
 }
@@ -190,6 +193,8 @@ interface ForecastState {
 }
 
 interface ForecastContextValue extends ForecastState {
+  /** ISO timestamp of the most recent failed cloud write; null when in sync. */
+  cloudSyncError: string | null;
   addRep: (rep: Rep) => void;
   updateRep: (rep: Rep) => void;
   deleteRep: (id: string) => void;
@@ -260,6 +265,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   // unseen cloud data with empty local defaults.
   const [hydrated, setHydrated] = useState(false);
   const [cloudWritable, setCloudWritable] = useState(false);
+  // F7: surface cloud write failures instead of only console.warn. Holds the
+  // timestamp of the most recent failed sync; cleared on the next success.
+  const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
   const userIdRef = useRef<string | null>(null);
   const settledRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
@@ -382,7 +390,12 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       }
       if (rows.length > 0) {
         supabase.from('app_state').upsert(rows, { onConflict: 'user_id,key' }).then(({ error }) => {
-          if (error) console.warn('[Forecast] cloud sync failed:', error.message);
+          if (error) {
+            console.warn('[Forecast] cloud sync failed:', error.message);
+            setCloudSyncError(new Date().toISOString());
+          } else {
+            setCloudSyncError(null);
+          }
         });
       }
     }
@@ -461,8 +474,14 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
         const stableId = existing ? existing.id : crypto.randomUUID();
         if (existing) processedExistingIds.add(existing.id);
 
+        // History rows are keyed by the Salesforce id (stable, survives the
+        // SF-id cleaners). Internal UUIDs previously used here were purged by
+        // cleanSnapshots/cleanChangelog on every load, silently destroying
+        // history for every UUID-id opportunity.
+        const histKey = sfid ?? existing?.salesforceId ?? stableId;
+
         newSnapshots.push({
-          opportunityId: stableId,
+          opportunityId: histKey,
           importDate,
           fileName,
           amount: o.amount,
@@ -490,7 +509,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
                 id: crypto.randomUUID(),
                 importDate,
                 fileName,
-                opportunityId: stableId,
+                opportunityId: histKey,
                 opportunityName: o.name,
                 repName: o.repName,
                 field,
@@ -553,7 +572,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           id: crypto.randomUUID(),
           importDate: new Date().toISOString(),
           fileName: '(manual)',
-          opportunityId: id,
+          opportunityId: opp.salesforceId || id,
           opportunityName: opp.name,
           repName: opp.repName,
           field: 'classification',
@@ -915,16 +934,19 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   }) => {
     setState(s => ({
       ...s,
-      reps: data.reps,
-      opportunities: data.opportunities,
+      // Run the same normalization as load/hydration so a restore cannot
+      // reintroduce corrupt rows, mixed probability scales, or stale
+      // terminal-stage classifications.
+      reps: cleanReps(data.reps),
+      opportunities: cleanOpportunities(data.opportunities),
       imports: data.imports,
-      changelog: data.changelog,
-      snapshots: data.snapshots || s.snapshots,
+      changelog: cleanChangelog(data.changelog),
+      snapshots: data.snapshots ? cleanSnapshots(data.snapshots) : s.snapshots,
       monthlyRepCommits: data.monthlyRepCommits || [],
       monthlyManagerCommits: data.monthlyManagerCommits || [],
       forecastPromotions: data.forecastPromotions || [],
       forecastSnapshots: data.forecastSnapshots || [],
-      dealRegistrations: data.dealRegistrations || [],
+      dealRegistrations: data.dealRegistrations ? cleanDealRegistrations(data.dealRegistrations) : [],
       drBatches: data.drBatches || [],
       managerQuotas: data.managerQuotas || [],
       weeklySnapshots: data.weeklySnapshots || [],
@@ -933,13 +955,19 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
 
   const getOpportunityHistory = useCallback((opportunityId: string): OpportunitySnapshot[] => {
+    // Resolve the opportunity so history keyed by either the Salesforce id or
+    // the internal id is found, regardless of which id the caller passed.
+    const opp = state.opportunities.find(o => o.id === opportunityId || o.salesforceId === opportunityId);
+    const keys = new Set<string>([opportunityId]);
+    if (opp) { keys.add(opp.id); if (opp.salesforceId) keys.add(opp.salesforceId); }
     return state.snapshots
-      .filter(s => s.opportunityId === opportunityId)
+      .filter(s => keys.has(s.opportunityId))
       .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
-  }, [state.snapshots]);
+  }, [state.snapshots, state.opportunities]);
 
   const contextValue: ForecastContextValue = {
     ...state,
+    cloudSyncError,
     addRep,
     updateRep,
     deleteRep,

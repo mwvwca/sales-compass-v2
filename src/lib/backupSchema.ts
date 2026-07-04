@@ -1,0 +1,224 @@
+import { z } from 'zod';
+
+const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted', 'rejected']);
+
+const repSchema = z.object({
+  id: z.string(),
+  name: z.string().max(200),
+  quarterlyGoals: z.record(z.string(), z.number().finite().min(0)),
+  isActive: z.boolean().optional(),
+  inactivatedAt: z.string().optional(),
+  inactivatedNote: z.string().max(2000).optional(),
+});
+
+const opportunitySchema = z.object({
+  id: z.string(),
+  // Critical: without this the restore stripped salesforceId (zod removes
+  // unknown keys), and cleanOpportunities then purged every UUID-id
+  // opportunity on the next load.
+  salesforceId: z.string().optional(),
+  name: z.string().max(500),
+  repId: z.string(),
+  repName: z.string().max(200),
+  amount: z.number().finite().min(0),
+  closeDate: z.string(),
+  stage: z.string().max(200),
+  classification: classificationEnum,
+  probability: z.number().finite().min(0).max(100),
+  importDate: z.string(),
+  previousClassification: classificationEnum.optional(),
+  lostDate: z.string().optional(),
+  lostReason: z.string().max(500).optional(),
+  movedAt: z.string().optional(),
+  notes: z.string().max(4000).optional(),
+  accountName: z.string().max(500).optional(),
+  productName: z.string().max(500).optional(),
+}).passthrough();
+
+const importRecordSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  fileName: z.string().max(500),
+  opportunityCount: z.number().finite().min(0),
+});
+
+const changeLogSchema = z.object({
+  id: z.string(),
+  importDate: z.string(),
+  fileName: z.string().max(500),
+  opportunityId: z.string(),
+  opportunityName: z.string().max(500),
+  repName: z.string().max(200),
+  field: z.enum(['closeDate', 'amount', 'stage', 'classification', 'name', 'repName', 'nextStep']),
+  oldValue: z.string(),
+  newValue: z.string(),
+});
+
+const monthlyRepCommitSchema = z.object({
+  id: z.string(),
+  repId: z.string(),
+  repName: z.string().max(200),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  commitAmount: z.number().finite().min(0),
+  notes: z.string().max(1000).optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const monthlyManagerCommitSchema = z.object({
+  id: z.string(),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  commitAmount: z.number().finite().min(0),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const forecastPromotionSchema = z.object({
+  opportunityId: z.string(),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  promotedAt: z.string(),
+});
+
+const forecastDealLineSchema = z.object({
+  opportunityId: z.string(),
+  opportunityName: z.string().max(500),
+  repName: z.string().max(200),
+  amount: z.number().finite().min(0),
+  closeDate: z.string(),
+  stage: z.string().max(200),
+  classification: z.enum(['commit', 'promoted_upside']),
+  weekLabel: z.string().max(40),
+});
+
+const forecastSnapshotOutcomeSchema = z.object({
+  opportunityId: z.string(),
+  status: z.enum(['won', 'lost', 'pushed', 'pending', 'removed']),
+  closedDate: z.string().optional(),
+  amount: z.number().finite().min(0),
+  note: z.string().max(500).optional(),
+});
+
+const forecastSnapshotSchema = z.object({
+  id: z.string(),
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  snapshotLabel: z.string().max(200),
+  createdAt: z.string(),
+  managerCommit: z.number().finite().min(0),
+  repRollup: z.number().finite().min(0),
+  commitTotal: z.number().finite().min(0),
+  promotedUpsideTotal: z.number().finite().min(0),
+  totalCall: z.number().finite().min(0),
+  deals: z.array(forecastDealLineSchema).max(5000),
+  closedWonTotal: z.number().finite().min(0).optional(),
+  closedWonCount: z.number().finite().min(0).optional(),
+  reconciledAt: z.string().optional(),
+  outcomes: z.array(forecastSnapshotOutcomeSchema).optional(),
+});
+
+const drStageHistorySchema = z.object({
+  stage: z.string().max(200),
+  probability: z.number().finite().min(0).max(1),
+  date: z.string(),
+  batchId: z.string(),
+});
+
+const drStatusEnum = z.enum(['active', 'stale', 'sql', 'rejected', 'withdrawn', 'converted', 'closed_won', 'closed_lost', 'padded']);
+
+const dealRegistrationSchema = z.object({
+  opportunityId: z.string(),
+  opportunityName: z.string().max(500),
+  accountName: z.string().max(500),
+  createdDate: z.string(),
+  batchIdFirstSeen: z.string().optional().default(''),
+  repName: z.string().max(200),
+  secondOwner: z.string().max(200).optional(),
+  channelAccountManager: z.string().max(200).optional(),
+  resellerName: z.string().max(500).optional(),
+  distributorReseller: z.string().max(500).optional(),
+  product: z.string().max(500).optional(),
+  stage: z.string().max(200),
+  probability: z.number().finite().min(0).max(1),
+  amount: z.number().finite().min(0).optional(),
+  expectedRevenue: z.number().finite().min(0).optional(),
+  closeDate: z.string().optional(),
+  billingState: z.string().max(200).optional(),
+  leadSource: z.string().max(200).optional(),
+  type: z.string().max(200).optional(),
+  registeredDeal: z.boolean(),
+  lastActivity: z.string().optional(),
+  ageDays: z.number().finite().min(0),
+  firstSeenAt: z.string().optional().default(''),
+  lastSeenAt: z.string().optional().default(''),
+  lastUpdatedAt: z.string().optional().default(''),
+  stageHistory: z.array(drStageHistorySchema).optional().default([]),
+  isSql: z.boolean(),
+  sqlDate: z.string().optional(),
+  status: drStatusEnum.optional().default('active'),
+  rejectedAt: z.string().optional(),
+  convertedAt: z.string().optional(),
+  // Legacy fields tolerated (ignored)
+  importedAt: z.string().optional(),
+  batchId: z.string().optional(),
+});
+
+const drBatchSchema = z.object({
+  id: z.string(),
+  importedAt: z.string(),
+  fileName: z.string().max(500),
+  recordCount: z.number().finite().min(0),
+  newCount: z.number().finite().min(0).optional().default(0),
+  updatedCount: z.number().finite().min(0).optional().default(0),
+  rejectedCount: z.number().finite().min(0).optional().default(0),
+  convertedCount: z.number().finite().min(0).optional().default(0),
+  asOfDate: z.string(),
+});
+
+const opportunitySnapshotSchema = z.object({
+  opportunityId: z.string(),
+  importDate: z.string(),
+  fileName: z.string().max(500),
+  amount: z.number().finite(),
+  closeDate: z.string(),
+  stage: z.string().max(200),
+  classification: z.string().max(50),
+  name: z.string().max(500),
+  repName: z.string().max(200),
+});
+
+export const backupSchema = z.object({
+  reps: z.array(repSchema).max(1000),
+  opportunities: z.array(opportunitySchema).max(10000),
+  imports: z.array(importRecordSchema).max(1000).optional(),
+  changelog: z.array(changeLogSchema).max(50000).optional(),
+  // Previously absent: zod stripped snapshots, so restore never restored deal
+  // history and a fresh device came up with empty Lookback and Deal 360 history.
+  snapshots: z.array(opportunitySnapshotSchema).max(50000).optional(),
+  monthlyRepCommits: z.array(monthlyRepCommitSchema).max(5000).optional(),
+  monthlyManagerCommits: z.array(monthlyManagerCommitSchema).max(120).optional(),
+  forecastPromotions: z.array(forecastPromotionSchema).max(20000).optional(),
+  forecastSnapshots: z.array(forecastSnapshotSchema).max(2000).optional(),
+  dealRegistrations: z.array(dealRegistrationSchema).max(20000).optional(),
+  drBatches: z.array(drBatchSchema).max(1000).optional(),
+  drScores: z.any().optional(),
+  managerQuotas: z.array(z.object({
+    id: z.string(),
+    annualAmount: z.number().finite().min(0),
+    year: z.number().int().min(2020).max(2040),
+    notes: z.string().max(500).optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })).max(20).optional(),
+  weeklySnapshots: z.array(z.object({
+    id: z.string(),
+    snapshotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    closedWon: z.number().finite(),
+    commitPipeline: z.number().finite(),
+    upsidePipeline: z.number().finite(),
+    totalPipeline: z.number().finite(),
+    defensibleCoverage: z.number().finite(),
+    capturedAt: z.string(),
+  })).max(104).optional(),
+  exportedAt: z.string().optional(),
+});
+
+export type BackupData = z.infer<typeof backupSchema>;

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
+import { usePersistedState, stringSetCodec } from '@/hooks/use-persisted-state';
 import { useForecast } from '@/context/ForecastContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -162,12 +163,13 @@ export default function DrPipeline() {
     preview: { newCount: number; updatedCount: number; rejectedCount: number; withdrawnCount: number; convertedCount: number };
   } | null>(null);
 
-  // Global filters
-  const [camFilter, setCamFilter] = useState<string>('all');
-  const [repFilter, setRepFilter] = useState<string>('all');
-  const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
-  const [timelinePeriod, setTimelinePeriod] = useState<Period>('all');
-  const [statuses, setStatuses] = useState<Set<DrStatus>>(() => new Set(DEFAULT_STATUSES));
+  // Global filters: persisted for the session so switching tabs (e.g. to open
+  // a deal in Deal 360) no longer wipes the whole filter context.
+  const [camFilter, setCamFilter] = usePersistedState<string>('drp.camFilter', 'all');
+  const [repFilter, setRepFilter] = usePersistedState<string>('drp.repFilter', 'all');
+  const [period, setPeriod] = usePersistedState<Period>('drp.period', DEFAULT_PERIOD);
+  const [timelinePeriod, setTimelinePeriod] = usePersistedState<Period>('drp.timelinePeriod', 'all');
+  const [statuses, setStatuses] = usePersistedState<Set<DrStatus>>('drp.statuses', () => new Set(DEFAULT_STATUSES), stringSetCodec as any);
 
   // Detail table
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -182,14 +184,14 @@ export default function DrPipeline() {
   const [funnelMonthOffset, setFunnelMonthOffset] = useState(0);
 
   // Deal Quality Analysis collapsible
-  const [qualityExpanded, setQualityExpanded] = useState(true);
-  const [dqView, setDqView] = useState<'defensible' | 'all'>('defensible');
+  const [qualityExpanded, setQualityExpanded] = usePersistedState('drp.qualityExpanded', true);
+  const [dqView, setDqView] = usePersistedState<'defensible' | 'all'>('drp.dqView', 'defensible');
 
   // Section F
-  const [showPaddedOnly, setShowPaddedOnly] = useState(false);
+  const [showPaddedOnly, setShowPaddedOnly] = usePersistedState('drp.showPaddedOnly', false);
 
   // AE accountability: hide inactive reps by default
-  const [showInactiveReps, setShowInactiveReps] = useState(false);
+  const [showInactiveReps, setShowInactiveReps] = usePersistedState('drp.showInactiveReps', false);
   const inactiveRepNameSet = useMemo(
     () => new Set(reps.filter(r => r.isActive === false).map(r => r.name)),
     [reps]
@@ -1171,7 +1173,7 @@ export default function DrPipeline() {
           {/* Headline: Defensible Pipeline Value */}
           <div className="border border-border rounded-md p-4 bg-secondary/30 flex items-baseline gap-4 flex-wrap">
             <div>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Defensible Pipeline Value</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Defensible Pipeline Value (SQL 25%+)</p>
               <p className="text-3xl font-semibold tabular-nums">{fmtDollar(defensiblePipelineValue)}</p>
             </div>
             <p className="text-[11px] text-muted-foreground max-w-md">

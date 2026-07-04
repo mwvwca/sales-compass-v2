@@ -1,212 +1,12 @@
 import { useForecast } from '@/context/ForecastContext';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { z } from 'zod';
 import { downloadBackupNow } from '@/lib/backupUtils';
+import { backupSchema, type BackupData } from '@/lib/backupSchema';
 import { loadCurrentSignalsByOpp, loadAllTranscripts } from '@/lib/transcriptsApi';
 import type { Transcript, TranscriptSignals } from '@/lib/transcripts';
-
-const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassified', 'lost', 'omitted', 'rejected']);
-
-const repSchema = z.object({
-  id: z.string(),
-  name: z.string().max(200),
-  quarterlyGoals: z.record(z.string(), z.number().finite().min(0)),
-  isActive: z.boolean().optional(),
-  inactivatedAt: z.string().optional(),
-  inactivatedNote: z.string().max(2000).optional(),
-});
-
-const opportunitySchema = z.object({
-  id: z.string(),
-  name: z.string().max(500),
-  repId: z.string(),
-  repName: z.string().max(200),
-  amount: z.number().finite().min(0),
-  closeDate: z.string(),
-  stage: z.string().max(200),
-  classification: classificationEnum,
-  probability: z.number().finite().min(0).max(100),
-  importDate: z.string(),
-  previousClassification: classificationEnum.optional(),
-  lostDate: z.string().optional(),
-  lostReason: z.string().max(500).optional(),
-  movedAt: z.string().optional(),
-  notes: z.string().max(4000).optional(),
-  accountName: z.string().max(500).optional(),
-  productName: z.string().max(500).optional(),
-});
-
-const importRecordSchema = z.object({
-  id: z.string(),
-  date: z.string(),
-  fileName: z.string().max(500),
-  opportunityCount: z.number().finite().min(0),
-});
-
-const changeLogSchema = z.object({
-  id: z.string(),
-  importDate: z.string(),
-  fileName: z.string().max(500),
-  opportunityId: z.string(),
-  opportunityName: z.string().max(500),
-  repName: z.string().max(200),
-  field: z.enum(['closeDate', 'amount', 'stage', 'classification', 'name', 'repName']),
-  oldValue: z.string(),
-  newValue: z.string(),
-});
-
-const monthlyRepCommitSchema = z.object({
-  id: z.string(),
-  repId: z.string(),
-  repName: z.string().max(200),
-  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
-  commitAmount: z.number().finite().min(0),
-  notes: z.string().max(1000).optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const monthlyManagerCommitSchema = z.object({
-  id: z.string(),
-  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
-  commitAmount: z.number().finite().min(0),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const forecastPromotionSchema = z.object({
-  opportunityId: z.string(),
-  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
-  promotedAt: z.string(),
-});
-
-const forecastDealLineSchema = z.object({
-  opportunityId: z.string(),
-  opportunityName: z.string().max(500),
-  repName: z.string().max(200),
-  amount: z.number().finite().min(0),
-  closeDate: z.string(),
-  stage: z.string().max(200),
-  classification: z.enum(['commit', 'promoted_upside']),
-  weekLabel: z.string().max(40),
-});
-
-const forecastSnapshotOutcomeSchema = z.object({
-  opportunityId: z.string(),
-  status: z.enum(['won', 'lost', 'pushed', 'pending', 'removed']),
-  closedDate: z.string().optional(),
-  amount: z.number().finite().min(0),
-  note: z.string().max(500).optional(),
-});
-
-const forecastSnapshotSchema = z.object({
-  id: z.string(),
-  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
-  snapshotLabel: z.string().max(200),
-  createdAt: z.string(),
-  managerCommit: z.number().finite().min(0),
-  repRollup: z.number().finite().min(0),
-  commitTotal: z.number().finite().min(0),
-  promotedUpsideTotal: z.number().finite().min(0),
-  totalCall: z.number().finite().min(0),
-  deals: z.array(forecastDealLineSchema).max(5000),
-  closedWonTotal: z.number().finite().min(0).optional(),
-  closedWonCount: z.number().finite().min(0).optional(),
-  reconciledAt: z.string().optional(),
-  outcomes: z.array(forecastSnapshotOutcomeSchema).optional(),
-});
-
-const drStageHistorySchema = z.object({
-  stage: z.string().max(200),
-  probability: z.number().finite().min(0).max(1),
-  date: z.string(),
-  batchId: z.string(),
-});
-
-const drStatusEnum = z.enum(['active', 'stale', 'sql', 'rejected', 'withdrawn', 'converted', 'closed_won', 'closed_lost', 'padded']);
-
-const dealRegistrationSchema = z.object({
-  opportunityId: z.string(),
-  opportunityName: z.string().max(500),
-  accountName: z.string().max(500),
-  createdDate: z.string(),
-  batchIdFirstSeen: z.string().optional().default(''),
-  repName: z.string().max(200),
-  secondOwner: z.string().max(200).optional(),
-  channelAccountManager: z.string().max(200).optional(),
-  resellerName: z.string().max(500).optional(),
-  distributorReseller: z.string().max(500).optional(),
-  product: z.string().max(500).optional(),
-  stage: z.string().max(200),
-  probability: z.number().finite().min(0).max(1),
-  amount: z.number().finite().min(0).optional(),
-  expectedRevenue: z.number().finite().min(0).optional(),
-  closeDate: z.string().optional(),
-  billingState: z.string().max(200).optional(),
-  leadSource: z.string().max(200).optional(),
-  type: z.string().max(200).optional(),
-  registeredDeal: z.boolean(),
-  lastActivity: z.string().optional(),
-  ageDays: z.number().finite().min(0),
-  firstSeenAt: z.string().optional().default(''),
-  lastSeenAt: z.string().optional().default(''),
-  lastUpdatedAt: z.string().optional().default(''),
-  stageHistory: z.array(drStageHistorySchema).optional().default([]),
-  isSql: z.boolean(),
-  sqlDate: z.string().optional(),
-  status: drStatusEnum.optional().default('active'),
-  rejectedAt: z.string().optional(),
-  convertedAt: z.string().optional(),
-  // Legacy fields tolerated (ignored)
-  importedAt: z.string().optional(),
-  batchId: z.string().optional(),
-});
-
-const drBatchSchema = z.object({
-  id: z.string(),
-  importedAt: z.string(),
-  fileName: z.string().max(500),
-  recordCount: z.number().finite().min(0),
-  newCount: z.number().finite().min(0).optional().default(0),
-  updatedCount: z.number().finite().min(0).optional().default(0),
-  rejectedCount: z.number().finite().min(0).optional().default(0),
-  convertedCount: z.number().finite().min(0).optional().default(0),
-  asOfDate: z.string(),
-});
-
-const backupSchema = z.object({
-  reps: z.array(repSchema).max(1000),
-  opportunities: z.array(opportunitySchema).max(10000),
-  imports: z.array(importRecordSchema).max(1000).optional(),
-  changelog: z.array(changeLogSchema).max(50000).optional(),
-  monthlyRepCommits: z.array(monthlyRepCommitSchema).max(5000).optional(),
-  monthlyManagerCommits: z.array(monthlyManagerCommitSchema).max(120).optional(),
-  forecastPromotions: z.array(forecastPromotionSchema).max(20000).optional(),
-  forecastSnapshots: z.array(forecastSnapshotSchema).max(2000).optional(),
-  dealRegistrations: z.array(dealRegistrationSchema).max(20000).optional(),
-  drBatches: z.array(drBatchSchema).max(1000).optional(),
-  drScores: z.any().optional(),
-  managerQuotas: z.array(z.object({
-    id: z.string(),
-    annualAmount: z.number().finite().min(0),
-    year: z.number().int().min(2020).max(2040),
-    notes: z.string().max(500).optional(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })).max(20).optional(),
-  weeklySnapshots: z.array(z.object({
-    id: z.string(),
-    snapshotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    closedWon: z.number().finite(),
-    commitPipeline: z.number().finite(),
-    upsidePipeline: z.number().finite(),
-    totalPipeline: z.number().finite(),
-    defensibleCoverage: z.number().finite(),
-    capturedAt: z.string(),
-  })).max(104).optional(),
-  exportedAt: z.string().optional(),
-});
 
 export function useDataBackup() {
   const {
@@ -227,6 +27,10 @@ export function useDataBackup() {
   } = useForecast();
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const [pendingRestore, setPendingRestore] = useState<{
+    data: BackupData;
+    fileName: string;
+  } | null>(null);
 
   const handleSave = async () => {
     // Transcripts and signals live in Supabase, not app_state, so pull them in
@@ -260,8 +64,9 @@ export function useDataBackup() {
           });
           return;
         }
-        restoreFromBackup(result.data as any);
-        toast({ title: 'Restored', description: `Data restored from ${file.name}` });
+        // Restoring replaces the working dataset and cloud sync propagates the
+        // overwrite everywhere, so it never applies without explicit confirmation.
+        setPendingRestore({ data: result.data, fileName: file.name });
       } catch {
         toast({ title: 'Error', description: 'Could not parse backup file.', variant: 'destructive' });
       }
@@ -272,7 +77,59 @@ export function useDataBackup() {
 
   // The hidden input must stay mounted in a stable spot in the tree (NOT inside a
   // dropdown menu that unmounts on close), so callers render `restoreInput` directly.
-  const restoreInput = <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />;
+  const restoreInput = (
+    <>
+      <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />
+      <Dialog open={!!pendingRestore} onOpenChange={open => { if (!open) setPendingRestore(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Replace all data with this backup?</DialogTitle>
+            <DialogDescription className="text-xs">
+              This replaces your working dataset on this device and syncs the replacement to the cloud. It cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingRestore && (
+            <div className="text-xs space-y-1.5">
+              <div className="grid grid-cols-3 gap-2 font-medium text-muted-foreground">
+                <span></span><span className="text-right">Current</span><span className="text-right">Backup</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span>Opportunities</span>
+                <span className="text-right">{opportunities.length.toLocaleString()}</span>
+                <span className="text-right">{pendingRestore.data.opportunities.length.toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span>Deal registrations</span>
+                <span className="text-right">{dealRegistrations.length.toLocaleString()}</span>
+                <span className="text-right">{(pendingRestore.data.dealRegistrations?.length ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span>History snapshots</span>
+                <span className="text-right">{snapshots.length.toLocaleString()}</span>
+                <span className="text-right">{(pendingRestore.data.snapshots?.length ?? 0).toLocaleString()}</span>
+              </div>
+              <p className="text-muted-foreground pt-1">
+                File: {pendingRestore.fileName}
+                {pendingRestore.data.exportedAt ? ` · exported ${String(pendingRestore.data.exportedAt).slice(0, 10)}` : ''}
+              </p>
+              {(pendingRestore.data.snapshots?.length ?? 0) === 0 && (
+                <p className="text-amber-600 dark:text-amber-500">This backup contains no history snapshots; existing deal history on this device will be kept.</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setPendingRestore(null)}>Cancel</Button>
+            <Button size="sm" variant="destructive" onClick={() => {
+              if (!pendingRestore) return;
+              restoreFromBackup(pendingRestore.data as any);
+              toast({ title: 'Restored', description: `Data restored from ${pendingRestore.fileName}` });
+              setPendingRestore(null);
+            }}>Replace data</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
   const openRestore = () => fileRef.current?.click();
 
   return { handleSave, openRestore, restoreInput };

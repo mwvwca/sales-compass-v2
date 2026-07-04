@@ -41,7 +41,8 @@ export function computeCommitAccuracy(
     return s;
   };
 
-  const oppById = new Map(opportunities.map(o => [o.id, o]));
+  const oppById = new Map(opportunities.map(o => [o.id, o] as const));
+  for (const o of opportunities) if (o.salesforceId) oppById.set(o.salesforceId, o);
 
   // From changelog: any classification -> commit entry
   for (const e of changelog) {

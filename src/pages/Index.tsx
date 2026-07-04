@@ -51,10 +51,36 @@ const tabClass = (active: boolean) =>
     active ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
   }`;
 
+const VALID_TABS = new Set<string>(Object.keys(TAB_META));
+const tabFromHash = (): Tab => {
+  const h = window.location.hash.replace(/^#/, '');
+  return VALID_TABS.has(h) ? (h as Tab) : 'forecast';
+};
+
 const Index = () => {
-  const [tab, setTab] = useState<Tab>('forecast');
+  // N1 fix: tab state lives in the URL hash so the browser Back button
+  // navigates tabs instead of exiting the app, refresh keeps your place,
+  // and every tab is deep-linkable.
+  const [tab, setTabState] = useState<Tab>(() => tabFromHash());
   const [selectedOppId, setSelectedOppId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    if (window.location.hash.replace(/^#/, '') !== next) {
+      window.history.pushState(null, '', `#${next}`);
+    }
+  };
+
+  useEffect(() => {
+    const onHashNav = () => setTabState(tabFromHash());
+    window.addEventListener('popstate', onHashNav);
+    window.addEventListener('hashchange', onHashNav);
+    return () => {
+      window.removeEventListener('popstate', onHashNav);
+      window.removeEventListener('hashchange', onHashNav);
+    };
+  }, []);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -78,6 +104,7 @@ const Index = () => {
   }, []);
 
   const { handleSave, openRestore, restoreInput } = useDataBackup();
+  const { cloudSyncError } = useForecast();
 
   return (
     <div className="min-h-screen bg-background">
@@ -140,6 +167,14 @@ const Index = () => {
           <h1 className="text-sm font-semibold tracking-tight">Sales Compass</h1>
         </div>
         <div className="flex items-center gap-3">
+          {cloudSyncError && (
+            <span
+              title={`Last failed sync: ${new Date(cloudSyncError).toLocaleTimeString()}. Changes are saved on this device and will sync when the connection recovers.`}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400"
+            >
+              <AlertTriangle size={11} /> Sync failed · working locally
+            </span>
+          )}
           <nav className="hidden md:flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
             {VISIBLE_GROUPS.map((group, gi) => (
               <Fragment key={gi}>

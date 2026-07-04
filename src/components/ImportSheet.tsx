@@ -4,6 +4,7 @@ import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { getImportedClassification } from '@/lib/forecastClassification';
 import { parseStage } from '@/lib/transformSalesforce';
+import { normalizeProbability } from '@/lib/probability';
 import { resolveReseller } from '@/lib/resellerUtils';
 import ImportReview from './ImportReview';
 import { notifyImportComplete } from './WeeklyBriefing';
@@ -271,7 +272,10 @@ export default function ImportSheet() {
           const parsed = parseStage(rawStage);
           const stageName = parsed.stage || rawStage;
           const stageProb = parsed.probability ? parseFloat(parsed.probability) / 100 : 0;
-          const colProb = parseFloat(row[mapping.probability || ''] || '0') || 0;
+          // Salesforce exports the Probability column as 0-100; normalize to 0-1
+          // so it matches the stage-derived scale (fixes the mixed-scale bug that
+          // let 5%-probability deals pass the 25% SQL gate).
+          const colProb = normalizeProbability(row[mapping.probability || '']);
 
           return {
             id: sfid || `import-${Date.now()}-${i}`,

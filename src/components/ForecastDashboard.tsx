@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { usePersistedState } from '@/hooks/use-persisted-state';
 import { useForecast } from '@/context/ForecastContext';
 import { buildChangelogIndex, flagDeal } from '@/lib/dealRisk';
 import { normalizeRepName } from '@/lib/repUtils';
@@ -14,6 +15,7 @@ import PipelineCoverage from './PipelineCoverage';
 import SalesIntelligence from './SalesIntelligence';
 import CommitAccuracySection from './CommitAccuracySection';
 import CoverageTrendCard from './CoverageTrendCard';
+import OmittedWonBanner from './OmittedWonBanner';
 
 import { Switch } from '@/components/ui/switch';
 import { ChevronLeft, ChevronRight, Camera } from 'lucide-react';
@@ -46,10 +48,10 @@ function localQuarter(dateStr: string): string | null {
 }
 
 export default function ForecastDashboard() {
-  const { reps, opportunities, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot, dealRegistrations, snapshots } = useForecast();
-  const [scope, setScope] = useState<Scope>('monthly');
+  const { reps, opportunities, imports, monthlyRepCommits, monthlyManagerCommits, managerQuotas, getManagerQuota, changelog, weeklySnapshots, captureWeeklySnapshot, dealRegistrations, snapshots } = useForecast();
+  const [scope, setScope] = usePersistedState<Scope>('fd.scope', 'monthly');
   const [anchor, setAnchor] = useState<Date>(() => new Date());
-  const [selectedRep, setSelectedRep] = useState<string | 'all'>('all');
+  const [selectedRep, setSelectedRep] = usePersistedState<string | 'all'>('fd.selectedRep', 'all');
   const [showGoals, setShowGoals] = useState(false);
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -355,8 +357,13 @@ export default function ForecastDashboard() {
   const legacyQuarter: Quarter | 'full-year' = scope === 'annual' ? 'full-year' : anchorQuarter;
   const legacyFullYearQuarters: Quarter[] = scope === 'annual' ? getYearQuarters(anchor.getUTCFullYear()) : [anchorQuarter];
 
+  const lastImportDate = imports.length
+    ? imports.reduce((max, i) => (i.date > max ? i.date : max), imports[0].date)
+    : null;
+
   return (
     <div className="space-y-6">
+      <OmittedWonBanner />
       {/* Unified scope controls */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex gap-0.5 bg-secondary rounded-md p-0.5">
@@ -393,6 +400,9 @@ export default function ForecastDashboard() {
               Today
             </button>
           )}
+        </div>
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          {lastImportDate ? `Data as of ${new Date(lastImportDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} import` : 'No data imported yet'}
         </div>
         <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
           className="bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring">

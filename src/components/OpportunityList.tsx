@@ -47,7 +47,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   const { classifyOpportunity, updateOpportunity, changelog, dealRegistrations } = useForecast();
   // Account Lightning links, derived from registered deals (Opportunity has no account URL).
   const acctUrlMap = useMemo(() => buildAccountUrlMap(dealRegistrations), [dealRegistrations]);
-  const [notesOpp, setNotesOpp] = useState<{ id: string; name: string } | null>(null);
+  const [notesOpp, setNotesOpp] = useState<{ id: string; name: string; salesforceId?: string } | null>(null);
   const [notesText, setNotesText] = useState('');
   const [transcriptOpp, setTranscriptOpp] = useState<{ id: string; name: string } | null>(null);
   const [activeFilters, setActiveFilters] = useState<Set<Classification>>(new Set(['closed_won', 'commit', 'upside', 'unclassified']));
@@ -56,7 +56,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   const [editState, setEditState] = useState<EditState>({ name: '', repName: '', amount: '', closeDate: '', stage: '', productName: '' });
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string } | null>(null);
+  const [historyOpp, setHistoryOpp] = useState<{ id: string; name: string; salesforceId?: string } | null>(null);
 
   // Filter out lost/graveyard opps from the main list (but keep omitted — they show greyed out)
   const activeOpportunities = useMemo(() => opportunities.filter(o => o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost'), [opportunities]);
@@ -165,7 +165,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
   }, [changelog]);
 
   const getStaleness = (opp: Opportunity) => {
-    const last = lastChangeByOpp.get(opp.id);
+    const last = lastChangeByOpp.get(opp.salesforceId || opp.id) ?? lastChangeByOpp.get(opp.id);
     const ref = last || new Date(opp.importDate).getTime();
     if (!ref || isNaN(ref)) return null;
     const days = Math.floor((Date.now() - ref) / 86400000);
@@ -453,14 +453,14 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
                         </div>
                       ) : (
                         <div className="flex gap-1">
-                          <button onClick={() => setHistoryOpp({ id: opp.id, name: opp.name })} className="text-muted-foreground hover:text-foreground transition-colors" title="View history">
+                          <button onClick={() => setHistoryOpp({ id: opp.id, name: opp.name, salesforceId: opp.salesforceId })} className="text-muted-foreground hover:text-foreground transition-colors" title="View history">
                             <History size={12} />
                           </button>
                           <button onClick={() => startEdit(opp)} className="text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                             <Pencil size={12} />
                           </button>
                           <button
-                            onClick={() => { setNotesOpp({ id: opp.id, name: opp.name }); setNotesText(opp.notes || ''); }}
+                            onClick={() => { setNotesOpp({ id: opp.id, name: opp.name, salesforceId: opp.salesforceId }); setNotesText(opp.notes || ''); }}
                             className={`transition-colors ${opp.notes ? 'text-upside hover:text-upside/80' : 'text-muted-foreground hover:text-foreground'}`}
                             title={opp.notes ? 'View/edit notes' : 'Add notes'}
                           >
@@ -566,6 +566,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
       {historyOpp && (
         <OpportunityHistory
           opportunityId={historyOpp.id}
+          salesforceId={historyOpp.salesforceId}
           opportunityName={historyOpp.name}
           onClose={() => setHistoryOpp(null)}
         />
@@ -594,7 +595,7 @@ export default function OpportunityList({ opportunities, lostOpportunities = [],
 
           {notesOpp && (() => {
             const entries = changelog
-              .filter(e => e.opportunityId === notesOpp.id)
+              .filter(e => e.opportunityId === notesOpp.id || e.opportunityId === notesOpp.salesforceId)
               .sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
             const groups = entries.reduce<Record<string, ChangeLogEntry[]>>((acc, e) => {
               const k = `${e.importDate}__${e.fileName}`;

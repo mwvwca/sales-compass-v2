@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { openOpportunity } from '@/lib/openOpportunity';
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const pct = (n: number, d: number) => d === 0 ? '—' : `${Math.round((n / d) * 100)}%`;
@@ -30,7 +31,7 @@ function getStateAsOf(
 ): HistoricalState | null {
   // Find latest snapshot on or before asOf
   const eligible = snapshots
-    .filter(s => s.opportunityId === opp.id && new Date(s.importDate).getTime() <= asOfMs)
+    .filter(s => (s.opportunityId === (opp.salesforceId || opp.id) || s.opportunityId === opp.id) && new Date(s.importDate).getTime() <= asOfMs)
     .sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
 
   if (eligible.length > 0) {
@@ -99,11 +100,13 @@ export default function PipelineLookback() {
       changes: string[];
     }> = [];
 
-    const oppById = new Map(opportunities.map(o => [o.id, o]));
+    const oppById = new Map(opportunities.map(o => [o.id, o] as const));
+    for (const o of opportunities) if (o.salesforceId) oppById.set(o.salesforceId, o);
 
-    // All opportunity IDs we know about (current + historical via snapshots)
+    // All opportunity keys we know about (current + historical via snapshots).
+    // Keyed by the stable history key so a deal never appears twice.
     const allIds = new Set<string>();
-    opportunities.forEach(o => allIds.add(o.id));
+    opportunities.forEach(o => allIds.add(o.salesforceId || o.id));
     snapshots.forEach(s => allIds.add(s.opportunityId));
 
     for (const id of allIds) {
@@ -487,7 +490,13 @@ export default function PipelineLookback() {
                           {typeBadge.icon} {typeBadge.label}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-medium">{r.name}</td>
+                      <td className="px-3 py-2 font-medium">
+                        <button
+                          onClick={() => openOpportunity(r.id)}
+                          className="text-left hover:underline"
+                          title="Open Deal 360"
+                        >{r.name}</button>
+                      </td>
                       <td className="px-3 py-2 text-secondary-foreground text-xs">{r.repName}</td>
                       <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
                         {r.past ? fmt(r.past.amount) : '—'}

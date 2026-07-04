@@ -233,7 +233,8 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
     ? input.changelog.filter(c => c.fileName === lastImport.fileName && c.importDate === lastImport.date)
     : [];
 
-  const oppById = new Map(opps.map(o => [o.id, o]));
+  const oppById = new Map(opps.map(o => [o.id, o] as const));
+  for (const o of opps) if (o.salesforceId) oppById.set(o.salesforceId, o);
   const findOpp = (id: string) => oppById.get(id);
 
   const newOppIds = new Set(
@@ -247,7 +248,10 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   );
   const newDeals = topByAmount(
     [...newOppIds]
-      .filter(id => !seenBeforeIds.has(id))
+      .filter(id => {
+        const o = oppById.get(id);
+        return !seenBeforeIds.has(id) && !(o?.salesforceId && seenBeforeIds.has(o.salesforceId));
+      })
       .map(id => findOpp(id))
       .filter((o): o is Opportunity => !!o && isOpen(o))
       .map(o => ({

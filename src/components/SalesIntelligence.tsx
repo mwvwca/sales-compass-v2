@@ -68,7 +68,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
 
       // 2. Close date slipping (check snapshots)
       const history = snapshots
-        .filter(s => s.opportunityId === opp.id)
+        .filter(s => s.opportunityId === (opp.salesforceId || opp.id) || s.opportunityId === opp.id)
         .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
       
       const dateSlips = history.reduce((count, snap, i) => {
@@ -140,7 +140,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
       let avgDays: number | null = null;
       const daysArr: number[] = [];
       for (const o of won) {
-        const hist = snapshots.filter(s => s.opportunityId === o.id).sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
+        const hist = snapshots.filter(s => s.opportunityId === (o.salesforceId || o.id) || s.opportunityId === o.id).sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
         if (hist.length > 0) {
           const firstSeen = new Date(hist[0].importDate);
           const closed = new Date(o.closeDate);
@@ -229,7 +229,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
     
     for (const opp of wonOpps) {
       const hist = snapshots
-        .filter(s => s.opportunityId === opp.id)
+        .filter(s => s.opportunityId === (opp.salesforceId || opp.id) || s.opportunityId === opp.id)
         .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
       
       if (hist.length >= 2) {
@@ -250,7 +250,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
 
     return activeOpps.slice(0, 10).map(opp => {
       const hist = snapshots
-        .filter(s => s.opportunityId === opp.id)
+        .filter(s => s.opportunityId === (opp.salesforceId || opp.id) || s.opportunityId === opp.id)
         .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
       
       const firstSeen = hist.length > 0 ? new Date(hist[0].importDate) : new Date(opp.importDate);

@@ -9,6 +9,8 @@ export interface Rep {
 
 export interface Opportunity {
   id: string;
+  /** User acknowledged that this Closed Won (in Salesforce) deal should stay omitted. */
+  omittedWonAck?: boolean;
   /** Salesforce Opportunity ID (e.g. '006Vy000017OsIs') — stable join key across imports/DR. */
   salesforceId?: string;
   name: string;
