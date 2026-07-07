@@ -9,6 +9,7 @@ import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
 import type { TranscriptSignals } from '@/lib/transcripts';
 import { FLAG_META } from '@/components/riskChips';
 import { openOpportunity } from '@/lib/openOpportunity';
+import PovTracker from '@/components/PovTracker';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const TERMINAL = new Set(['closed_won', 'lost', 'omitted', 'rejected']);
@@ -107,6 +108,7 @@ export default function DealRiskView() {
 
   return (
     <div className="space-y-4">
+      <PovTracker />
       {/* Header: count + $ at risk + classify trigger */}
       <div className="flex items-baseline gap-3 flex-wrap">
         <span className="text-2xl font-semibold">{filtered.length}</span>
