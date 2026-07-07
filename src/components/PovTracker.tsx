@@ -3,7 +3,9 @@ import { useForecast } from '@/context/ForecastContext';
 import { detectMotions, motionStats, type MotionKind, type MotionRecord } from '@/lib/povTracking';
 import { openOpportunity } from '@/lib/openOpportunity';
 import { usePersistedState } from '@/hooks/use-persisted-state';
-import { ChevronDown, ChevronUp, FlaskConical } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, FlaskConical, Pencil, X } from 'lucide-react';
+import * as XLSX from '@e965/xlsx';
+import type { Opportunity } from '@/types/forecast';
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -27,8 +29,13 @@ function outcomeBadge(r: MotionRecord) {
   );
 }
 
-function MotionTable({ records }: { records: MotionRecord[] }) {
+function MotionTable({ records, onSetStart, onClearStart }: {
+  records: MotionRecord[];
+  onSetStart: (oppId: string, kind: MotionRecord['kind'], iso: string) => void;
+  onClearStart: (oppId: string, kind: MotionRecord['kind']) => void;
+}) {
   const [showConcluded, setShowConcluded] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const visible = showConcluded ? records : records.filter(r => r.outcome === 'active');
   const concludedCount = records.length - records.filter(r => r.outcome === 'active').length;
 
@@ -61,9 +68,44 @@ function MotionTable({ records }: { records: MotionRecord[] }) {
               </td>
               <td className="px-3 py-1.5 whitespace-nowrap">{r.repName}</td>
               <td className="px-3 py-1.5 text-right whitespace-nowrap">{fmt(r.amount)}</td>
-              <td className="px-3 py-1.5 whitespace-nowrap" title={r.startApproximate ? 'Token was already in the name at first import; actual start may be earlier.' : 'Date the token was added to the opportunity name.'}>
-                {new Date(r.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                {r.startApproximate && <span className="text-muted-foreground">~</span>}
+              <td className="px-3 py-1.5 whitespace-nowrap">
+                {editingId === r.opportunityId ? (
+                  <span className="flex items-center gap-1">
+                    <input
+                      type="date"
+                      defaultValue={r.startedAt.slice(0, 10)}
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Escape') setEditingId(null); }}
+                      onChange={e => {
+                        if (!e.target.value) return;
+                        onSetStart(r.opportunityId, r.kind, new Date(e.target.value + 'T00:00:00').toISOString());
+                        setEditingId(null);
+                      }}
+                      className="bg-background border border-border rounded px-1 py-0.5 text-xs w-[120px]"
+                    />
+                    <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground"><X size={11} /></button>
+                  </span>
+                ) : (
+                  <span className="group/date flex items-center gap-1">
+                    <span title={r.startSource === 'manual' ? 'Manually set start date.' : r.startApproximate ? 'Token was already in the name at first import; actual start may be earlier. Click the pencil to correct it.' : 'Date the token was added to the opportunity name.'}>
+                      {new Date(r.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {r.startApproximate && <span className="text-muted-foreground">~</span>}
+                      {r.startSource === 'manual' && <span className="text-muted-foreground" title="Manually set">*</span>}
+                    </span>
+                    <button
+                      onClick={() => setEditingId(r.opportunityId)}
+                      className="opacity-0 group-hover/date:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                      title="Edit start date"
+                    ><Pencil size={10} /></button>
+                    {r.startSource === 'manual' && (
+                      <button
+                        onClick={() => onClearStart(r.opportunityId, r.kind)}
+                        className="opacity-0 group-hover/date:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                        title="Clear override, return to detected date"
+                      ><X size={10} /></button>
+                    )}
+                  </span>
+                )}
               </td>
               <td className={`px-3 py-1.5 text-right font-medium ${r.outcome === 'active' ? ageTone(r.durationDays) : 'text-muted-foreground'}`}>
                 {r.durationDays}
@@ -91,7 +133,7 @@ function MotionTable({ records }: { records: MotionRecord[] }) {
  * name-change changelog; a ~ marks deals whose token predates tracking.
  */
 export default function PovTracker() {
-  const { opportunities, changelog } = useForecast();
+  const { opportunities, changelog, updateOpportunity } = useForecast();
   const [expanded, setExpanded] = usePersistedState('pov.expanded', true);
   const [kind, setKind] = usePersistedState<MotionKind>('pov.kind', 'POV');
 
@@ -99,6 +141,48 @@ export default function PovTracker() {
     const records = detectMotions(opportunities, changelog, kind);
     return { records, stats: motionStats(records, kind) };
   }, [opportunities, changelog, kind]);
+
+  const setStart = (oppId: string, k: MotionKind, iso: string) => {
+    const opp = opportunities.find(o => o.id === oppId);
+    updateOpportunity(oppId, { motionStartOverrides: { ...(opp as Opportunity | undefined)?.motionStartOverrides, [k]: iso } });
+  };
+  const clearStart = (oppId: string, k: MotionKind) => {
+    const opp = opportunities.find(o => o.id === oppId);
+    const next = { ...(opp as Opportunity | undefined)?.motionStartOverrides };
+    delete next[k];
+    updateOpportunity(oppId, { motionStartOverrides: next });
+  };
+
+  const exportXlsx = () => {
+    const wb = XLSX.utils.book_new();
+    for (const k of ['POV', 'RFP'] as MotionKind[]) {
+      const recs = detectMotions(opportunities, changelog, k);
+      const st = motionStats(recs, k);
+      const rows = recs.map(r => ({
+        Deal: r.name,
+        Rep: r.repName,
+        Amount: r.amount,
+        Started: r.startedAt.slice(0, 10),
+        'Start source': r.startSource === 'manual' ? 'Manual' : r.startSource === 'observed' ? 'Name change' : 'First import (approx.)',
+        Days: r.durationDays,
+        Status: r.outcome,
+        'Close date': (r.closeDate || '').slice(0, 10),
+        Classification: r.classification,
+      }));
+      rows.push({} as any, {
+        Deal: `Active: ${st.activeCount} ($${Math.round(st.activeAmount).toLocaleString()})`,
+        Rep: `Concluded: ${st.concludedCount}`,
+        Amount: '' as any,
+        Started: `Win rate: ${st.conversionRate === null ? 'n/a' : Math.round(st.conversionRate * 100) + '%'}`,
+        'Start source': `Median days (observed/manual): ${st.medianDurationDays ?? 'n/a'}`,
+        Days: '' as any, Status: '' as any, 'Close date': '' as any, Classification: '' as any,
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 52 }, { wch: 18 }, { wch: 11 }, { wch: 11 }, { wch: 22 }, { wch: 6 }, { wch: 9 }, { wch: 11 }, { wch: 13 }];
+      XLSX.utils.book_append_sheet(wb, ws, k);
+    }
+    XLSX.writeFile(wb, `pov-rfp-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   return (
     <div className="border border-border rounded-lg bg-card">
@@ -108,7 +192,15 @@ export default function PovTracker() {
           POV / RFP Tracker
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </button>
-        <div className="flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportXlsx}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            title="Export both POV and RFP sheets to Excel"
+          >
+            <Download size={12} /> Excel
+          </button>
+          <div className="flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
           {(['POV', 'RFP'] as MotionKind[]).map(k => (
             <button
               key={k}
@@ -116,6 +208,7 @@ export default function PovTracker() {
               className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${kind === k ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >{k}</button>
           ))}
+          </div>
         </div>
       </div>
       {expanded && (
@@ -139,7 +232,7 @@ export default function PovTracker() {
             </div>
           </div>
           <div className="border-t border-border overflow-x-auto">
-            <MotionTable records={records} />
+            <MotionTable records={records} onSetStart={setStart} onClearStart={clearStart} />
           </div>
         </>
       )}

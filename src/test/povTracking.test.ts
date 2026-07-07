@@ -99,3 +99,30 @@ describe('motionStats', () => {
     expect(s.medianDurationDays).toBeNull();
   });
 });
+
+describe('manual start overrides', () => {
+  it('override wins over observed name changes and counts as reliable duration', () => {
+    const withOverride = opp({ motionStartOverrides: { POV: '2026-03-15T00:00:00.000Z' } });
+    const [r] = detectMotions([withOverride], [nameChange({})], 'POV', NOW);
+    expect(r.startedAt).toBe('2026-03-15T00:00:00.000Z');
+    expect(r.startSource).toBe('manual');
+    expect(r.startApproximate).toBe(false);
+  });
+
+  it('median includes manual starts but still excludes first-import approximations', () => {
+    const manualLost = opp({
+      id: 'm1', salesforceId: '006Vy0000AAAABBB03', classification: 'lost',
+      lostDate: '2026-05-15T00:00:00.000Z',
+      motionStartOverrides: { POV: '2026-04-01T00:00:00.000Z' },
+    });
+    const approxLost = opp({ id: 'a1', salesforceId: '006Vy0000AAAABBB04', classification: 'lost', lostDate: '2026-03-02T00:00:00.000Z' });
+    const s = motionStats(detectMotions([manualLost, approxLost], [], 'POV', NOW), 'POV');
+    expect(s.medianDurationDays).toBe(44);
+  });
+
+  it('is per-kind: a POV override does not affect RFP detection', () => {
+    const dual = opp({ name: 'Acme - MDR (POV) RFP', motionStartOverrides: { POV: '2026-03-15T00:00:00.000Z' } });
+    const [rfp] = detectMotions([dual], [], 'RFP', NOW);
+    expect(rfp.startSource).toBe('first-import');
+  });
+});

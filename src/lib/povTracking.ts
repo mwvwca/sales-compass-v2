@@ -29,9 +29,11 @@ export interface MotionRecord {
   closeDate: string;
   classification: string;
   kind: MotionKind;
-  /** ISO date the token first appeared in the name. */
+  /** ISO date the token first appeared in the name (or the manual override). */
   startedAt: string;
-  /** true when startedAt is the first-import date rather than an observed name change. */
+  /** manual: user-set override. observed: name-change import date. first-import: lower bound only. */
+  startSource: 'manual' | 'observed' | 'first-import';
+  /** true when startedAt is the first-import date rather than an observed change or override. */
   startApproximate: boolean;
   /** Days from start to today (open) or to conclusion (closed). */
   durationDays: number;
@@ -100,8 +102,10 @@ export function detectMotions(
         !hasMotionToken(String(c.oldValue ?? ''), kind))
       .sort((a, b) => a.importDate.localeCompare(b.importDate));
 
-    const startedAt = changes[0]?.importDate ?? o.importDate;
-    const startApproximate = changes.length === 0;
+    const override = o.motionStartOverrides?.[kind];
+    const startedAt = override ?? changes[0]?.importDate ?? o.importDate;
+    const startSource: MotionRecord['startSource'] = override ? 'manual' : changes.length > 0 ? 'observed' : 'first-import';
+    const startApproximate = startSource === 'first-import';
     const outcome = outcomeOf(o);
     const endIso = outcome === 'active'
       ? now.toISOString()
@@ -117,6 +121,7 @@ export function detectMotions(
       classification: o.classification,
       kind,
       startedAt,
+      startSource,
       startApproximate,
       durationDays: daysBetween(startedAt, endIso),
       outcome,

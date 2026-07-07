@@ -11,6 +11,8 @@ export interface Opportunity {
   id: string;
   /** User acknowledged that this Closed Won (in Salesforce) deal should stay omitted. */
   omittedWonAck?: boolean;
+  /** Manual POV/RFP start-date overrides (ISO dates), set from the tracker when the name convention misled detection. */
+  motionStartOverrides?: Partial<Record<'POV' | 'RFP', string>>;
   /** Salesforce Opportunity ID (e.g. '006Vy000017OsIs') — stable join key across imports/DR. */
   salesforceId?: string;
   name: string;

@@ -542,6 +542,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             // Preserved app-generated fields not present in Salesforce export
             importDate: existing.importDate,
             notes: existing.notes,
+            omittedWonAck: existing.omittedWonAck,
+            motionStartOverrides: existing.motionStartOverrides,
             classification: resolvedClassification,
             previousClassification: existing.classification !== resolvedClassification ? existing.classification : existing.previousClassification,
             movedAt: existing.classification !== resolvedClassification ? new Date().toISOString() : existing.movedAt,
