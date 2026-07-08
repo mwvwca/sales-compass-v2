@@ -9,6 +9,7 @@ import OpportunityGraveyard from '@/components/OpportunityGraveyard';
 import PipelineLookback from '@/components/PipelineLookback';
 import DrPipeline from '@/components/DrPipeline';
 import DrCleanupPlanSection from '@/components/DrCleanupPlan';
+import InspectionPrep from '@/components/InspectionPrep';
 import { useForecast } from '@/context/ForecastContext';
 import SlipReport from '@/components/SlipReport';
 import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
@@ -20,9 +21,9 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search, Compass, MoreHorizontal, MoreVertical, Download, LogOut, Menu } from 'lucide-react';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search, Compass, MoreHorizontal, MoreVertical, Download, LogOut, Menu, ClipboardCheck } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'deal' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard';
+type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'deal' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard' | 'inspection';
 
 const TAB_META: Record<Tab, { label: string; icon: React.ReactNode }> = {
   forecast: { label: 'Forecast', icon: <BarChart3 size={14} /> },
@@ -36,6 +37,7 @@ const TAB_META: Record<Tab, { label: string; icon: React.ReactNode }> = {
   lookback: { label: 'Lookback', icon: <History size={14} /> },
   slips: { label: 'Slips', icon: <TrendingDown size={14} /> },
   graveyard: { label: 'Graveyard', icon: <Skull size={14} /> },
+  inspection: { label: 'SQL Inspection', icon: <ClipboardCheck size={14} /> },
 };
 
 // Visible nav, in three groups separated by dividers; the rest live under "More".
@@ -44,7 +46,7 @@ const VISIBLE_GROUPS: Tab[][] = [
   ['deal-risk', 'dr-pipeline', 'dr-cleanup'],
   ['deal', 'import'],
 ];
-const OVERFLOW_TABS: Tab[] = ['lookback', 'slips', 'graveyard'];
+const OVERFLOW_TABS: Tab[] = ['inspection', 'lookback', 'slips', 'graveyard'];
 
 const tabClass = (active: boolean) =>
   `flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
@@ -302,6 +304,15 @@ const Index = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Search for a deal to see its overview, risk, next step, and call history in one place.</p>
             </div>
             <DealView selectedOppId={selectedOppId} onSelect={setSelectedOppId} />
+          </div>
+        )}
+        {tab === 'inspection' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">SQL Inspection</h2>
+              <p className="text-xs text-muted-foreground">Manager sign-off prep for Qualified 5% to Discovery 25% advancement</p>
+            </div>
+            <InspectionPrep />
           </div>
         )}
         {tab === 'slips' && (
