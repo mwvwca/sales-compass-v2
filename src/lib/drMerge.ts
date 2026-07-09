@@ -45,6 +45,18 @@ function terminalStatusFromStage(stage: string): DrStatus | null {
   return null;
 }
 
+/**
+ * Terminal (sticky) DR statuses. Once a DR reaches one of these it represents a
+ * settled outcome and must NEVER be downgraded by a later import that simply
+ * lacks fresh evidence — e.g. the DR row drops out of the export, or its matched
+ * Opportunity ages out of the pipeline report. A later import may only move a
+ * terminal DR to a DIFFERENT terminal state on explicit new evidence (handled by
+ * the reject/pipeline/DR-stage checks that run before the stickiness guard).
+ */
+function isTerminalStatus(status: DrStatus | undefined): boolean {
+  return status === 'closed_won' || status === 'closed_lost' || status === 'rejected';
+}
+
 /** Stale = not rejected, not currently SQL, no activity for STALE_DAYS+. */
 function isStaleFor(d: DealRegistration, today: Date): boolean {
   if (isRejectedStage(d.stage)) return false;
@@ -218,6 +230,16 @@ export function mergeDrBatch(
   // Step 2: existing records NOT in incoming → withdrawn or converted (pipeline match)
   for (const prev of existing) {
     if (incomingMap.has(prev.opportunityId)) continue;
+
+    // Stickiness: a settled (won/lost/rejected) DR that simply dropped out of this
+    // export keeps its terminal status and analytics. Without this guard a won DR
+    // whose Opportunity later ages out of the pipeline import was silently flipped
+    // to 'withdrawn', erasing it from cohort win counts (e.g. Mar 2026 → 0 won).
+    if (isTerminalStatus(prev.status)) {
+      merged.push(prev);
+      continue;
+    }
+
     const opp = oppMap.get(normSfId(prev.opportunityId));
     const pipelineClass = classifyByPipeline(opp);
 
@@ -301,6 +323,15 @@ export function mergeDrBatch(
         convertedAt: r.convertedAt || importedAt,
         ...cycle,
       };
+      continue;
+    }
+
+    // 2c) Stickiness for present records: the checks above (reject, pipeline, DR
+    // stage) capture every source of FRESH terminal evidence. If none fired and
+    // the DR was already terminal, keep that settled outcome rather than letting a
+    // stale/missing stage demote it to an open lifecycle state (sql/padded/stale/active).
+    if (isTerminalStatus(r.status)) {
+      merged[i] = r;
       continue;
     }
 

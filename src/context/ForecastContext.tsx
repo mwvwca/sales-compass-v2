@@ -26,6 +26,7 @@ import { mergeDrBatch } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
+import { compactForecastState } from '@/lib/storageCompaction';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
@@ -42,6 +43,9 @@ const STORAGE_KEYS = {
   managerQuotas: 'forecast_manager_quotas',
   weeklySnapshots: 'forecast_weekly_snapshots',
 };
+
+// Set once the one-time storage compaction has run on this device.
+const COMPACTION_FLAG = 'forecast_compaction_v1';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -270,6 +274,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
   const userIdRef = useRef<string | null>(null);
   const settledRef = useRef(false);
+  const compactionRanRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
 
   const [state, setState] = useState<ForecastState>(() => ({
@@ -345,6 +350,49 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(fallback);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // One-time storage compaction. Runs once per device after hydration (so it
+  // compacts the real, possibly cloud-overlaid state) and is guarded by a
+  // persisted flag. Strips redundant batch/import payloads and bounds the
+  // snapshot + changelog histories without touching DR/opportunity records,
+  // DR stage history, or any metric-feeding changelog entry.
+  useEffect(() => {
+    if (!hydrated || compactionRanRef.current) return;
+    compactionRanRef.current = true;
+    try {
+      if (localStorage.getItem(COMPACTION_FLAG)) return;
+    } catch {
+      return; // storage blocked (e.g. iOS private mode) — nothing to compact
+    }
+
+    const { snapshots, changelog, drBatches, imports, report } = compactForecastState(
+      {
+        snapshots: state.snapshots,
+        changelog: state.changelog,
+        drBatches: state.drBatches,
+        imports: state.imports,
+      },
+      {
+        reps: state.reps,
+        opportunities: state.opportunities,
+        monthlyRepCommits: state.monthlyRepCommits,
+        monthlyManagerCommits: state.monthlyManagerCommits,
+        forecastPromotions: state.forecastPromotions,
+        forecastSnapshots: state.forecastSnapshots,
+        dealRegistrations: state.dealRegistrations,
+        managerQuotas: state.managerQuotas,
+        weeklySnapshots: state.weeklySnapshots,
+      },
+    );
+
+    console.log(`[storage] Compacted localStorage from ${report.beforeKB}KB to ${report.afterKB}KB`);
+    try { localStorage.setItem(COMPACTION_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+
+    if (report.changed) {
+      setState(s => ({ ...s, snapshots, changelog, drBatches, imports }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   useEffect(() => {
     const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
