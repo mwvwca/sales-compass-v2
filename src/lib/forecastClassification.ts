@@ -41,6 +41,37 @@ export function getImportedClassification(params: {
   return 'unclassified';
 }
 
+export interface HudPipeTotals {
+  /** Open + commit + upside + closed won in scope (excludes lost/omitted/rejected). */
+  totalPipe: number;
+  /** Closed lost in scope (excludes omitted/rejected). */
+  closedLost: number;
+  /** Everything that was in play regardless of outcome: totalPipe + closedLost. */
+  startingPipe: number;
+}
+
+/**
+ * Partition an already period+rep-scoped opportunity set into the HUD pipe figures.
+ * Mirrors ForecastDashboard's listOpps/lostOpps/hudOpps split exactly:
+ *  - a "closed lost" deal (classification 'lost' or stage 'closed lost') feeds closedLost
+ *  - every other deal, minus omitted/rejected, feeds totalPipe (open + commit + upside + won)
+ *  - omitted/rejected deals feed neither
+ * Because totalPipe already spans open + closed won, startingPipe = totalPipe + closedLost
+ * reconstructs the full open + won + lost universe with no double-count, and the identity
+ * `startingPipe - closedLost === totalPipe` holds by construction for any scope.
+ */
+export function computeHudPipe(scopedOpps: Opportunity[]): HudPipeTotals {
+  let totalPipe = 0;
+  let closedLost = 0;
+  for (const o of scopedOpps) {
+    if (o.classification === 'omitted' || o.classification === 'rejected') continue;
+    const isLost = o.classification === 'lost' || o.stage.toLowerCase().trim() === 'closed lost';
+    if (isLost) closedLost += o.amount;
+    else totalPipe += o.amount;
+  }
+  return { totalPipe, closedLost, startingPipe: totalPipe + closedLost };
+}
+
 export function resolveImportedClassification(
   existingClassification: OpportunityClassification,
   incomingClassification: OpportunityClassification,

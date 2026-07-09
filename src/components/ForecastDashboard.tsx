@@ -3,6 +3,7 @@ import { usePersistedState } from '@/hooks/use-persisted-state';
 import { useForecast } from '@/context/ForecastContext';
 import { buildChangelogIndex, flagDeal } from '@/lib/dealRisk';
 import { normalizeRepName } from '@/lib/repUtils';
+import { computeHudPipe } from '@/lib/forecastClassification';
 import {
   getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter,
   getISOWeekRange, getDateAtUtcStart, addDaysUTC, addMonthsUTC, getYearQuarters,
@@ -143,10 +144,18 @@ export default function ForecastDashboard() {
 
   // HUD totals (exclude omitted and rejected from totals)
   const hudOpps = useMemo(() => listOpps.filter(o => o.classification !== 'omitted' && o.classification !== 'rejected'), [listOpps]);
-  const totalPipe = hudOpps.reduce((s, o) => s + o.amount, 0);
   const totalWon = hudOpps.filter(o => o.classification === 'closed_won').reduce((s, o) => s + o.amount, 0);
   const totalCommit = hudOpps.filter(o => o.classification === 'commit').reduce((s, o) => s + o.amount, 0);
   const totalUpside = hudOpps.filter(o => o.classification === 'upside').reduce((s, o) => s + o.amount, 0);
+
+  // Total Pipe already spans open + closed won (hudOpps excludes only lost/omitted/rejected).
+  // Starting Pipe adds in-scope closed lost to reconstruct everything that was in play for the
+  // period regardless of outcome (open + won + lost) with no double-count. listOpps (non-lost)
+  // and lostOpps (lost) are disjoint and together are the full period+rep-scoped set.
+  const { totalPipe, startingPipe } = useMemo(
+    () => computeHudPipe([...listOpps, ...lostOpps]),
+    [listOpps, lostOpps],
+  );
 
   // Commit integrity: how much of the in-scope commit carries a deterministic risk flag
   // (stalled, under-qualified, repeatedly pushed, weak next step). A "commit" that is
@@ -478,13 +487,14 @@ export default function ForecastDashboard() {
             <p className="text-xl font-mono font-semibold text-positive">{fmt(totalWon)}</p>
             <p className="text-xs font-mono mt-0.5 text-positive">{pct(totalWon, totalGoal)} of goal</p>
           </div>
-          {/* Row 2: Total Pipe, Commit, Upside, Pace Variance */}
+          {/* Row 2: Starting Pipe, Total Pipe, Commit, Upside */}
           {[
-            { label: 'Total Pipe', value: fmt(totalPipe), sub: `${pct(totalPipe, totalGoal)} of goal`, color: 'text-foreground', note: undefined as string | undefined },
-            { label: 'Commit', value: fmt(totalCommit), sub: `${pct(totalCommit, totalGoal)} of goal`, color: 'text-commit', note: commitAtRisk.amt > 0 ? `${fmt(commitAtRisk.amt)} at risk · ${commitAtRisk.n} flagged` : undefined },
-            { label: 'Upside', value: fmt(totalUpside), sub: `${pct(totalUpside, totalGoal)} of goal`, color: 'text-upside', note: undefined },
+            { label: 'Starting Pipe', value: fmt(startingPipe), sub: `${pct(startingPipe, totalGoal)} of goal`, color: 'text-foreground', note: undefined as string | undefined, tip: 'Open + closed won + closed lost in period' as string | undefined },
+            { label: 'Total Pipe', value: fmt(totalPipe), sub: `${pct(totalPipe, totalGoal)} of goal`, color: 'text-foreground', note: undefined, tip: undefined },
+            { label: 'Commit', value: fmt(totalCommit), sub: `${pct(totalCommit, totalGoal)} of goal`, color: 'text-commit', note: commitAtRisk.amt > 0 ? `${fmt(commitAtRisk.amt)} at risk · ${commitAtRisk.n} flagged` : undefined, tip: undefined },
+            { label: 'Upside', value: fmt(totalUpside), sub: `${pct(totalUpside, totalGoal)} of goal`, color: 'text-upside', note: undefined, tip: undefined },
           ].map(c => (
-            <div key={c.label} className="bg-card border border-border rounded-lg p-4">
+            <div key={c.label} title={c.tip} className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{c.label}</p>
               <p className={`text-xl font-mono font-semibold ${c.color}`}>{c.value}</p>
               <p className={`text-xs font-mono mt-0.5 ${c.color}`}>{c.sub}</p>
