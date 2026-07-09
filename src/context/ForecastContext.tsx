@@ -22,7 +22,7 @@ import type {
   WeeklySnapshot,
 } from '@/types/forecast';
 import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, quarterStart, quarterEnd } from '@/types/forecast';
-import { mergeDrBatch } from '@/lib/drMerge';
+import { mergeDrBatch, backfillDrTerminalStatuses } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
@@ -46,6 +46,8 @@ const STORAGE_KEYS = {
 
 // Set once the one-time storage compaction has run on this device.
 const COMPACTION_FLAG = 'forecast_compaction_v1';
+// Set once the terminal-DR-status backfill has run on this device.
+const DR_TERMINAL_BACKFILL_FLAG = 'forecast_dr_terminal_backfill_v1';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -275,6 +277,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const userIdRef = useRef<string | null>(null);
   const settledRef = useRef(false);
   const compactionRanRef = useRef(false);
+  const backfillRanRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
 
   const [state, setState] = useState<ForecastState>(() => ({
@@ -390,6 +393,30 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
     if (report.changed) {
       setState(s => ({ ...s, snapshots, changelog, drBatches, imports }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  // One-time repair of DR records that lost their terminal status to the
+  // pre-stickiness merge bug (a won/lost/rejected DR downgraded to withdrawn/
+  // active/etc. once it left the import). Re-derives terminal status from
+  // surviving evidence (closedWonDate / the DR's own terminal stage). Runs once
+  // per device after hydration; idempotent and guarded by a persisted flag.
+  useEffect(() => {
+    if (!hydrated || backfillRanRef.current) return;
+    backfillRanRef.current = true;
+    try {
+      if (localStorage.getItem(DR_TERMINAL_BACKFILL_FLAG)) return;
+    } catch {
+      return; // storage blocked — skip
+    }
+
+    const { drs, restored } = backfillDrTerminalStatuses(state.dealRegistrations);
+    console.log(`[dr-backfill] Restored ${restored} terminal DR status${restored === 1 ? '' : 'es'} (won/lost/rejected) from stored evidence`);
+    try { localStorage.setItem(DR_TERMINAL_BACKFILL_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+
+    if (restored > 0) {
+      setState(s => ({ ...s, dealRegistrations: drs }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);

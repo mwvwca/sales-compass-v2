@@ -363,3 +363,54 @@ export function mergeDrBatch(
   console.log(`[drMerge] After merge: ${merged.filter(d => d.accountUrl).length} of ${merged.length} records have accountUrl`);
   return { merged, stats: { newCount, updatedCount, rejectedCount, withdrawnCount, convertedCount } };
 }
+
+/**
+ * Repair a single DR whose settled outcome was erased by the pre-stickiness merge
+ * (which downgraded terminal DRs to withdrawn/sql/stale/active/etc. once their row
+ * left the import or their Opportunity aged out of the pipeline). Re-derives a
+ * terminal status from evidence that survived the downgrade, mirroring the merge's
+ * own resolution order — never downgrades an already-terminal record, never
+ * fabricates a terminal state without evidence:
+ *   - closedWonDate present  → closed_won (a win date is only ever stamped on a win)
+ *   - own stage Closed Won/Lost → closed_won / closed_lost
+ *   - own stage Rejected     → rejected
+ * Closed-won repairs also backfill cycle analytics if they were lost.
+ */
+export function reconcileTerminalStatus(dr: DealRegistration): DealRegistration {
+  if (isTerminalStatus(dr.status)) return dr;
+
+  let intended: DrStatus | null = null;
+  if (dr.closedWonDate) intended = 'closed_won';
+  else {
+    const fromStage = terminalStatusFromStage(dr.stage);
+    if (fromStage) intended = fromStage;
+    else if (isRejectedStage(dr.stage)) intended = 'rejected';
+  }
+  if (!intended) return dr;
+
+  if (intended === 'closed_won') {
+    const hasCycle = dr.closedWonDate !== undefined && dr.cycleDays !== undefined;
+    const cycle = hasCycle
+      ? {}
+      : computeCycleFields(dr, { closeDate: dr.closedWonDate || dr.closeDate } as Opportunity);
+    return { ...dr, status: 'closed_won', convertedAt: dr.convertedAt || dr.lastSeenAt, ...cycle };
+  }
+  return { ...dr, status: intended, convertedAt: dr.convertedAt || dr.lastSeenAt };
+}
+
+/**
+ * Batch backfill: re-derive terminal status for every stored DR that was
+ * downgraded before the stickiness fix. Pure; returns the repaired list and the
+ * number of records whose status changed. Idempotent — running it again is a no-op.
+ */
+export function backfillDrTerminalStatuses(
+  drs: DealRegistration[],
+): { drs: DealRegistration[]; restored: number } {
+  let restored = 0;
+  const next = drs.map(d => {
+    const fixed = reconcileTerminalStatus(d);
+    if (fixed.status !== d.status) restored++;
+    return fixed;
+  });
+  return { drs: next, restored };
+}
