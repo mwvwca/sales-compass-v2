@@ -86,6 +86,7 @@ export function inspectOpportunity(
   o: Opportunity,
   hasTranscript: boolean,
   today: Date = new Date(),
+  meta: { leapfrog?: boolean; transitionedAt?: string } = {},
 ): InspectionRow {
   const checks = [
     methodologyCheck(hasTranscript),
@@ -95,7 +96,11 @@ export function inspectOpportunity(
   ];
   const overall = checks.reduce<CheckLevel>(
     (worst, c) => (ORDER[c.level] > ORDER[worst] ? c.level : worst), 'pass');
-  return { opp: o, checks, overall, hasTranscript };
+  return {
+    opp: o, checks, overall, hasTranscript,
+    leapfrog: meta.leapfrog,
+    transitionedAt: meta.transitionedAt,
+  };
 }
 
 /** Deals currently at a Discovery stage and open. */
@@ -132,22 +137,43 @@ export function discoveryTransitions(
   return out.sort((a, b) => b.entry.importDate.localeCompare(a.entry.importDate));
 }
 
-/** Paste-ready Manager Review Note in the mandated format. */
+/**
+ * Paste-ready Manager Review Note in the mandated format.
+ *
+ * The wording branches on C1's actual level so the note never claims a review
+ * that did not happen: only a deal with a transcript on file (C1 pass) may read
+ * "N-gage criteria met; discovery call reviewed …". A C1-manual deal (no
+ * transcript) reads "C2/C3 validated; discovery call review pending …" and must
+ * not contain "criteria met" or "discovery call reviewed". Leapfrog rows
+ * (skipped Qualified 5%) additionally acknowledge the skipped stage.
+ */
 export function inspectionNote(row: InspectionRow, initials: string, today: Date = new Date()): string {
   const d = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
   const ini = (initials || 'XX').toUpperCase();
+  const leapPrefix = row.leapfrog
+    ? 'stage progression skipped Qualified 5%; retroactive inspection performed; '
+    : '';
+
   if (row.overall === 'fail') {
     const fails = row.checks.filter(c => c.level === 'fail').map(c => c.detail).join('; ');
-    return `${d} ${ini}: Inspection incomplete — returned to rep. ${fails}. Re-review scheduled.`;
+    return `${d} ${ini}: ${leapPrefix}Inspection incomplete — returned to rep. ${fails}. Re-review scheduled.`;
   }
+
+  const c1 = row.checks.find(c => c.criterion === 'C1');
   const amt = row.checks.find(c => c.criterion === 'C3' && c.detail.startsWith('Amount'));
   const cd = row.checks.find(c => c.detail.startsWith('Close Date') && c.level !== 'fail');
+
+  // C1 pass = transcript on file; C1 manual = no transcript, so the discovery
+  // call review has not actually been performed yet.
+  const head = c1?.level === 'manual'
+    ? ['C2/C3 validated', 'discovery call review pending, no transcript on file']
+    : ['N-gage criteria met', row.hasTranscript ? 'discovery call reviewed via transcript' : 'discovery call reviewed'];
+
   const parts = [
-    'N-gage criteria met',
-    row.hasTranscript ? 'discovery call reviewed via transcript' : 'discovery call reviewed',
+    ...head,
     amt ? amt.detail.replace('Amount ', 'ACV validated at ') : null,
     cd ? cd.detail.replace('Close Date ', 'close date confirmed ') : null,
     'next step confirmed with rep',
   ].filter(Boolean);
-  return `${d} ${ini}: ${parts.join('; ')}.`;
+  return `${d} ${ini}: ${leapPrefix}${parts.join('; ')}.`;
 }

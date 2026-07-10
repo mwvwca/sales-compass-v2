@@ -22,11 +22,23 @@ const LEVEL_STYLE: Record<CheckLevel, string> = {
   manual: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
 };
 
+const LEVEL_RANK: Record<CheckLevel, number> = { fail: 3, warn: 2, manual: 1, pass: 0 };
+
 function LevelChip({ level, label, title }: { level: CheckLevel; label: string; title?: string }) {
   return (
     <span title={title} className={`px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${LEVEL_STYLE[level]}`}>
       {label}
     </span>
+  );
+}
+
+/** Shown wherever a C1-manual row can be copied, so a pending call review is visible before pasting. */
+function PendingBadge() {
+  return (
+    <span
+      title="No transcript on file — discovery call review not yet performed"
+      className={`px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${LEVEL_STYLE.manual}`}
+    >call review pending</span>
   );
 }
 
@@ -58,6 +70,18 @@ export default function InspectionPrep() {
     const since = new Date(Date.now() - windowDays * 86400000).toISOString();
     return discoveryTransitions(changelog, opportunities, since);
   }, [changelog, opportunities, windowDays]);
+
+  // Run the full C1/C2/C3 inspection on each transition (leapfrogs included) so
+  // the audit rows carry the same per-criterion badges and note generation as
+  // the sign-off list. The leapfrog flag flows into the note wording.
+  const transitionRows = useMemo(() =>
+    transitions.map(t => ({
+      t,
+      row: t.opp
+        ? inspectOpportunity(t.opp, transcriptOpps.has(t.opp.id), new Date(), { leapfrog: t.leapfrog, transitionedAt: t.entry.importDate })
+        : null,
+    })),
+    [transitions, transcriptOpps]);
 
   const visible = onlyProblems ? rows.filter(r => r.overall !== 'pass') : rows;
   const counts = {
@@ -91,7 +115,7 @@ export default function InspectionPrep() {
     const ws1 = XLSX.utils.json_to_sheet(sheet1);
     ws1['!cols'] = [{ wch: 50 }, { wch: 18 }, { wch: 10 }, { wch: 11 }, { wch: 30 }, { wch: 8 }, { wch: 34 }, { wch: 34 }, { wch: 26 }, { wch: 30 }, { wch: 70 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Discovery 25 sign-off');
-    const sheet2 = transitions.map(t => ({
+    const sheet2 = transitionRows.map(({ t, row }) => ({
       Date: t.entry.importDate.slice(0, 10),
       Deal: t.entry.opportunityName,
       Rep: t.entry.repName,
@@ -99,9 +123,14 @@ export default function InspectionPrep() {
       To: String(t.entry.newValue),
       Leapfrog: t.leapfrog ? 'YES' : '',
       Amount: t.opp?.amount ?? '',
+      C1: row?.checks.find(c => c.criterion === 'C1')?.detail ?? '',
+      C2: row?.checks.find(c => c.criterion === 'C2')?.detail ?? '',
+      'C3 Amount': row?.checks.find(c => c.detail.toLowerCase().startsWith('amount'))?.detail ?? '',
+      'C3 Close Date': row ? (row.checks.filter(c => c.criterion === 'C3').map(c => c.detail).find(d => d.toLowerCase().includes('close')) || '') : '',
+      'Manager Review Note': row ? inspectionNote(row, initials) : '',
     }));
-    const ws2 = XLSX.utils.json_to_sheet(sheet2.length ? sheet2 : [{ Date: '', Deal: 'No transitions in window', Rep: '', From: '', To: '', Leapfrog: '', Amount: '' }]);
-    ws2['!cols'] = [{ wch: 11 }, { wch: 50 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 9 }, { wch: 10 }];
+    const ws2 = XLSX.utils.json_to_sheet(sheet2.length ? sheet2 : [{ Date: '', Deal: 'No transitions in window', Rep: '', From: '', To: '', Leapfrog: '', Amount: '', C1: '', C2: '', 'C3 Amount': '', 'C3 Close Date': '', 'Manager Review Note': '' }]);
+    ws2['!cols'] = [{ wch: 11 }, { wch: 50 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 9 }, { wch: 10 }, { wch: 34 }, { wch: 34 }, { wch: 26 }, { wch: 30 }, { wch: 70 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Stage transitions');
     XLSX.writeFile(wb, `sql-inspection-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
@@ -169,9 +198,12 @@ export default function InspectionPrep() {
                   <td className="px-3 py-1.5"><LevelChip level={c2.level} label={c2.level} title={c2.detail} /></td>
                   <td className="px-3 py-1.5"><LevelChip level={c3worst.level} label={c3worst.level} title={c3s.map(c => c.detail).join(' · ')} /></td>
                   <td className="px-3 py-1.5">
-                    <button onClick={() => copyNote(r)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground" title={inspectionNote(r, initials)}>
-                      <Copy size={11} /> copy
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => copyNote(r)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground" title={inspectionNote(r, initials)}>
+                        <Copy size={11} /> copy
+                      </button>
+                      {c1.level === 'manual' && <PendingBadge />}
+                    </div>
                   </td>
                 </tr>
               );
@@ -200,28 +232,39 @@ export default function InspectionPrep() {
           <p className="text-xs text-muted-foreground px-3 py-3">No Qualified-to-Discovery transitions captured in the last {windowDays} days of imports.</p>
         ) : (
           <div className="divide-y divide-border">
-            {transitions.map(t => (
-              <div key={t.entry.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-                <div className="min-w-0">
-                  <button
-                    onClick={() => t.opp && openOpportunity(t.opp.id)}
-                    className={`truncate block max-w-[420px] text-left ${t.opp ? 'hover:underline' : ''}`}
-                  >
-                    {t.entry.opportunityName}
-                  </button>
-                  <p className="text-muted-foreground">{t.entry.repName} · {t.entry.importDate.slice(0, 10)} · {String(t.entry.oldValue)} to {String(t.entry.newValue)}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {t.leapfrog && <LevelChip level="fail" label="LEAPFROG" title="Bypassed the Qualified 5% stage" />}
-                  {t.opp && (
+            {transitionRows.map(({ t, row }) => {
+              const c1 = row?.checks.find(c => c.criterion === 'C1');
+              const c2 = row?.checks.find(c => c.criterion === 'C2');
+              const c3s = row?.checks.filter(c => c.criterion === 'C3') ?? [];
+              const c3worst = c3s.length ? c3s.reduce((w, c) => (LEVEL_RANK[c.level] > LEVEL_RANK[w.level] ? c : w)) : null;
+              return (
+                <div key={t.entry.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                  <div className="min-w-0">
                     <button
-                      onClick={() => copyNote(inspectOpportunity(t.opp!, transcriptOpps.has(t.opp!.id)))}
-                      className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                    ><Copy size={11} /> note</button>
-                  )}
+                      onClick={() => t.opp && openOpportunity(t.opp.id)}
+                      className={`truncate block max-w-[420px] text-left ${t.opp ? 'hover:underline' : ''}`}
+                    >
+                      {t.entry.opportunityName}
+                    </button>
+                    <p className="text-muted-foreground">{t.entry.repName} · {t.entry.importDate.slice(0, 10)} · {String(t.entry.oldValue)} to {String(t.entry.newValue)}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                    {t.leapfrog && <LevelChip level="fail" label="LEAPFROG" title="Bypassed the Qualified 5% stage — retroactive inspection" />}
+                    {c1 && <LevelChip level={c1.level} label={c1.level === 'pass' ? 'C1 transcript' : 'C1 review call'} title={c1.detail} />}
+                    {c2 && <LevelChip level={c2.level} label={`C2 ${c2.level}`} title={c2.detail} />}
+                    {c3worst && <LevelChip level={c3worst.level} label={`C3 ${c3worst.level}`} title={c3s.map(c => c.detail).join(' · ')} />}
+                    {c1?.level === 'manual' && <PendingBadge />}
+                    {row && (
+                      <button
+                        onClick={() => copyNote(row)}
+                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                        title={inspectionNote(row, initials)}
+                      ><Copy size={11} /> note</button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         <p className="text-[10px] text-muted-foreground px-3 py-2 border-t border-border">

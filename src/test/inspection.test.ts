@@ -92,4 +92,39 @@ describe('note generation', () => {
     expect(note).toContain('Inspection incomplete');
     expect(note).toContain('$0');
   });
+
+  it('with a transcript (C1 pass) produces the reviewed wording', () => {
+    const note = inspectionNote(inspectOpportunity(opp({}), true, TODAY), 'MB', TODAY);
+    expect(note).toContain('N-gage criteria met');
+    expect(note).toContain('discovery call reviewed via transcript');
+  });
+
+  it('without a transcript (C1 manual) produces the pending wording and never claims a review', () => {
+    const note = inspectionNote(inspectOpportunity(opp({}), false, TODAY), 'MB', TODAY);
+    expect(note).toContain('C2/C3 validated');
+    expect(note).toContain('discovery call review pending, no transcript on file');
+    expect(note).toContain('ACV validated at $42,500');
+    // Must NOT claim a review that did not happen.
+    expect(note).not.toContain('discovery call reviewed');
+    expect(note).not.toContain('criteria met');
+  });
+
+  it('a leapfrog note acknowledges the skipped Qualified 5% stage, honoring C1 branching', () => {
+    const reviewed = inspectionNote(inspectOpportunity(opp({}), true, TODAY, { leapfrog: true }), 'MB', TODAY);
+    expect(reviewed).toContain('stage progression skipped Qualified 5%; retroactive inspection performed');
+    expect(reviewed).toContain('N-gage criteria met');
+
+    const pending = inspectionNote(inspectOpportunity(opp({}), false, TODAY, { leapfrog: true }), 'MB', TODAY);
+    expect(pending).toContain('stage progression skipped Qualified 5%; retroactive inspection performed');
+    expect(pending).toContain('discovery call review pending, no transcript on file');
+    expect(pending).not.toContain('criteria met');
+    expect(pending).not.toContain('discovery call reviewed');
+  });
+
+  it('a failing leapfrog deal still produces the returned-to-rep variant, prefixed with the skip note', () => {
+    const note = inspectionNote(inspectOpportunity(opp({ amount: 0 }), false, TODAY, { leapfrog: true }), 'MB', TODAY);
+    expect(note).toContain('stage progression skipped Qualified 5%; retroactive inspection performed');
+    expect(note).toContain('Inspection incomplete');
+    expect(note).not.toContain('criteria met');
+  });
 });
