@@ -4,13 +4,14 @@ import { usePersistedState } from '@/hooks/use-persisted-state';
 import { openOpportunity } from '@/lib/openOpportunity';
 import {
   currentDiscoveryDeals, discoveryTransitions, inspectOpportunity, inspectionNote,
-  managerNoteStatus,
-  type CheckLevel, type InspectionRow, type NoteStatus,
+  managerNoteStatus, transitionPriorityRank,
+  type CheckLevel, type InspectionRow, type NoteStatus, type StageTransition,
 } from '@/lib/inspection';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Copy, Download, ClipboardCheck, ExternalLink } from 'lucide-react';
+import { SortHeader, type SortDir } from '@/components/sortableTable';
+import { Copy, Download, ClipboardCheck } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { useEffect } from 'react';
 
@@ -30,6 +31,38 @@ const NOTE_STATUS_META: Record<NoteStatus, { level: CheckLevel; label: string; t
   applied: { level: 'pass', label: 'Applied', title: 'Manager note on file in the mandated format' },
   missing: { level: 'fail', label: 'Missing', title: 'No manager note, or note not in the mandated M/D/YYYY format' },
   stale: { level: 'warn', label: 'Re-inspect', title: 'Note is 14+ days old with no changes since — re-inspection due' },
+};
+
+// Urgency tiers, indexed by transitionPriorityRank (0 = most urgent). Rank 4 is "completed".
+const URGENCY_TIER: { short: string; level: CheckLevel; label: string }[] = [
+  { short: 'P1', level: 'fail', label: 'Missing note · leapfrog' },
+  { short: 'P2', level: 'fail', label: 'Missing note' },
+  { short: 'P3', level: 'warn', label: 'Re-inspect (stale note)' },
+  { short: 'P4', level: 'warn', label: 'Applied note · a criterion still fails' },
+  { short: 'P5', level: 'pass', label: 'Applied note · clean (completed)' },
+];
+
+// A transition enriched with its inspection, note status, and urgency rank.
+interface QueueRow {
+  t: StageTransition;
+  row: InspectionRow | null;
+  note: { status: NoteStatus; noteDate: Date | null };
+  priorityRank: number;
+}
+
+type QueueSortKey = 'urgency' | 'account' | 'ae' | 'amount' | 'closeDate' | 'transitionDate' | 'noteStatus';
+
+const NOTE_STATUS_RANK: Record<NoteStatus, number> = { missing: 0, stale: 1, applied: 2 };
+
+// All comparators ascending; the hook/dir flips for descending.
+const QUEUE_COMPARATORS: Record<QueueSortKey, (a: QueueRow, b: QueueRow) => number> = {
+  urgency: (a, b) => a.priorityRank - b.priorityRank || a.t.entry.importDate.localeCompare(b.t.entry.importDate),
+  account: (a, b) => (a.t.opp?.accountName ?? '').localeCompare(b.t.opp?.accountName ?? ''),
+  ae: (a, b) => a.t.entry.repName.localeCompare(b.t.entry.repName),
+  amount: (a, b) => (a.t.opp?.amount ?? 0) - (b.t.opp?.amount ?? 0),
+  closeDate: (a, b) => (a.t.opp?.closeDate ?? '').localeCompare(b.t.opp?.closeDate ?? ''),
+  transitionDate: (a, b) => a.t.entry.importDate.localeCompare(b.t.entry.importDate),
+  noteStatus: (a, b) => NOTE_STATUS_RANK[a.note.status] - NOTE_STATUS_RANK[b.note.status],
 };
 
 /**
@@ -75,7 +108,19 @@ export default function InspectionPrep() {
   const [windowDays, setWindowDays] = usePersistedState('insp.window', 14);
   const [onlyProblems, setOnlyProblems] = usePersistedState('insp.onlyProblems', false);
   const [noteFilter, setNoteFilter] = usePersistedState<'all' | 'missing' | 'reinspect'>('insp.noteFilter', 'all');
+  const [showCompleted, setShowCompleted] = usePersistedState('insp.showCompleted', false);
   const [transcriptOpps, setTranscriptOpps] = useState<Set<string>>(new Set());
+
+  // Work-queue sort. Default is the urgency ranking (ascending: most urgent first).
+  const [sortKey, setSortKey] = useState<QueueSortKey>('urgency');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const isDefaultSort = sortKey === 'urgency' && sortDir === 'asc';
+  const toggleSort = (key: QueueSortKey) => {
+    if (key === sortKey) { setSortDir(d => (d === 'asc' ? 'desc' : 'asc')); return; }
+    setSortKey(key);
+    setSortDir(key === 'urgency' ? 'asc' : 'desc'); // urgency reads best ascending; metrics start descending
+  };
+  const resetSort = () => { setSortKey('urgency'); setSortDir('asc'); };
 
   useEffect(() => {
     let cancelled = false;
@@ -100,15 +145,30 @@ export default function InspectionPrep() {
 
   // Run the full C1/C2/C3 inspection on each transition (leapfrogs included) so
   // the audit rows carry the same per-criterion badges and note generation as
-  // the sign-off list. The leapfrog flag flows into the note wording.
-  const transitionRows = useMemo(() =>
-    transitions.map(t => ({
-      t,
-      row: t.opp
-        ? inspectOpportunity(t.opp, transcriptOpps.has(t.opp.id), new Date(), { leapfrog: t.leapfrog, transitionedAt: t.entry.importDate })
-        : null,
-    })),
-    [transitions, transcriptOpps]);
+  // the sign-off list, plus its manager-note status and urgency rank.
+  const transitionRows: QueueRow[] = useMemo(() => {
+    const today = new Date();
+    return transitions.map(t => {
+      const row = t.opp
+        ? inspectOpportunity(t.opp, transcriptOpps.has(t.opp.id), today, { leapfrog: t.leapfrog, transitionedAt: t.entry.importDate })
+        : null;
+      const note = t.opp
+        ? managerNoteStatus(t.opp, changelog, today)
+        : { status: 'missing' as NoteStatus, noteDate: null };
+      return { t, row, note, priorityRank: transitionPriorityRank(note.status, !!t.leapfrog, row?.overall) };
+    });
+  }, [transitions, transcriptOpps, changelog]);
+
+  // Sort by the active column (default urgency asc); ties within a column keep
+  // the underlying urgency order because Array.sort is stable.
+  const sortedTransitions = useMemo(() => {
+    const cmp = QUEUE_COMPARATORS[sortKey];
+    return [...transitionRows].sort((a, b) => (sortDir === 'desc' ? -cmp(a, b) : cmp(a, b)));
+  }, [transitionRows, sortKey, sortDir]);
+
+  // Default view hides completed rows (applied note, clean checks — rank 4).
+  const visibleTransitions = showCompleted ? sortedTransitions : sortedTransitions.filter(q => q.priorityRank !== 4);
+  const completedCount = transitionRows.filter(q => q.priorityRank === 4).length;
 
   // Pair each inspection row with its manager-note application status.
   const worklist = useMemo(() => {
@@ -162,25 +222,28 @@ export default function InspectionPrep() {
     const ws1 = XLSX.utils.json_to_sheet(sheet1);
     ws1['!cols'] = [{ wch: 50 }, { wch: 60 }, { wch: 18 }, { wch: 10 }, { wch: 11 }, { wch: 30 }, { wch: 8 }, { wch: 12 }, { wch: 34 }, { wch: 34 }, { wch: 26 }, { wch: 30 }, { wch: 70 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Discovery 25 sign-off');
-    const today = new Date();
-    const sheet2 = transitionRows.map(({ t, row }) => ({
+    // Export in the currently active sort order.
+    const sheet2 = sortedTransitions.map(({ t, row, note, priorityRank }) => ({
+      Urgency: URGENCY_TIER[priorityRank].short,
       Date: t.entry.importDate.slice(0, 10),
       Deal: t.entry.opportunityName,
+      Account: t.opp?.accountName ?? '',
       'Opportunity URL': t.opp?.opportunityUrl || '',
       Rep: t.entry.repName,
       From: String(t.entry.oldValue),
       To: String(t.entry.newValue),
       Leapfrog: t.leapfrog ? 'YES' : '',
       Amount: t.opp?.amount ?? '',
-      'Note Status': t.opp ? NOTE_STATUS_META[managerNoteStatus(t.opp, changelog, today).status].label : '',
+      'Close Date': (t.opp?.closeDate ?? '').slice(0, 10),
+      'Note Status': NOTE_STATUS_META[note.status].label,
       C1: row?.checks.find(c => c.criterion === 'C1')?.detail ?? '',
       C2: row?.checks.find(c => c.criterion === 'C2')?.detail ?? '',
       'C3 Amount': row?.checks.find(c => c.detail.toLowerCase().startsWith('amount'))?.detail ?? '',
       'C3 Close Date': row ? (row.checks.filter(c => c.criterion === 'C3').map(c => c.detail).find(d => d.toLowerCase().includes('close')) || '') : '',
       'Manager Review Note': row ? inspectionNote(row, initials) : '',
     }));
-    const ws2 = XLSX.utils.json_to_sheet(sheet2.length ? sheet2 : [{ Date: '', Deal: 'No transitions in window', 'Opportunity URL': '', Rep: '', From: '', To: '', Leapfrog: '', Amount: '', 'Note Status': '', C1: '', C2: '', 'C3 Amount': '', 'C3 Close Date': '', 'Manager Review Note': '' }]);
-    ws2['!cols'] = [{ wch: 11 }, { wch: 50 }, { wch: 60 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 34 }, { wch: 34 }, { wch: 26 }, { wch: 30 }, { wch: 70 }];
+    const ws2 = XLSX.utils.json_to_sheet(sheet2.length ? sheet2 : [{ Urgency: '', Date: '', Deal: 'No transitions in window', Account: '', 'Opportunity URL': '', Rep: '', From: '', To: '', Leapfrog: '', Amount: '', 'Close Date': '', 'Note Status': '', C1: '', C2: '', 'C3 Amount': '', 'C3 Close Date': '', 'Manager Review Note': '' }]);
+    ws2['!cols'] = [{ wch: 8 }, { wch: 11 }, { wch: 50 }, { wch: 24 }, { wch: 60 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 9 }, { wch: 10 }, { wch: 11 }, { wch: 12 }, { wch: 34 }, { wch: 34 }, { wch: 26 }, { wch: 30 }, { wch: 70 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Stage transitions');
     XLSX.writeFile(wb, `sql-inspection-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
@@ -272,58 +335,102 @@ export default function InspectionPrep() {
       </div>
 
       <div className="border border-border rounded-lg">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+        <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 border-b border-border">
           <span className="flex items-center gap-2 text-sm font-medium">
             <ClipboardCheck size={14} className="text-muted-foreground" />
             Stage transitions requiring notes
             <span className="text-xs text-muted-foreground font-normal">Qualified 5% to Discovery 25%, from import history</span>
           </span>
-          <div className="flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
-            {[7, 14, 30].map(dys => (
-              <button key={dys} onClick={() => setWindowDays(dys)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium ${windowDays === dys ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-                {dys}d
+          <div className="flex items-center gap-2">
+            {!isDefaultSort && (
+              <button onClick={resetSort} title="Sort by urgency (default order)"
+                className="px-2 py-0.5 rounded text-[11px] font-medium border border-border text-muted-foreground hover:text-foreground">
+                Reset to urgency
               </button>
-            ))}
+            )}
+            <button onClick={() => setShowCompleted(v => !v)}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium border ${showCompleted ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground'}`}>
+              Show completed{completedCount ? ` (${completedCount})` : ''}
+            </button>
+            <div className="flex items-center gap-0.5 bg-secondary rounded-md p-0.5">
+              {[7, 14, 30].map(dys => (
+                <button key={dys} onClick={() => setWindowDays(dys)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium ${windowDays === dys ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {dys}d
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {transitions.length === 0 ? (
           <p className="text-xs text-muted-foreground px-3 py-3">No Qualified-to-Discovery transitions captured in the last {windowDays} days of imports.</p>
         ) : (
-          <div className="divide-y divide-border">
-            {transitionRows.map(({ t, row }) => {
-              const c1 = row?.checks.find(c => c.criterion === 'C1');
-              const c2 = row?.checks.find(c => c.criterion === 'C2');
-              const c3s = row?.checks.filter(c => c.criterion === 'C3') ?? [];
-              const c3worst = c3s.length ? c3s.reduce((w, c) => (LEVEL_RANK[c.level] > LEVEL_RANK[w.level] ? c : w)) : null;
-              return (
-                <div key={t.entry.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-                  <div className="min-w-0">
-                    <OppNameLink
-                      name={t.entry.opportunityName}
-                      url={t.opp?.opportunityUrl}
-                      oppId={t.opp?.id}
-                      className="truncate block max-w-[420px] text-left hover:underline"
-                    />
-                    <p className="text-muted-foreground">{t.entry.repName} · {t.entry.importDate.slice(0, 10)} · {String(t.entry.oldValue)} to {String(t.entry.newValue)}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                    {t.leapfrog && <LevelChip level="fail" label="LEAPFROG" title="Bypassed the Qualified 5% stage — retroactive inspection" />}
-                    {c1 && <LevelChip level={c1.level} label={c1.level === 'pass' ? 'C1 transcript' : 'C1 review call'} title={c1.detail} />}
-                    {c2 && <LevelChip level={c2.level} label={`C2 ${c2.level}`} title={c2.detail} />}
-                    {c3worst && <LevelChip level={c3worst.level} label={`C3 ${c3worst.level}`} title={c3s.map(c => c.detail).join(' · ')} />}
-                    {c1?.level === 'manual' && <PendingBadge />}
-                    {row && (
-                      <button
-                        onClick={() => copyNote(row)}
-                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                        title={inspectionNote(row, initials)}
-                      ><Copy size={11} /> note</button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
+                  <SortHeader field="urgency" label="Urgency" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" title="Priority rank — the default order" />
+                  <th className="px-3 py-2 font-medium">Deal</th>
+                  <SortHeader field="account" label="Account" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
+                  <SortHeader field="ae" label="AE" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
+                  <SortHeader field="amount" label="Amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" className="px-3 py-2 font-medium" />
+                  <SortHeader field="closeDate" label="Close" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
+                  <SortHeader field="transitionDate" label="Transition" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
+                  <th className="px-3 py-2 font-medium">Checks</th>
+                  <SortHeader field="noteStatus" label="Note Status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
+                  <th className="px-3 py-2 font-medium">Note</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {visibleTransitions.length === 0 ? (
+                  <tr><td colSpan={10} className="px-3 py-3 text-muted-foreground">
+                    Every transition in this window has a completed note. {completedCount > 0 && 'Toggle “Show completed” to view them.'}
+                  </td></tr>
+                ) : visibleTransitions.map(({ t, row, note, priorityRank }) => {
+                  const c1 = row?.checks.find(c => c.criterion === 'C1');
+                  const c2 = row?.checks.find(c => c.criterion === 'C2');
+                  const c3s = row?.checks.filter(c => c.criterion === 'C3') ?? [];
+                  const c3worst = c3s.length ? c3s.reduce((w, c) => (LEVEL_RANK[c.level] > LEVEL_RANK[w.level] ? c : w)) : null;
+                  const tier = URGENCY_TIER[priorityRank];
+                  const noteMeta = NOTE_STATUS_META[note.status];
+                  return (
+                    <tr key={t.entry.id} className="hover:bg-muted/40 align-top">
+                      <td className="px-3 py-1.5"><LevelChip level={tier.level} label={tier.short} title={tier.label} /></td>
+                      <td className="px-3 py-1.5 max-w-[260px]">
+                        <OppNameLink name={t.entry.opportunityName} url={t.opp?.opportunityUrl} oppId={t.opp?.id} className="truncate block w-full text-left hover:underline" />
+                      </td>
+                      <td className="px-3 py-1.5 max-w-[160px] truncate" title={t.opp?.accountName}>{t.opp?.accountName || '—'}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{t.entry.repName}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{t.opp ? fmt(t.opp.amount) : '—'}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{(t.opp?.closeDate || '').slice(0, 10) || '—'}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        <div>{t.entry.importDate.slice(0, 10)}</div>
+                        <div className="text-muted-foreground flex items-center gap-1">
+                          <span>{String(t.entry.oldValue)} → {String(t.entry.newValue)}</span>
+                          {t.leapfrog && <LevelChip level="fail" label="LEAPFROG" title="Bypassed the Qualified 5% stage — retroactive inspection" />}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {c1 && <LevelChip level={c1.level} label={c1.level === 'pass' ? 'C1 transcript' : 'C1 review call'} title={c1.detail} />}
+                          {c2 && <LevelChip level={c2.level} label={`C2 ${c2.level}`} title={c2.detail} />}
+                          {c3worst && <LevelChip level={c3worst.level} label={`C3 ${c3worst.level}`} title={c3s.map(c => c.detail).join(' · ')} />}
+                          {c1?.level === 'manual' && <PendingBadge />}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5"><LevelChip level={noteMeta.level} label={noteMeta.label} title={noteMeta.title} /></td>
+                      <td className="px-3 py-1.5">
+                        {row && (
+                          <button onClick={() => copyNote(row)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground" title={inspectionNote(row, initials)}>
+                            <Copy size={11} /> note
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
         <p className="text-[10px] text-muted-foreground px-3 py-2 border-t border-border">

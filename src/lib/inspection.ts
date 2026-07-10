@@ -152,6 +152,23 @@ export function managerNoteStatus(
   return { status: 'applied', noteDate };
 }
 
+/**
+ * Urgency rank for a transition in the sign-off work queue (0 = most urgent):
+ *   0 Missing note + leapfrog   3 Applied note but a criterion still fails
+ *   1 Missing note              4 Applied note, clean (completed)
+ *   2 Re-inspect (stale note)
+ * Callers break ties by transition date ascending.
+ */
+export function transitionPriorityRank(
+  noteStatus: NoteStatus,
+  leapfrog: boolean,
+  overall: CheckLevel | undefined,
+): number {
+  if (noteStatus === 'missing') return leapfrog ? 0 : 1;
+  if (noteStatus === 'stale') return 2;
+  return overall === 'fail' ? 3 : 4; // applied
+}
+
 /** Deals currently at a Discovery stage and open. */
 export function currentDiscoveryDeals(opps: Opportunity[]): Opportunity[] {
   return opps.filter(o =>

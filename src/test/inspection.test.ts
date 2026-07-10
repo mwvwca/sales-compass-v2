@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   inspectOpportunity, currentDiscoveryDeals, discoveryTransitions, inspectionNote,
-  noteMatchesMandatedFormat, managerNoteStatus,
+  noteMatchesMandatedFormat, managerNoteStatus, transitionPriorityRank,
 } from '@/lib/inspection';
 import type { ChangeLogEntry, Opportunity } from '@/types/forecast';
 
@@ -184,5 +184,32 @@ describe('manager note status (applied / missing / stale)', () => {
       TODAY,
     );
     expect(r.status).toBe('stale');
+  });
+});
+
+describe('transition urgency ranking', () => {
+  it('ranks Missing+leapfrog, Missing, Re-inspect, Applied-with-fails, Applied-clean in order', () => {
+    expect(transitionPriorityRank('missing', true, 'fail')).toBe(0);
+    expect(transitionPriorityRank('missing', false, 'pass')).toBe(1);
+    expect(transitionPriorityRank('stale', false, 'pass')).toBe(2);
+    expect(transitionPriorityRank('applied', false, 'fail')).toBe(3);
+    expect(transitionPriorityRank('applied', false, 'pass')).toBe(4);
+  });
+
+  it('leapfrog only escalates a Missing note, not an applied/stale one', () => {
+    expect(transitionPriorityRank('applied', true, 'pass')).toBe(4); // leapfrog doesn't override an applied clean note
+    expect(transitionPriorityRank('stale', true, 'pass')).toBe(2);
+  });
+
+  it('produces a strictly increasing default order', () => {
+    const ranks = [
+      transitionPriorityRank('missing', true, 'warn'),
+      transitionPriorityRank('missing', false, 'warn'),
+      transitionPriorityRank('stale', false, 'warn'),
+      transitionPriorityRank('applied', false, 'fail'),
+      transitionPriorityRank('applied', false, 'warn'),
+    ];
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    expect(new Set(ranks).size).toBe(5);
   });
 });
