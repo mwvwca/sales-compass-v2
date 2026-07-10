@@ -6,6 +6,7 @@ import { getImportedClassification } from '@/lib/forecastClassification';
 import { parseStage } from '@/lib/transformSalesforce';
 import { normalizeProbability } from '@/lib/probability';
 import { resolveReseller } from '@/lib/resellerUtils';
+import { originFromUrls, resolveOpportunityUrl } from '@/lib/opportunityUrl';
 import ImportReview from './ImportReview';
 import { notifyImportComplete } from './WeeklyBriefing';
 
@@ -32,6 +33,16 @@ interface ColumnMapping {
 
 function normalizeHeader(header: string): string {
   return header.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+
+// Manager inspection-note column candidates, matched case-insensitively.
+const MANAGER_NOTE_HEADERS = [
+  'Manager Note', 'Manager Notes', 'Manager Review Note', 'Manager Review Notes',
+  'Inspection Note', 'Inspection Notes', 'Management Notes',
+];
+function detectManagerNoteHeader(headers: string[]): string | undefined {
+  const wanted = new Set(MANAGER_NOTE_HEADERS.map(normalizeHeader));
+  return headers.find(h => wanted.has(normalizeHeader(h)));
 }
 
 const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
@@ -203,6 +214,13 @@ export default function ImportSheet() {
         const headers = headerCols.map(h => h.name);
         const mapping = autoMap(headers);
 
+        const managerNoteHeader = detectManagerNoteHeader(headers);
+        console.log(managerNoteHeader
+          ? `[parser] manager note column: ${managerNoteHeader}`
+          : '[parser] manager note column not found');
+        // Original column index of the Opportunity Name cell, for reading its hyperlink target.
+        const nameColIdx = headerCols.find(c => c.name === mapping.name)?.idx;
+
         // Build rows as objects using original column indices
         const rows: Record<string, any>[] = [];
         for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
@@ -213,6 +231,7 @@ export default function ImportSheet() {
             obj[name] = val;
             if (String(val).trim()) hasValue = true;
           }
+          obj.__rowIdx = i; // sheet row index, for hyperlink cell lookup
           if (hasValue) rows.push(obj);
         }
 
@@ -242,6 +261,17 @@ export default function ImportSheet() {
         const opps: Opportunity[] = validRows.map((row, i) => {
           const closeDate = parseImportDate(row[mapping.closeDate || '']);
           const sfid = String(row[mapping.id || ''] || '').trim() || undefined;
+
+          const managerNote = managerNoteHeader
+            ? (String(row[managerNoteHeader] ?? '').trim() || undefined)
+            : undefined;
+          // Prefer the hyperlink target on the Opportunity Name cell (same technique as the DR parser's accountUrl).
+          let opportunityUrl: string | undefined;
+          if (nameColIdx !== undefined && typeof row.__rowIdx === 'number') {
+            const addr = XLSX.utils.encode_cell({ r: row.__rowIdx, c: nameColIdx });
+            const target = sheet[addr]?.l?.Target;
+            if (target) opportunityUrl = String(target);
+          }
 
           const resellerName = String(row[mapping.resellerName || ''] || '').trim() || undefined;
           const distributorReseller = String(row[mapping.distributorReseller || ''] || '').trim() || undefined;
@@ -301,8 +331,18 @@ export default function ImportSheet() {
             nextStep: String(row[mapping.nextStep || ''] || '').trim() || undefined,
             description: String(row[mapping.description || ''] || '').trim() || undefined,
             forecastCategory: forecastCategoryRaw || undefined,
+            managerNote,
+            opportunityUrl,
           };
         });
+
+        // Backfill opportunityUrl for rows without a hyperlink, using a URL origin
+        // derived from any hyperlink present in this import + each row's salesforceId.
+        const origin = originFromUrls(opps.map(o => o.opportunityUrl));
+        for (const o of opps) {
+          o.opportunityUrl = resolveOpportunityUrl(o.opportunityUrl, o.salesforceId, origin);
+        }
+        console.log(`[parser] opportunityUrl populated for ${opps.filter(o => o.opportunityUrl).length} of ${opps.length} opportunities`);
 
         setReview({ opps, fileName: file.name, headers, mapping: mapping as Record<string, string> });
       } catch (err) {

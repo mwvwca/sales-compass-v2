@@ -103,6 +103,55 @@ export function inspectOpportunity(
   };
 }
 
+/**
+ * Manager-note application status for an inspection row.
+ *  applied  — managerNote carries a note in the mandated format (a leading
+ *             M/D/YYYY date followed by initials).
+ *  missing  — no note, or the note text does not match the mandated format.
+ *  stale    — an applied note whose date is 14+ days old AND the import
+ *             changelog shows no change to this opportunity since that date;
+ *             the deal needs re-inspection.
+ */
+export type NoteStatus = 'applied' | 'missing' | 'stale';
+
+// A Manager Review Note opens with "M/D/YYYY XX:" — date then 1-4 initials.
+const MANDATED_NOTE_RE = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s+[A-Za-z]{1,4}\b/;
+
+/** True when the note opens in the mandated "M/D/YYYY XX: …" format. */
+export function noteMatchesMandatedFormat(note: string | null | undefined): boolean {
+  return MANDATED_NOTE_RE.test(note || '');
+}
+
+/** Parse the leading M/D/YYYY date from a mandated-format note, else null. */
+export function parseManagerNoteDate(note: string | null | undefined): Date | null {
+  const m = MANDATED_NOTE_RE.exec(note || '');
+  if (!m) return null;
+  const [, mm, dd, yyyy] = m;
+  const d = new Date(Date.UTC(+yyyy, +mm - 1, +dd));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export const STALE_NOTE_DAYS = 14;
+
+/** Classify an opportunity's manager note as applied / missing / stale. */
+export function managerNoteStatus(
+  opp: Opportunity,
+  changelog: ChangeLogEntry[],
+  today: Date = new Date(),
+): { status: NoteStatus; noteDate: Date | null } {
+  const noteDate = parseManagerNoteDate(opp.managerNote);
+  if (!noteDate) return { status: 'missing', noteDate: null };
+
+  const ageDays = Math.floor((today.getTime() - noteDate.getTime()) / 86_400_000);
+  if (ageDays >= STALE_NOTE_DAYS) {
+    const noteIso = noteDate.toISOString().slice(0, 10);
+    const changedSince = changelog.some(
+      e => matchesHistoryKey(e.opportunityId, opp) && e.importDate >= noteIso);
+    if (!changedSince) return { status: 'stale', noteDate };
+  }
+  return { status: 'applied', noteDate };
+}
+
 /** Deals currently at a Discovery stage and open. */
 export function currentDiscoveryDeals(opps: Opportunity[]): Opportunity[] {
   return opps.filter(o =>

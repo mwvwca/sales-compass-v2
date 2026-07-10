@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   inspectOpportunity, currentDiscoveryDeals, discoveryTransitions, inspectionNote,
+  noteMatchesMandatedFormat, managerNoteStatus,
 } from '@/lib/inspection';
 import type { ChangeLogEntry, Opportunity } from '@/types/forecast';
 
@@ -126,5 +127,62 @@ describe('note generation', () => {
     expect(note).toContain('stage progression skipped Qualified 5%; retroactive inspection performed');
     expect(note).toContain('Inspection incomplete');
     expect(note).not.toContain('criteria met');
+  });
+});
+
+describe('manager note pattern detection', () => {
+  it('matches the mandated M/D/YYYY + initials format', () => {
+    expect(noteMatchesMandatedFormat('7/5/2026 MB: N-gage criteria met; discovery call reviewed.')).toBe(true);
+    expect(noteMatchesMandatedFormat('12/31/2025 XX: C2/C3 validated; review pending.')).toBe(true);
+  });
+
+  it('rejects arbitrary text and empty notes', () => {
+    expect(noteMatchesMandatedFormat('Spoke with the customer, looks good')).toBe(false);
+    expect(noteMatchesMandatedFormat('reviewed 7/5/2026 by MB')).toBe(false); // date not leading
+    expect(noteMatchesMandatedFormat('')).toBe(false);
+    expect(noteMatchesMandatedFormat(undefined)).toBe(false);
+  });
+});
+
+describe('manager note status (applied / missing / stale)', () => {
+  const change = (over: Partial<ChangeLogEntry>): ChangeLogEntry => ({
+    id: crypto.randomUUID(), importDate: '2026-07-01T00:00:00.000Z', fileName: 'x.xlsx',
+    opportunityId: '006Vy0000AAAABBBCC', opportunityName: 'Deal', repName: 'Rep',
+    field: 'stage', oldValue: 'a', newValue: 'b', ...over,
+  });
+
+  it('missing when there is no note or the note is not in the mandated format', () => {
+    expect(managerNoteStatus(opp({ managerNote: undefined }), [], TODAY).status).toBe('missing');
+    expect(managerNoteStatus(opp({ managerNote: 'talked to the buyer' }), [], TODAY).status).toBe('missing');
+  });
+
+  it('applied for a recent mandated-format note', () => {
+    const r = managerNoteStatus(opp({ managerNote: '7/5/2026 MB: N-gage criteria met.' }), [], TODAY);
+    expect(r.status).toBe('applied');
+    expect(r.noteDate?.toISOString().slice(0, 10)).toBe('2026-07-05');
+  });
+
+  it('stale for a 14+ day old note with no changelog changes since that date', () => {
+    // Note dated 6/20/2026 → 18 days before TODAY (7/8/2026), no changes since.
+    const r = managerNoteStatus(opp({ managerNote: '6/20/2026 MB: N-gage criteria met.' }), [], TODAY);
+    expect(r.status).toBe('stale');
+  });
+
+  it('not stale when the old note has a changelog entry since its date', () => {
+    const r = managerNoteStatus(
+      opp({ managerNote: '6/20/2026 MB: N-gage criteria met.' }),
+      [change({ importDate: '2026-07-01T00:00:00.000Z' })], // change after the note
+      TODAY,
+    );
+    expect(r.status).toBe('applied');
+  });
+
+  it('changes strictly before the note date do not count against staleness', () => {
+    const r = managerNoteStatus(
+      opp({ managerNote: '6/20/2026 MB: N-gage criteria met.' }),
+      [change({ importDate: '2026-06-01T00:00:00.000Z' })], // change before the note
+      TODAY,
+    );
+    expect(r.status).toBe('stale');
   });
 });

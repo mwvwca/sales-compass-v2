@@ -40,6 +40,10 @@ export interface Opportunity {
   opportunitySource?: string;
   nextStep?: string;
   description?: string;
+  /** Manager inspection note carried on the Salesforce export (Manager Note / Inspection Note column). */
+  managerNote?: string;
+  /** Direct Salesforce link to the opportunity — from the Opportunity Name cell hyperlink, else derived from salesforceId. */
+  opportunityUrl?: string;
 }
 
 export interface MonthlyRepCommit {
