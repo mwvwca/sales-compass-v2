@@ -1,17 +1,17 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { usePersistedState } from '@/hooks/use-persisted-state';
 import { openOpportunity } from '@/lib/openOpportunity';
 import {
   currentDiscoveryDeals, discoveryTransitions, inspectOpportunity, inspectionNote,
   managerNoteStatus, transitionPriorityRank,
-  type CheckLevel, type InspectionRow, type NoteStatus, type StageTransition,
+  type CheckLevel, type CriterionCheck, type InspectionRow, type NoteStatus, type StageTransition,
 } from '@/lib/inspection';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { SortHeader, type SortDir } from '@/components/sortableTable';
-import { Copy, Download, ClipboardCheck } from 'lucide-react';
+import { Copy, Download, ClipboardCheck, ExternalLink, ChevronRight } from 'lucide-react';
 import * as XLSX from '@e965/xlsx';
 import { useEffect } from 'react';
 
@@ -101,6 +101,64 @@ function PendingBadge() {
   );
 }
 
+// Solid dot fill per check level (green pass, amber warn, red fail, blue manual/review-needed).
+const DOT_STYLE: Record<CheckLevel, string> = {
+  pass: 'bg-emerald-500',
+  warn: 'bg-amber-500',
+  fail: 'bg-red-500',
+  manual: 'bg-blue-500',
+};
+
+/**
+ * Three fixed dots for C1/C2/C3 (left→right). C3 collapses its amount+close checks
+ * to the worst level. A blue C1 dot is the folded-in "call review pending" signal.
+ */
+function CheckDots({ row }: { row: InspectionRow | null }) {
+  const c1 = row?.checks.find(c => c.criterion === 'C1');
+  const c2 = row?.checks.find(c => c.criterion === 'C2');
+  const c3s = row?.checks.filter(c => c.criterion === 'C3') ?? [];
+  const c3worst = c3s.length ? c3s.reduce((w, c) => (LEVEL_RANK[c.level] > LEVEL_RANK[w.level] ? c : w)) : undefined;
+  const dot = (label: string, check: CriterionCheck | undefined, detail?: string) => (
+    <span
+      title={check ? `${label} — ${detail ?? check.detail}` : `${label} — not inspected (opportunity not in current pipeline)`}
+      className={`inline-block w-2 h-2 rounded-full ${check ? DOT_STYLE[check.level] : 'bg-muted-foreground/30'}`}
+    />
+  );
+  return (
+    <span className="inline-flex items-center gap-1" aria-label="C1 C2 C3 checks">
+      {dot('C1', c1)}
+      {dot('C2', c2)}
+      {dot('C3', c3worst, c3s.map(c => c.detail).join(' · '))}
+    </span>
+  );
+}
+
+/** Small red-outlined chip flagging a leapfrog transition. */
+function LeapfrogChip() {
+  return (
+    <span
+      title="Leapfrog — bypassed the Qualified 5% stage; retroactive inspection"
+      className="ml-1 shrink-0 px-1 py-[1px] rounded-[3px] border border-red-500/60 text-red-600 dark:text-red-400 text-[9px] font-semibold leading-none"
+    >LF</span>
+  );
+}
+
+/** "First L." short form for dense AE column; falls back to the raw name. */
+function shortRepName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2 && parts[parts.length - 1][0]) return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  return name;
+}
+
+/** Single-letter stage shorthand: Unqualified→U, Qualified→Q, Discovery→D. */
+function stageAbbrev(s: string): string {
+  const n = s.toLowerCase();
+  if (n.includes('unqualified')) return 'U';
+  if (n.includes('qualified')) return 'Q';
+  if (n.includes('discovery')) return 'D';
+  return (s.trim()[0] || '?').toUpperCase();
+}
+
 export default function InspectionPrep() {
   const { opportunities, changelog } = useForecast();
   const { toast } = useToast();
@@ -114,6 +172,7 @@ export default function InspectionPrep() {
   // Work-queue sort. Default is the urgency ranking (ascending: most urgent first).
   const [sortKey, setSortKey] = useState<QueueSortKey>('urgency');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const isDefaultSort = sortKey === 'urgency' && sortDir === 'asc';
   const toggleSort = (key: QueueSortKey) => {
     if (key === sortKey) { setSortDir(d => (d === 'asc' ? 'desc' : 'asc')); return; }
@@ -366,67 +425,115 @@ export default function InspectionPrep() {
           <p className="text-xs text-muted-foreground px-3 py-3">No Qualified-to-Discovery transitions captured in the last {windowDays} days of imports.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
-                  <SortHeader field="urgency" label="Urgency" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" title="Priority rank — the default order" />
-                  <th className="px-3 py-2 font-medium">Deal</th>
-                  <SortHeader field="account" label="Account" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
-                  <SortHeader field="ae" label="AE" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
-                  <SortHeader field="amount" label="Amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" className="px-3 py-2 font-medium" />
-                  <SortHeader field="closeDate" label="Close" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
-                  <SortHeader field="transitionDate" label="Transition" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
-                  <th className="px-3 py-2 font-medium">Checks</th>
-                  <SortHeader field="noteStatus" label="Note Status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 py-2 font-medium" />
-                  <th className="px-3 py-2 font-medium">Note</th>
+            <table className="w-full text-xs table-fixed">
+              <thead className="bg-secondary/40 text-muted-foreground">
+                <tr className="text-left">
+                  <SortHeader field="urgency" label="Pri" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-2 py-1.5 font-medium whitespace-nowrap w-12" title="Urgency priority rank — the default order" />
+                  <th className="px-2 py-1.5 font-medium">Deal</th>
+                  <SortHeader field="account" label="Account" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-2 py-1.5 font-medium w-32" />
+                  <SortHeader field="ae" label="AE" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-2 py-1.5 font-medium w-24" />
+                  <SortHeader field="amount" label="Amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" className="px-2 py-1.5 font-medium w-28" />
+                  <SortHeader field="closeDate" label="Close" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-2 py-1.5 font-medium whitespace-nowrap w-28" />
+                  <SortHeader field="transitionDate" label="Transition" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-2 py-1.5 font-medium whitespace-nowrap w-44" />
+                  <th className="px-2 py-1.5 font-medium text-center w-16" title="C1 · C2 · C3 inspection">Checks</th>
+                  <SortHeader field="noteStatus" label="Note" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-2 py-1.5 font-medium w-24" title="Manager note status" />
+                  <th className="px-2 py-1.5 font-medium text-right w-16"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {visibleTransitions.length === 0 ? (
-                  <tr><td colSpan={10} className="px-3 py-3 text-muted-foreground">
+                  <tr><td colSpan={10} className="px-2 py-3 text-muted-foreground">
                     Every transition in this window has a completed note. {completedCount > 0 && 'Toggle “Show completed” to view them.'}
                   </td></tr>
                 ) : visibleTransitions.map(({ t, row, note, priorityRank }) => {
-                  const c1 = row?.checks.find(c => c.criterion === 'C1');
-                  const c2 = row?.checks.find(c => c.criterion === 'C2');
-                  const c3s = row?.checks.filter(c => c.criterion === 'C3') ?? [];
-                  const c3worst = c3s.length ? c3s.reduce((w, c) => (LEVEL_RANK[c.level] > LEVEL_RANK[w.level] ? c : w)) : null;
                   const tier = URGENCY_TIER[priorityRank];
                   const noteMeta = NOTE_STATUS_META[note.status];
+                  const expanded = expandedId === t.entry.id;
+                  const c3s = row?.checks.filter(c => c.criterion === 'C3') ?? [];
                   return (
-                    <tr key={t.entry.id} className="hover:bg-muted/40 align-top">
-                      <td className="px-3 py-1.5"><LevelChip level={tier.level} label={tier.short} title={tier.label} /></td>
-                      <td className="px-3 py-1.5 max-w-[260px]">
-                        <OppNameLink name={t.entry.opportunityName} url={t.opp?.opportunityUrl} oppId={t.opp?.id} className="truncate block w-full text-left hover:underline" />
-                      </td>
-                      <td className="px-3 py-1.5 max-w-[160px] truncate" title={t.opp?.accountName}>{t.opp?.accountName || '—'}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{t.entry.repName}</td>
-                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{t.opp ? fmt(t.opp.amount) : '—'}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{(t.opp?.closeDate || '').slice(0, 10) || '—'}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">
-                        <div>{t.entry.importDate.slice(0, 10)}</div>
-                        <div className="text-muted-foreground flex items-center gap-1">
-                          <span>{String(t.entry.oldValue)} → {String(t.entry.newValue)}</span>
-                          {t.leapfrog && <LevelChip level="fail" label="LEAPFROG" title="Bypassed the Qualified 5% stage — retroactive inspection" />}
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {c1 && <LevelChip level={c1.level} label={c1.level === 'pass' ? 'C1 transcript' : 'C1 review call'} title={c1.detail} />}
-                          {c2 && <LevelChip level={c2.level} label={`C2 ${c2.level}`} title={c2.detail} />}
-                          {c3worst && <LevelChip level={c3worst.level} label={`C3 ${c3worst.level}`} title={c3s.map(c => c.detail).join(' · ')} />}
-                          {c1?.level === 'manual' && <PendingBadge />}
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5"><LevelChip level={noteMeta.level} label={noteMeta.label} title={noteMeta.title} /></td>
-                      <td className="px-3 py-1.5">
-                        {row && (
-                          <button onClick={() => copyNote(row)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground" title={inspectionNote(row, initials)}>
-                            <Copy size={11} /> note
-                          </button>
-                        )}
-                      </td>
-                    </tr>
+                    <Fragment key={t.entry.id}>
+                      <tr
+                        onClick={() => setExpandedId(id => (id === t.entry.id ? null : t.entry.id))}
+                        className="hover:bg-muted/40 cursor-pointer"
+                      >
+                        <td className="px-2 py-1.5"><LevelChip level={tier.level} label={tier.short} title={tier.label} /></td>
+                        <td className="px-2 py-1.5">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <ChevronRight size={11} className={`shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                            <span onClick={e => e.stopPropagation()} className="min-w-0 flex-1">
+                              <OppNameLink name={t.entry.opportunityName} url={t.opp?.opportunityUrl} oppId={t.opp?.id} className="truncate block hover:underline" />
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5"><div className="max-w-[16ch] truncate" title={t.opp?.accountName}>{t.opp?.accountName || '—'}</div></td>
+                        <td className="px-2 py-1.5"><div className="max-w-[12ch] truncate" title={t.entry.repName}>{shortRepName(t.entry.repName)}</div></td>
+                        <td className="px-2 py-1.5 text-right whitespace-nowrap tabular-nums">{t.opp ? fmt(t.opp.amount) : '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap tabular-nums">{(t.opp?.closeDate || '').slice(0, 10) || '—'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          <span className="tabular-nums">{t.entry.importDate.slice(0, 10)}</span>
+                          <span className="text-muted-foreground ml-1">{stageAbbrev(String(t.entry.oldValue))}→{stageAbbrev(String(t.entry.newValue))}</span>
+                          {t.leapfrog && <LeapfrogChip />}
+                        </td>
+                        <td className="px-2 py-1.5 text-center"><CheckDots row={row} /></td>
+                        <td className="px-2 py-1.5"><LevelChip level={noteMeta.level} label={noteMeta.label} title={noteMeta.title} /></td>
+                        <td className="px-2 py-1.5">
+                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                            {row && (
+                              <button onClick={e => { e.stopPropagation(); copyNote(row); }} className="text-muted-foreground hover:text-foreground" title={`Copy note: ${inspectionNote(row, initials)}`}>
+                                <Copy size={12} />
+                              </button>
+                            )}
+                            {t.opp?.opportunityUrl ? (
+                              <a href={t.opp.opportunityUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-muted-foreground hover:text-foreground" title="Open in Salesforce">
+                                <ExternalLink size={12} />
+                              </a>
+                            ) : t.opp ? (
+                              <button onClick={e => { e.stopPropagation(); openOpportunity(t.opp!.id); }} className="text-muted-foreground hover:text-foreground" title="Open Deal 360">
+                                <ExternalLink size={12} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className="bg-muted/20">
+                          <td colSpan={10} className="px-3 py-2">
+                            <div className="grid gap-2 sm:grid-cols-2 text-[11px]">
+                              <div>
+                                <p className="text-muted-foreground uppercase tracking-wide text-[10px] mb-0.5">Transition</p>
+                                <p>{String(t.entry.oldValue)} → {String(t.entry.newValue)}{t.leapfrog && <span className="text-red-600 dark:text-red-400"> · leapfrog (bypassed Qualified 5%)</span>}</p>
+                                <p className="text-muted-foreground">{t.entry.repName} · captured {t.entry.importDate.slice(0, 10)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground uppercase tracking-wide text-[10px] mb-0.5">Checks</p>
+                                {row ? (
+                                  <ul className="space-y-0.5">
+                                    {[row.checks.find(c => c.criterion === 'C1'), row.checks.find(c => c.criterion === 'C2'), ...c3s].filter(Boolean).map((c, i) => (
+                                      <li key={i} className="flex items-start gap-1.5">
+                                        <span className={`mt-1 inline-block w-2 h-2 rounded-full shrink-0 ${DOT_STYLE[c!.level]}`} />
+                                        <span><span className="font-medium">{c!.criterion}:</span> {c!.detail}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : <p className="text-muted-foreground">Opportunity not in the current pipeline — no inspection.</p>}
+                              </div>
+                              {t.opp?.managerNote && (
+                                <div>
+                                  <p className="text-muted-foreground uppercase tracking-wide text-[10px] mb-0.5">Manager note (from Salesforce)</p>
+                                  <p className="whitespace-pre-wrap">{t.opp.managerNote}</p>
+                                </div>
+                              )}
+                              {row && (
+                                <div>
+                                  <p className="text-muted-foreground uppercase tracking-wide text-[10px] mb-0.5">Generated note preview</p>
+                                  <p className="whitespace-pre-wrap font-mono text-[10.5px]">{inspectionNote(row, initials)}</p>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
