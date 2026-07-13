@@ -69,18 +69,18 @@ const QUEUE_COMPARATORS: Record<QueueSortKey, (a: QueueRow, b: QueueRow) => numb
  * Opportunity name rendered as a direct Salesforce link when a URL is known;
  * otherwise falls back to the in-app Deal 360 opener, or plain text if neither.
  */
-function OppNameLink({ name, url, oppId, className }: { name: string; url?: string; oppId?: string; className?: string }) {
+function OppNameLink({ name, url, oppId, className, title }: { name: string; url?: string; oppId?: string; className?: string; title?: string }) {
   if (url) {
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" className={className} title="Open in Salesforce">
+      <a href={url} target="_blank" rel="noopener noreferrer" className={className} title={title ?? 'Open in Salesforce'}>
         {name}
       </a>
     );
   }
   if (oppId) {
-    return <button onClick={() => openOpportunity(oppId)} className={className} title="Open Deal 360">{name}</button>;
+    return <button onClick={() => openOpportunity(oppId)} className={className} title={title ?? 'Open Deal 360'}>{name}</button>;
   }
-  return <span className={className}>{name}</span>;
+  return <span className={className} title={title}>{name}</span>;
 }
 
 function LevelChip({ level, label, title }: { level: CheckLevel; label: string; title?: string }) {
@@ -398,7 +398,7 @@ export default function InspectionPrep() {
           <span className="flex items-center gap-2 text-sm font-medium">
             <ClipboardCheck size={14} className="text-muted-foreground" />
             Stage transitions requiring notes
-            <span className="text-xs text-muted-foreground font-normal">Qualified 5% to Discovery 25%, from import history</span>
+            <span className="text-xs text-muted-foreground font-normal">Into Discovery 25% from Qualified 5% or Unqualified, from import history</span>
           </span>
           <div className="flex items-center gap-2">
             {!isDefaultSort && (
@@ -422,7 +422,7 @@ export default function InspectionPrep() {
           </div>
         </div>
         {transitions.length === 0 ? (
-          <p className="text-xs text-muted-foreground px-3 py-3">No Qualified-to-Discovery transitions captured in the last {windowDays} days of imports.</p>
+          <p className="text-xs text-muted-foreground px-3 py-3">No transitions into Discovery 25% (from Qualified 5% or Unqualified) captured in the last {windowDays} days of imports.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs table-fixed">
@@ -458,10 +458,12 @@ export default function InspectionPrep() {
                       >
                         <td className="px-2 py-1.5"><LevelChip level={tier.level} label={tier.short} title={tier.label} /></td>
                         <td className="px-2 py-1.5">
-                          <div className="flex items-center gap-1 min-w-0">
+                          <div className="flex items-center gap-1">
                             <ChevronRight size={11} className={`shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
-                            <span onClick={e => e.stopPropagation()} className="min-w-0 flex-1">
-                              <OppNameLink name={t.entry.opportunityName} url={t.opp?.opportunityUrl} oppId={t.opp?.id} className="truncate block hover:underline" />
+                            {/* truncate lives on the flex item (with min-w-0) so a long name clips
+                                inside the Deal cell instead of overflowing onto the Account column. */}
+                            <span onClick={e => e.stopPropagation()} title={t.entry.opportunityName} className="flex-1 min-w-0 truncate">
+                              <OppNameLink name={t.entry.opportunityName} url={t.opp?.opportunityUrl} oppId={t.opp?.id} title={t.entry.opportunityName} className="hover:underline" />
                             </span>
                           </div>
                         </td>
