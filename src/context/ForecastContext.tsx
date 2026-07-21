@@ -24,7 +24,7 @@ import type {
 import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, quarterStart, quarterEnd } from '@/types/forecast';
 import { mergeDrBatch, backfillDrTerminalStatuses } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
-import { resolveImportedClassification } from '@/lib/forecastClassification';
+import { resolveImportedClassification, backfillReopenedClassifications } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
 import { compactForecastState } from '@/lib/storageCompaction';
 
@@ -48,6 +48,8 @@ const STORAGE_KEYS = {
 const COMPACTION_FLAG = 'forecast_compaction_v1';
 // Set once the terminal-DR-status backfill has run on this device.
 const DR_TERMINAL_BACKFILL_FLAG = 'forecast_dr_terminal_backfill_v1';
+// Set once the reopened-classification heal has run on this device.
+const REOPEN_CLASS_BACKFILL_FLAG = 'forecast_reopen_class_backfill_v1';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -278,6 +280,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const settledRef = useRef(false);
   const compactionRanRef = useRef(false);
   const backfillRanRef = useRef(false);
+  const reopenBackfillRanRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
 
   const [state, setState] = useState<ForecastState>(() => ({
@@ -417,6 +420,31 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
     if (restored > 0) {
       setState(s => ({ ...s, dealRegistrations: drs }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  // One-time heal of opportunities stranded by a reopen that predates the reopen-clear:
+  // stage is open again but classification is still a stale terminal value (omitted/lost/
+  // closed_won). The forward-looking merge guard can't catch these (the closed→open
+  // transition already happened), so reset them to 'unclassified' — they re-enter open
+  // pipeline and the next import reclassifies from fresh forecast evidence. Runs once per
+  // device after hydration; idempotent and guarded by a persisted flag.
+  useEffect(() => {
+    if (!hydrated || reopenBackfillRanRef.current) return;
+    reopenBackfillRanRef.current = true;
+    try {
+      if (localStorage.getItem(REOPEN_CLASS_BACKFILL_FLAG)) return;
+    } catch {
+      return; // storage blocked — skip
+    }
+
+    const { opportunities, healed } = backfillReopenedClassifications(state.opportunities, state.snapshots);
+    console.log(`[reopen-backfill] Healed ${healed} stranded reopened classification${healed === 1 ? '' : 's'} (open stage, stale terminal class → unclassified)`);
+    try { localStorage.setItem(REOPEN_CLASS_BACKFILL_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+
+    if (healed > 0) {
+      setState(s => ({ ...s, opportunities }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
@@ -596,6 +624,15 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
           const resolvedClassification = resolveImportedClassification(existing.classification, o.classification, existing.stage, o.stage);
 
+          // A reopen cleared a stale terminal classification (existing was
+          // closed_won/lost/omitted/rejected, now resolves to an open class). Drop the
+          // stale Closed-Lost metadata too, so a re-opened deal doesn't keep a lostDate/reason.
+          const wasTerminal = existing.classification === 'closed_won' || existing.classification === 'lost'
+            || existing.classification === 'omitted' || existing.classification === 'rejected';
+          const nowOpen = resolvedClassification !== 'closed_won' && resolvedClassification !== 'lost'
+            && resolvedClassification !== 'omitted' && resolvedClassification !== 'rejected';
+          const clearedByReopen = wasTerminal && nowOpen;
+
           // Full field replacement: every field from incoming Salesforce export overwrites
           // the stored record. Only app-generated fields not present in the export are preserved.
           return {
@@ -612,8 +649,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             probability: o.probability,
             name: o.name,
             repName: o.repName,
-            lostDate: o.lostDate ?? existing.lostDate,
-            lostReason: o.lostReason ?? existing.lostReason,
+            lostDate: clearedByReopen ? undefined : (o.lostDate ?? existing.lostDate),
+            lostReason: clearedByReopen ? undefined : (o.lostReason ?? existing.lostReason),
             // Preserved app-generated fields not present in Salesforce export
             importDate: existing.importDate,
             notes: existing.notes,

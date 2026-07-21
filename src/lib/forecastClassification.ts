@@ -87,6 +87,51 @@ export function isOpenStage(stage: string | undefined): boolean {
   return s !== '' && s !== 'closed won' && s !== 'closed lost' && s !== 'rejected';
 }
 
+/**
+ * One-time heal for deals stranded by a reopen that happened BEFORE the reopen-clear
+ * shipped: their stage is already open again, but their classification is still a stale
+ * terminal value (omitted / lost / closed_won) left over from when the stage was closed.
+ * The forward-looking reopen-clear can't catch these — the closed→open transition already
+ * happened, so the stored stage is open and no future import re-detects it.
+ *
+ * Gated on snapshot evidence: only heals a deal whose history shows it was actually Closed
+ * Won/Lost in a prior import (proof of a genuine reopen). This deliberately spares deals
+ * that were omitted while always open — e.g. test/junk deals never meant to count — which
+ * would otherwise be wrongly pulled into open pipeline.
+ *
+ * Resets qualifying deals to 'unclassified' and drops stale Closed-Lost metadata, so they
+ * re-enter open pipeline and the next import reclassifies them from fresh forecast evidence
+ * (e.g. a Best Case + Upside deal → 'upside'). Pure and idempotent — a second pass heals 0.
+ */
+export function backfillReopenedClassifications(
+  opps: Opportunity[],
+  snapshots: { opportunityId: string; stage: string }[],
+): { opportunities: Opportunity[]; healed: number } {
+  // Opportunity ids (by history key = salesforceId) that were Closed Won/Lost in some prior
+  // snapshot — the deal genuinely settled and later reopened.
+  const everClosed = new Set<string>();
+  for (const s of snapshots) {
+    if (isClosedWonLostStage(s.stage)) everClosed.add(s.opportunityId);
+  }
+  const STALE = new Set<OpportunityClassification>(['omitted', 'lost', 'closed_won']);
+  let healed = 0;
+  const next = opps.map(o => {
+    const histKey = o.salesforceId ?? o.id;
+    if (isOpenStage(o.stage) && STALE.has(o.classification) && everClosed.has(histKey)) {
+      healed++;
+      return {
+        ...o,
+        previousClassification: o.classification,
+        classification: 'unclassified' as const,
+        lostDate: undefined,
+        lostReason: undefined,
+      };
+    }
+    return o;
+  });
+  return { opportunities: next, healed };
+}
+
 export function resolveImportedClassification(
   existingClassification: OpportunityClassification,
   incomingClassification: OpportunityClassification,
@@ -94,10 +139,13 @@ export function resolveImportedClassification(
   incomingStage?: string,
 ): OpportunityClassification {
   // Reopen guard: a settled Closed Won/Lost deal that comes back on an OPEN stage has
-  // genuinely reopened. Its persisted 'omitted' is now stale — do NOT carry it across the
-  // reopen. Clear it and let the incoming (open) evidence reclassify the deal downstream.
+  // genuinely reopened. Its persisted terminal classification (omitted / lost / closed_won)
+  // is now stale — do NOT carry it across the reopen. Clear it and let the incoming (open)
+  // evidence reclassify the deal downstream.
   const reopened = isClosedWonLostStage(existingStage) && isOpenStage(incomingStage);
-  if (reopened && existingClassification === 'omitted') return incomingClassification;
+  if (reopened && (existingClassification === 'omitted' || existingClassification === 'lost' || existingClassification === 'closed_won')) {
+    return incomingClassification;
+  }
 
   if (existingClassification === 'omitted') return 'omitted';
   if (incomingClassification === 'omitted') return 'omitted';
