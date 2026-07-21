@@ -72,10 +72,33 @@ export function computeHudPipe(scopedOpps: Opportunity[]): HudPipeTotals {
   return { totalPipe, closedLost, startingPipe: totalPipe + closedLost };
 }
 
+const normStage = (stage: string | undefined): string =>
+  normalizeImportFlag(stage).replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
+
+/** A settled Closed Won / Closed Lost stage. */
+export function isClosedWonLostStage(stage: string | undefined): boolean {
+  const s = normStage(stage);
+  return s === 'closed won' || s === 'closed lost';
+}
+
+/** An OPEN (non-terminal, non-blank) stage — not Closed Won/Lost/Rejected. */
+export function isOpenStage(stage: string | undefined): boolean {
+  const s = normStage(stage);
+  return s !== '' && s !== 'closed won' && s !== 'closed lost' && s !== 'rejected';
+}
+
 export function resolveImportedClassification(
   existingClassification: OpportunityClassification,
   incomingClassification: OpportunityClassification,
+  existingStage?: string,
+  incomingStage?: string,
 ): OpportunityClassification {
+  // Reopen guard: a settled Closed Won/Lost deal that comes back on an OPEN stage has
+  // genuinely reopened. Its persisted 'omitted' is now stale — do NOT carry it across the
+  // reopen. Clear it and let the incoming (open) evidence reclassify the deal downstream.
+  const reopened = isClosedWonLostStage(existingStage) && isOpenStage(incomingStage);
+  if (reopened && existingClassification === 'omitted') return incomingClassification;
+
   if (existingClassification === 'omitted') return 'omitted';
   if (incomingClassification === 'omitted') return 'omitted';
   if (existingClassification === 'closed_won') return 'closed_won';

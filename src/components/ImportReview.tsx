@@ -77,7 +77,7 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
     if ((existing.productName || '') !== (opp.productName || '')) {
       changes.push(`Product: ${existing.productName || '(empty)'} → ${opp.productName || '(empty)'}`);
     }
-    const resolvedClassification = resolveImportedClassification(existing.classification, opp.classification);
+    const resolvedClassification = resolveImportedClassification(existing.classification, opp.classification, existing.stage, opp.stage);
     if (existing.classification !== resolvedClassification) {
       changes.push(`Classification: ${existing.classification} → ${resolvedClassification}`);
     } else if (existing.classification !== opp.classification) {

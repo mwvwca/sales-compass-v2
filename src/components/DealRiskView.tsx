@@ -9,6 +9,7 @@ import { loadCurrentSignalsByOpp } from '@/lib/transcriptsApi';
 import type { TranscriptSignals } from '@/lib/transcripts';
 import { FLAG_META } from '@/components/riskChips';
 import { openOpportunity } from '@/lib/openOpportunity';
+import { isOpenStage } from '@/lib/forecastClassification';
 import PovTracker from '@/components/PovTracker';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
@@ -51,7 +52,10 @@ export default function DealRiskView() {
     const index = buildChangelogIndex(changelog);
     const out: RiskRow[] = [];
     for (const o of opportunities) {
-      if (TERMINAL.has(o.classification)) continue; // open deals only
+      // Open deals only. Stage wins: a deal on an OPEN stage is never terminal, no matter
+      // what stale classification (closed_won/lost/omitted) it still carries from before it
+      // reopened. 'omitted' stays an additive backstop only behind an already-closed stage.
+      if (TERMINAL.has(o.classification) && !isOpenStage(o.stage)) continue;
       const flags = flagDeal(o, index, today, qualityFor(o, cache), signalsByOpp[o.id]);
       if (flags.length === 0) continue;
       const { pushCount, daysSinceMovement } = dealRiskSignals(o, index, today);

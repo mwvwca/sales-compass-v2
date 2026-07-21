@@ -44,10 +44,16 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
   const allOpps = opportunities;
 
   const TERMINAL_STAGES = new Set(['closed won', 'closed lost', 'rejected']);
-  const isResolved = (o: Opportunity): boolean =>
-    TERMINAL_STAGES.has((o.stage ?? '').trim().toLowerCase())
-    || o.classification === 'closed_won'
-    || o.classification === 'lost';
+  // Resolution keys STRICTLY on the current stage: a deal is resolved only when its stage is
+  // a terminal Closed Won/Lost/Rejected value. An OPEN stage always wins — a reopened deal is
+  // never resolved, no matter what stale classification (closed_won/lost/omitted) it still
+  // carries from before it reopened. classification === 'omitted' is kept only as an ADDITIVE
+  // backstop for deals whose stage is already closed; it can never mark an open deal resolved.
+  const isResolved = (o: Opportunity): boolean => {
+    const stageClosed = TERMINAL_STAGES.has((o.stage ?? '').trim().toLowerCase());
+    if (!stageClosed) return false;
+    return stageClosed || o.classification === 'omitted';
+  };
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
