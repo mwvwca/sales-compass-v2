@@ -24,7 +24,7 @@ import type {
 import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, quarterStart, quarterEnd } from '@/types/forecast';
 import { mergeDrBatch, backfillDrTerminalStatuses } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
-import { resolveImportedClassification } from '@/lib/forecastClassification';
+import { resolveImportedClassification, isOpenStage } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
 import { compactForecastState } from '@/lib/storageCompaction';
 
@@ -627,6 +627,18 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
         return { ...o, id: stableId, salesforceId: sfid };
       });
+
+      // TEMP diagnostic: merged records that land on an OPEN stage but still classify as 'omitted'.
+      for (const r of merged) {
+        if (isOpenStage(r.stage) && r.classification === 'omitted') {
+          console.log('[importOpportunities] open-stage omitted:', {
+            opportunityId: r.salesforceId || r.id,
+            dealName: r.name,
+            stage: r.stage,
+            classification: r.classification,
+          });
+        }
+      }
 
       const kept = s.opportunities.filter(o => !processedExistingIds.has(o.id));
       return {
