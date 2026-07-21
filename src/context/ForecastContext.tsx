@@ -24,7 +24,7 @@ import type {
 import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, quarterStart, quarterEnd } from '@/types/forecast';
 import { mergeDrBatch, backfillDrTerminalStatuses } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
-import { resolveImportedClassification, isOpenStage } from '@/lib/forecastClassification';
+import { resolveImportedClassification } from '@/lib/forecastClassification';
 import { normalizeRepName } from '@/lib/repUtils';
 import { compactForecastState } from '@/lib/storageCompaction';
 
@@ -95,7 +95,7 @@ function migrateOppClassification(o: Opportunity): Opportunity {
 /** Purge corrupted Salesforce footer rows, backfill salesforceId, migrate stages. */
 function cleanOpportunities(raw: unknown): Opportunity[] {
   const arr = Array.isArray(raw) ? raw : [];
-  const cleaned = arr
+  return arr
     .filter((o: any) => SF_ID.test(o?.salesforceId || '') || SF_ID.test(o?.id || ''))
     .map((o: any) => ({
       ...o,
@@ -104,17 +104,6 @@ function cleanOpportunities(raw: unknown): Opportunity[] {
       probability: normalizeProbability(o.probability),
     }) as Opportunity)
     .map(migrateOppClassification);
-
-  // DIAGNOSTIC: deals on an OPEN stage still carrying classification 'omitted'. This is
-  // exactly the population that a stale sticky 'omitted' suppresses from the risk engine
-  // (SalesIntelligence.isResolved) despite the deal being live again. Logged to confirm the
-  // affected count before the open-stage-wins guards fully absorb it downstream.
-  const openOmitted = cleaned.filter(o => o.classification === 'omitted' && isOpenStage(o.stage));
-  if (openOmitted.length > 0) {
-    console.warn(`[cleanOpportunities] ${openOmitted.length} deal(s) on an OPEN stage but classification 'omitted' (stale reopen suppression):`,
-      openOmitted.map(o => ({ id: o.salesforceId || o.id, name: o.name, stage: o.stage, rep: o.repName, amount: o.amount })));
-  }
-  return cleaned;
 }
 
 function cleanChangelog(raw: unknown): ChangeLogEntry[] {
