@@ -48,8 +48,9 @@ const STORAGE_KEYS = {
 const COMPACTION_FLAG = 'forecast_compaction_v1';
 // Set once the terminal-DR-status backfill has run on this device.
 const DR_TERMINAL_BACKFILL_FLAG = 'forecast_dr_terminal_backfill_v1';
-// Set once the reopened-classification heal has run on this device.
-const REOPEN_CLASS_BACKFILL_FLAG = 'forecast_reopen_class_backfill_v1';
+// Set once the reopened-classification heal has run on this device. v2 extends the heal to
+// stranded open-stage 'omitted' deals at/above qualification, so it must re-run past v1.
+const REOPEN_CLASS_BACKFILL_FLAG = 'forecast_reopen_class_backfill_v2';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -440,7 +441,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { opportunities, healed } = backfillReopenedClassifications(state.opportunities, state.snapshots);
-    console.log(`[reopen-backfill] Healed ${healed} stranded reopened classification${healed === 1 ? '' : 's'} (open stage, stale terminal class → unclassified)`);
+    console.log(`[reopen-backfill] Healed ${healed} stranded classification${healed === 1 ? '' : 's'} → unclassified (open stage; reopened lost/closed_won w/ prior-close evidence, or omitted at/above qualification)`);
     try { localStorage.setItem(REOPEN_CLASS_BACKFILL_FLAG, new Date().toISOString()); } catch { /* ignore */ }
 
     if (healed > 0) {
@@ -622,7 +623,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          const resolvedClassification = resolveImportedClassification(existing.classification, o.classification, existing.stage, o.stage);
+          const resolvedClassification = resolveImportedClassification(existing.classification, o.classification, existing.stage, o.stage, o.probability);
 
           // A reopen cleared a stale terminal classification (existing was
           // closed_won/lost/omitted/rejected, now resolves to an open class). Drop the

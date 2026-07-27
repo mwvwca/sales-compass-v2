@@ -75,6 +75,14 @@ export function computeHudPipe(scopedOpps: Opportunity[]): HudPipeTotals {
 const normStage = (stage: string | undefined): string =>
   normalizeImportFlag(stage).replace(/[-_/]/g, ' ').replace(/\s+/g, ' ');
 
+/**
+ * Probability (0–1) at or above which a deal is 'qualified' — the SQL gate (25%).
+ * Used as the guard for clearing an 'omitted' classification: because there is no
+ * provenance to tell a manager's deliberate omit from a system-derived one, an omit is
+ * only ever cleared on a qualified record — never resurrected below this threshold.
+ */
+export const QUALIFICATION_THRESHOLD = 0.25;
+
 /** A settled Closed Won / Closed Lost stage. */
 export function isClosedWonLostStage(stage: string | undefined): boolean {
   const s = normStage(stage);
@@ -94,10 +102,14 @@ export function isOpenStage(stage: string | undefined): boolean {
  * The forward-looking reopen-clear can't catch these — the closed→open transition already
  * happened, so the stored stage is open and no future import re-detects it.
  *
- * Gated on snapshot evidence: only heals a deal whose history shows it was actually Closed
- * Won/Lost in a prior import (proof of a genuine reopen). This deliberately spares deals
- * that were omitted while always open — e.g. test/junk deals never meant to count — which
- * would otherwise be wrongly pulled into open pipeline.
+ * Heals two stranded populations, both left behind because their current stage is stable
+ * so merge-time clearing never fires:
+ *   - lost / closed_won on an open stage, gated on snapshot evidence that the deal was
+ *     actually Closed Won/Lost before (proof of a genuine reopen). Spares deals never closed.
+ *   - omitted on an open stage AT/ABOVE the qualification threshold. Because classification
+ *     carries no provenance (can't tell a deliberate omit from a derived one), an omit is
+ *     healed only on a qualified open deal — never below qualification, where a deliberate
+ *     omit of an early/junk deal is left untouched.
  *
  * Resets qualifying deals to 'unclassified' and drops stale Closed-Lost metadata, so they
  * re-enter open pipeline and the next import reclassifies them from fresh forecast evidence
@@ -113,11 +125,15 @@ export function backfillReopenedClassifications(
   for (const s of snapshots) {
     if (isClosedWonLostStage(s.stage)) everClosed.add(s.opportunityId);
   }
-  const STALE = new Set<OpportunityClassification>(['omitted', 'lost', 'closed_won']);
   let healed = 0;
   const next = opps.map(o => {
+    if (!isOpenStage(o.stage)) return o;
     const histKey = o.salesforceId ?? o.id;
-    if (isOpenStage(o.stage) && STALE.has(o.classification) && everClosed.has(histKey)) {
+    const reopenedTerminal =
+      (o.classification === 'lost' || o.classification === 'closed_won') && everClosed.has(histKey);
+    const strandedOmitted =
+      o.classification === 'omitted' && (o.probability ?? 0) >= QUALIFICATION_THRESHOLD;
+    if (reopenedTerminal || strandedOmitted) {
       healed++;
       return {
         ...o,
@@ -137,14 +153,23 @@ export function resolveImportedClassification(
   incomingClassification: OpportunityClassification,
   existingStage?: string,
   incomingStage?: string,
+  incomingProbability?: number,
 ): OpportunityClassification {
-  // Reopen guard: a settled Closed Won/Lost deal that comes back on an OPEN stage has
-  // genuinely reopened. Its persisted terminal classification (omitted / lost / closed_won)
-  // is now stale — do NOT carry it across the reopen. Clear it and let the incoming (open)
-  // evidence reclassify the deal downstream.
-  const reopened = isClosedWonLostStage(existingStage) && isOpenStage(incomingStage);
-  if (reopened && (existingClassification === 'omitted' || existingClassification === 'lost' || existingClassification === 'closed_won')) {
-    return incomingClassification;
+  // A stage change means the deal has moved — do NOT carry a stale TERMINAL classification
+  // across it; recompute from the incoming snapshot. This generalizes the old closed→open
+  // reopen guard to any stage change (e.g. Rejected→Discovery, Unqualified→Discovery).
+  // Only terminal states are cleared, so a manager's manual commit/upside forecast call is
+  // never touched. 'omitted' has no provenance (can't tell a deliberate omit from a derived
+  // one), so it clears only on a QUALIFIED record — an omit below the qualification threshold
+  // is left alone.
+  const stageChanged = normStage(incomingStage) !== '' && normStage(existingStage) !== normStage(incomingStage);
+  if (stageChanged) {
+    if (existingClassification === 'lost' || existingClassification === 'closed_won' || existingClassification === 'rejected') {
+      return incomingClassification;
+    }
+    if (existingClassification === 'omitted' && (incomingProbability ?? 0) >= QUALIFICATION_THRESHOLD) {
+      return incomingClassification;
+    }
   }
 
   if (existingClassification === 'omitted') return 'omitted';

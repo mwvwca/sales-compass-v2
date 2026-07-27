@@ -8,48 +8,54 @@ const opp = (over: Partial<Opportunity>): Opportunity => ({
   importDate: '2026-07-21T00:00:00.000Z', ...over,
 });
 
-describe('resolveImportedClassification — reopen clears stale omitted', () => {
-  it('clears omitted when a Closed Won deal reopens on an open stage', () => {
-    // existing: omitted + Closed Won stage; incoming: back on an open stage → 'commit'
-    expect(resolveImportedClassification('omitted', 'commit', 'Closed Won', 'Negotiation')).toBe('commit');
-  });
-
-  it('clears omitted when a Closed Lost deal reopens, recomputing to incoming (unclassified)', () => {
-    expect(resolveImportedClassification('omitted', 'unclassified', 'Closed Lost', 'Discovery')).toBe('unclassified');
-  });
-
-  it('clears a stale lost when a Closed Lost deal reopens on an open stage', () => {
-    // The Alive Hospice case: SF marked it Closed Lost, then reopened it to Commercial (upside).
+describe('resolveImportedClassification — a stage change clears a stale terminal class', () => {
+  it('clears lost on a Closed Lost → open reopen (recomputes from incoming)', () => {
     expect(resolveImportedClassification('lost', 'upside', 'Closed Lost', 'Commercial')).toBe('upside');
   });
 
-  it('clears a stale closed_won when a Closed Won deal reopens on an open stage', () => {
+  it('clears closed_won on a Closed Won → open reopen', () => {
     expect(resolveImportedClassification('closed_won', 'commit', 'Closed Won', 'Negotiation')).toBe('commit');
   });
 
-  it('keeps lost sticky when the stage stays closed (no reopen)', () => {
+  it('clears rejected on a Rejected → Discovery stage change', () => {
+    expect(resolveImportedClassification('rejected', 'unclassified', 'Rejected', 'Discovery')).toBe('unclassified');
+  });
+
+  it('clears a stale lost on an open → open stage change (not only closed → open)', () => {
+    expect(resolveImportedClassification('lost', 'commit', 'Discovery', 'Technical')).toBe('commit');
+  });
+
+  it('keeps lost sticky when the stage is unchanged', () => {
     expect(resolveImportedClassification('lost', 'commit', 'Closed Lost', 'Closed Lost')).toBe('lost');
   });
 
-  it('keeps omitted sticky when the stage stays closed (no reopen)', () => {
-    expect(resolveImportedClassification('omitted', 'commit', 'Closed Won', 'Closed Won')).toBe('omitted');
+  it('never wipes a manual commit/upside on a stage change (not a terminal state)', () => {
+    // commit is not terminal → the stage-change clear must not touch it; incoming unclassified
+    // falls through to preserve the existing commit.
+    expect(resolveImportedClassification('commit', 'unclassified', 'Discovery', 'Technical', 0.5)).toBe('commit');
+    expect(resolveImportedClassification('upside', 'unclassified', 'Discovery', 'Technical', 0.5)).toBe('upside');
+  });
+});
+
+describe('resolveImportedClassification — omitted clears only on a QUALIFIED stage change', () => {
+  it('clears omitted on a stage change when the incoming record is qualified (≥ 0.25)', () => {
+    expect(resolveImportedClassification('omitted', 'unclassified', 'Qualified', 'Discovery', 0.25)).toBe('unclassified');
+  });
+
+  it('keeps omitted on a stage change when the record is BELOW qualification', () => {
+    expect(resolveImportedClassification('omitted', 'unclassified', 'Qualified', 'Discovery', 0.05)).toBe('omitted');
+  });
+
+  it('keeps omitted sticky when the stage is unchanged (even if qualified)', () => {
+    expect(resolveImportedClassification('omitted', 'commit', 'Commercial', 'Commercial', 0.75)).toBe('omitted');
   });
 
   it('keeps omitted sticky when there is no stage evidence', () => {
     expect(resolveImportedClassification('omitted', 'commit')).toBe('omitted');
   });
 
-  it('does not treat a blank incoming stage as a reopen', () => {
-    expect(resolveImportedClassification('omitted', 'unclassified', 'Closed Won', '')).toBe('omitted');
-  });
-
-  it('does not reopen from a non-terminal existing stage', () => {
-    // existing stage was already open — the omitted was a deliberate omit, keep it sticky
-    expect(resolveImportedClassification('omitted', 'commit', 'Discovery', 'Negotiation')).toBe('omitted');
-  });
-
-  it('keeps closed_won sticky when there is no stage evidence (not a detectable reopen)', () => {
-    expect(resolveImportedClassification('closed_won', 'commit')).toBe('closed_won');
+  it('does not treat a blank incoming stage as a stage change', () => {
+    expect(resolveImportedClassification('omitted', 'unclassified', 'Closed Won', '', 0.9)).toBe('omitted');
   });
 });
 
@@ -72,8 +78,7 @@ describe('stage helpers', () => {
   });
 });
 
-describe('backfillReopenedClassifications — heal already-stranded reopens', () => {
-  // Snapshot proving opp 006Vy00000mao98 was Closed Lost before it reopened.
+describe('backfillReopenedClassifications — heal already-stranded records', () => {
   const priorClosed = [{ opportunityId: '006Vy00000mao98', stage: 'Closed Lost' }];
 
   it('resets a stale lost on an open stage (with prior-closed evidence) to unclassified', () => {
@@ -87,28 +92,35 @@ describe('backfillReopenedClassifications — heal already-stranded reopens', ()
     expect(opportunities[0].lostReason).toBeUndefined();
   });
 
-  it('heals stale omitted and closed_won on open stages when prior-closed evidence exists', () => {
-    const { healed } = backfillReopenedClassifications([
-      opp({ id: '006Vy00000mao98', salesforceId: '006Vy00000mao98', classification: 'omitted', stage: 'Qualified' }),
-      opp({ id: '006Vy00000zzz01', salesforceId: '006Vy00000zzz01', classification: 'closed_won', stage: 'Negotiation' }),
-    ], [
-      { opportunityId: '006Vy00000mao98', stage: 'Closed Lost' },
-      { opportunityId: '006Vy00000zzz01', stage: 'Closed Won' },
-    ]);
-    expect(healed).toBe(2);
+  it('heals a stranded omitted on a QUALIFIED open stage — no prior-closed evidence needed', () => {
+    // The Mid-America / Savage case: omitted while open, never actually closed, but qualified.
+    const { opportunities, healed } = backfillReopenedClassifications([
+      opp({ salesforceId: '006Vy00000mid01', classification: 'omitted', stage: 'Technical', probability: 0.5 }),
+    ], []); // no snapshots at all
+    expect(healed).toBe(1);
+    expect(opportunities[0].classification).toBe('unclassified');
+    expect(opportunities[0].previousClassification).toBe('omitted');
   });
 
-  it('spares an omitted deal that was NEVER closed (deliberate open omit, e.g. a test deal)', () => {
+  it('spares an omitted open deal BELOW qualification (deliberate omit of an early/junk deal)', () => {
     const { opportunities, healed } = backfillReopenedClassifications([
-      opp({ salesforceId: '006Vy00000test1', classification: 'omitted', stage: 'Technical' }),
-    ], [{ opportunityId: '006Vy00000test1', stage: 'Technical' }]); // only ever open in history
+      opp({ salesforceId: '006Vy00000low01', classification: 'omitted', stage: 'Qualified', probability: 0.05 }),
+    ], []);
     expect(healed).toBe(0);
     expect(opportunities[0].classification).toBe('omitted');
   });
 
-  it('leaves genuinely closed-stage terminal deals untouched even with prior-closed history', () => {
+  it('spares a lost/closed_won open deal that was NEVER closed (no snapshot evidence)', () => {
+    const { healed } = backfillReopenedClassifications([
+      opp({ salesforceId: '006Vy00000rem01', classification: 'lost', stage: 'Qualified', probability: 0.5 }),
+    ], []); // no Closed snapshot → not a confirmed reopen
+    expect(healed).toBe(0);
+  });
+
+  it('leaves genuinely closed-stage terminal deals untouched', () => {
     const { healed } = backfillReopenedClassifications([
       opp({ classification: 'lost', stage: 'Closed Lost' }),
+      opp({ salesforceId: '006Vy00000om02', classification: 'omitted', stage: 'Closed Won', probability: 0.9 }),
     ], priorClosed);
     expect(healed).toBe(0);
   });
