@@ -36,7 +36,20 @@ export default function SlipReport() {
   }, [changelog, currentQ]);
 
   const [selectedQuarter, setSelectedQuarter] = useState<Quarter | ''>('');
-  const effectiveQuarter = selectedQuarter || (availableQuarters[availableQuarters.length - 1] ?? '');
+
+  // Default to the most recent quarter that has OPEN slips (scanning newest → oldest), so the
+  // tab doesn't open on a future/empty quarter or one whose slips are all already resolved
+  // (which the default open-only filter would hide). Falls back to the latest available.
+  const defaultQuarter = useMemo(() => {
+    for (let i = availableQuarters.length - 1; i >= 0; i--) {
+      if (computeSlips(opportunities, changelog, snapshots, availableQuarters[i]).some(s => s.isOpen)) {
+        return availableQuarters[i];
+      }
+    }
+    return availableQuarters[availableQuarters.length - 1] ?? '';
+  }, [opportunities, changelog, snapshots, availableQuarters]);
+
+  const effectiveQuarter = selectedQuarter || defaultQuarter;
 
   const repNames = useMemo(() => Array.from(new Set(opportunities.map(o => o.repName))).sort(), [opportunities]);
   const [repFilter, setRepFilter] = useState<string | 'all'>('all');
