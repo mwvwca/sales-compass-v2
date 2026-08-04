@@ -3,15 +3,21 @@ import { Fragment, useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import { getQuarter, getCurrentQuarter, type Quarter } from '@/types/forecast';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { computeSlips } from '@/lib/slips';
+import { ChevronDown, ChevronRight, Download } from 'lucide-react';
+import { computeSlips, type SuggestedAction } from '@/lib/slips';
+import * as XLSX from '@e965/xlsx';
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const ymd = (s: string) => (s || '').slice(0, 10) || '—';
 
-// computeSlips + SlipRecord/SlipReason now live in @/lib/slips.
+const actionTone: Record<SuggestedAction, string> = {
+  'Confirm new date': 'bg-primary/15 text-primary border-transparent',
+  'Reforecast': 'bg-upside/20 text-upside border-transparent',
+  'Review for disqualification': 'bg-destructive/20 text-destructive border-transparent',
+};
 
 export default function SlipReport() {
-  const { opportunities, changelog } = useForecast();
+  const { opportunities, changelog, snapshots } = useForecast();
   const currentQ = getCurrentQuarter();
 
   // Available prior quarters from changelog (exclude current)
@@ -35,22 +41,59 @@ export default function SlipReport() {
   const repNames = useMemo(() => Array.from(new Set(opportunities.map(o => o.repName))).sort(), [opportunities]);
   const [repFilter, setRepFilter] = useState<string | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'date_pushed' | 'classification_dropped'>('all');
+  const [openOnly, setOpenOnly] = useState(true);               // default: actionable open deals only
+  const [sortMode, setSortMode] = useState<'dollars_out' | 'slip_count'>('dollars_out');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const allSlips = useMemo(() => {
     if (!effectiveQuarter) return [];
-    return computeSlips(opportunities, changelog, effectiveQuarter as Quarter);
-  }, [opportunities, changelog, effectiveQuarter]);
+    return computeSlips(opportunities, changelog, snapshots, effectiveQuarter as Quarter);
+  }, [opportunities, changelog, snapshots, effectiveQuarter]);
 
+  // Filtered + sorted — this exact list is what the table shows AND what Export emits.
   const slips = useMemo(() => {
-    return allSlips.filter(s => {
+    const filtered = allSlips.filter(s => {
+      if (openOnly && !s.isOpen) return false;                  // stage-strict resolved check
       if (repFilter !== 'all' && s.repName !== repFilter) return false;
       if (typeFilter !== 'all' && !s.slipReasons.includes(typeFilter)) return false;
       return true;
-    }).sort((a, b) => b.amount - a.amount);
-  }, [allSlips, repFilter, typeFilter]);
+    });
+    return filtered.sort((a, b) => {
+      if (sortMode === 'slip_count') {
+        return b.outwardMoveCount - a.outwardMoveCount || b.amount - a.amount;
+      }
+      // dollars that slipped OUT of the current period, descending
+      const av = a.crossesToLaterPeriod ? a.amount : 0;
+      const bv = b.crossesToLaterPeriod ? b.amount : 0;
+      return bv - av || b.amount - a.amount;
+    });
+  }, [allSlips, openOnly, repFilter, typeFilter, sortMode]);
 
   const enoughData = changelog.length > 0 && availableQuarters.length > 0;
+
+  const exportRows = () => {
+    const rows = slips.map(s => ({
+      'Opportunity ID': s.opportunityId,
+      'Opportunity': s.opportunityName,
+      'Owner': s.repName,
+      'Reseller': s.resolvedReseller || '',
+      'Product': s.productName || '',
+      'Amount': s.amount,
+      'Original Close': ymd(s.originalCloseDate),
+      'Current Close': ymd(s.currentCloseDate),
+      'Total Slip (days)': s.totalSlipDays,
+      'Outward Moves': s.outwardMoveCount,
+      'Crosses Period': s.crossesToLaterPeriod ? 'Yes' : 'No',
+      'Days Since Activity': s.daysSinceActivity ?? '',
+      'Suggested Action': s.suggestedAction,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Slips');
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `slips-${effectiveQuarter || 'all'}-${date}.xlsx`);
+  };
+
   if (!enoughData) {
     return (
       <div className="border border-border rounded-lg p-6">
@@ -59,24 +102,22 @@ export default function SlipReport() {
     );
   }
 
-  // Summary
+  // Summary (over the filtered set on screen)
   const totalCount = slips.length;
   const totalValue = slips.reduce((s, r) => s + r.amount, 0);
-  const stillOpenCt = slips.filter(s => s.isStillOpen).length;
-  const stillOpenAmt = slips.filter(s => s.isStillOpen).reduce((s, r) => s + r.amount, 0);
-  const recoveredCt = slips.filter(s => s.isNowClosed).length;
-  const recoveredAmt = slips.filter(s => s.isNowClosed).reduce((s, r) => s + r.amount, 0);
+  const outOfPeriodCt = slips.filter(s => s.crossesToLaterPeriod).length;
+  const outOfPeriodAmt = slips.filter(s => s.crossesToLaterPeriod).reduce((s, r) => s + r.amount, 0);
+  const disqualCt = slips.filter(s => s.suggestedAction === 'Review for disqualification').length;
 
-  // Per-rep summary using all slips for selected quarter (not type-filtered)
+  // Per-rep summary using all slips for selected quarter (not type/open-filtered)
   const repSummary = useMemo(() => {
     const repsInQ = new Set(allSlips.map(s => s.repName));
     return Array.from(repsInQ).map(rep => {
       const repSlips = allSlips.filter(s => s.repName === rep);
       const slipCt = repSlips.length;
       const slipAmt = repSlips.reduce((s, r) => s + r.amount, 0);
-      const openCt = repSlips.filter(s => s.isStillOpen).length;
+      const openCt = repSlips.filter(s => s.isOpen).length;
       const recCt = repSlips.filter(s => s.isNowClosed).length;
-      // Closed won deals in that quarter for this rep
       const closedWonCt = opportunities.filter(o =>
         o.repName === rep &&
         o.classification === 'closed_won' &&
@@ -87,13 +128,6 @@ export default function SlipReport() {
       return { rep, slipCt, slipAmt, openCt, recCt, slipRate };
     }).sort((a, b) => b.slipAmt - a.slipAmt);
   }, [allSlips, opportunities, effectiveQuarter]);
-
-  const insightLine = (() => {
-    if (allSlips.length === 0) return null;
-    return `${allSlips.length} deals worth ${fmt(allSlips.reduce((s, r) => s + r.amount, 0))} slipped from ${effectiveQuarter}. ${fmt(allSlips.filter(s => s.isStillOpen).reduce((s, r) => s + r.amount, 0))} (${allSlips.filter(s => s.isStillOpen).length} deals) are still in pipeline this quarter.`;
-  })();
-
-  const highRep = repSummary.find(r => r.slipRate > 0.4);
 
   const slipRateTone = (r: number) => r < 0.2 ? 'text-positive' : r <= 0.4 ? 'text-upside' : 'text-negative';
 
@@ -122,6 +156,27 @@ export default function SlipReport() {
             </button>
           ))}
         </div>
+        {/* Sort toggle */}
+        <div className="flex gap-0.5 bg-secondary rounded-md p-0.5">
+          {([
+            ['dollars_out', '$ slipped out'],
+            ['slip_count', 'Repeat slippers'],
+          ] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setSortMode(k)}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${sortMode === k ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {/* Open-only toggle */}
+        <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer">
+          <input type="checkbox" checked={openOnly} onChange={e => setOpenOnly(e.target.checked)} className="accent-foreground" />
+          Open deals only
+        </label>
+        <button onClick={exportRows}
+          className="ml-auto flex items-center gap-1.5 bg-secondary border border-border rounded-md px-3 py-1.5 text-xs font-medium hover:bg-secondary/70 transition-colors">
+          <Download size={13} /> Export
+        </button>
       </div>
 
       {/* Summary cards */}
@@ -135,14 +190,13 @@ export default function SlipReport() {
           <p className="text-xl font-mono font-semibold">{fmt(totalValue)}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Still in Pipeline</p>
-          <p className="text-xl font-mono font-semibold">{stillOpenCt}</p>
-          <p className="text-xs font-mono mt-0.5 text-muted-foreground">{fmt(stillOpenAmt)}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Out of Period</p>
+          <p className="text-xl font-mono font-semibold">{outOfPeriodCt}</p>
+          <p className="text-xs font-mono mt-0.5 text-muted-foreground">{fmt(outOfPeriodAmt)}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Recovered</p>
-          <p className="text-xl font-mono font-semibold text-positive">{recoveredCt}</p>
-          <p className="text-xs font-mono mt-0.5 text-positive">{fmt(recoveredAmt)}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Review for Disqual</p>
+          <p className="text-xl font-mono font-semibold text-destructive">{disqualCt}</p>
         </div>
       </div>
 
@@ -152,30 +206,31 @@ export default function SlipReport() {
           <thead>
             <tr className="border-b border-border bg-secondary/50">
               <th className="w-8"></th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Opportunity</th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rep</th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">CAM</th>
+              {['Opportunity', 'Owner', 'Reseller', 'Product'].map(h => (
+                <th key={h} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">{h}</th>
+              ))}
               <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Was Due</th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Now Due</th>
-              <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Qtrs Pushed</th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Current Status</th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Orig Close</th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Curr Close</th>
+              <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Slip (d)</th>
+              <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Moves</th>
+              <th className="text-center px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Crosses</th>
+              <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last Activity</th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Suggested Action</th>
             </tr>
           </thead>
           <tbody>
             {slips.length === 0 && (
-              <tr><td colSpan={10} className="text-center px-3 py-6 text-xs text-muted-foreground">No slips match the current filters.</td></tr>
+              <tr><td colSpan={13} className="text-center px-3 py-6 text-xs text-muted-foreground">No slips match the current filters.</td></tr>
             )}
             {slips.map(s => {
-              const isOpen = expanded === s.opportunityId;
+              const isOpenRow = expanded === s.opportunityId;
               return (
                 <Fragment key={s.opportunityId}>
                   <tr
-                    onClick={() => setExpanded(isOpen ? null : s.opportunityId)}
+                    onClick={() => setExpanded(isOpenRow ? null : s.opportunityId)}
                     className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors cursor-pointer">
-
-                    <td className="px-2 py-2">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</td>
+                    <td className="px-2 py-2">{isOpenRow ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</td>
                     <td className="px-3 py-2 text-xs">
                       <button
                         onClick={(e) => { e.stopPropagation(); openOpportunity(s.opportunityId); }}
@@ -184,35 +239,30 @@ export default function SlipReport() {
                       >{s.opportunityName}</button>
                     </td>
                     <td className="px-3 py-2 text-xs">{s.repName}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{s.channelAccountManager || '—'}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{s.resolvedReseller || '—'}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{s.productName || '—'}</td>
                     <td className="text-right px-3 py-2 font-mono text-xs">{fmt(s.amount)}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{s.originalQuarter}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{s.currentQuarter}</td>
-                    <td className="text-right px-3 py-2 font-mono text-xs">{s.quartersPushed}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{ymd(s.originalCloseDate)}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{ymd(s.currentCloseDate)}</td>
+                    <td className="text-right px-3 py-2 font-mono text-xs">{s.totalSlipDays}</td>
+                    <td className="text-right px-3 py-2 font-mono text-xs">{s.outwardMoveCount}</td>
+                    <td className="text-center px-3 py-2 text-xs">{s.crossesToLaterPeriod ? <span className="text-negative">✓</span> : <span className="text-muted-foreground">—</span>}</td>
+                    <td className="text-right px-3 py-2 font-mono text-xs">{s.daysSinceActivity == null ? '—' : `${s.daysSinceActivity}d`}</td>
                     <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {s.slipReasons.includes('date_pushed') && (
-                          <Badge className="bg-upside/20 text-upside hover:bg-upside/30 border-transparent">Date pushed</Badge>
-                        )}
-                        {s.slipReasons.includes('classification_dropped') && s.classDropFrom === 'commit' && (
-                          <Badge className="bg-destructive/20 text-destructive hover:bg-destructive/30 border-transparent">Dropped from commit</Badge>
-                        )}
-                        {s.slipReasons.includes('classification_dropped') && s.classDropFrom === 'upside' && (
-                          <Badge className="bg-orange-500/20 text-orange-500 hover:bg-orange-500/30 border-transparent">Dropped from upside</Badge>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      {s.isNowClosed && <span className="text-positive">Closed Won ✓</span>}
-                      {s.isNowLost && <span className="text-negative">Lost ✗</span>}
-                      {s.isStillOpen && <span className="text-primary">Still open</span>}
+                      <Badge className={actionTone[s.suggestedAction]}>{s.suggestedAction}</Badge>
                     </td>
                   </tr>
-                  {isOpen && (
+                  {isOpenRow && (
                     <tr key={s.opportunityId + '-detail'} className="bg-secondary/20 border-b border-border">
                       <td></td>
-                      <td colSpan={9} className="px-3 py-3">
+                      <td colSpan={12} className="px-3 py-3">
                         <div className="text-[11px] space-y-2">
+                          <div className="flex gap-4 text-muted-foreground">
+                            <span>Stage: <span className="text-foreground">{s.currentStage}</span></span>
+                            <span>Class: <span className="text-foreground">{s.currentClassification}</span></span>
+                            <span>Was due: <span className="text-foreground">{s.originalQuarter}</span> → <span className="text-foreground">{s.currentQuarter}</span></span>
+                            {s.channelAccountManager && <span>CAM: <span className="text-foreground">{s.channelAccountManager}</span></span>}
+                          </div>
                           <div className="font-medium text-muted-foreground uppercase tracking-wider">Timeline</div>
                           {[...s.closeDateHistory.map(h => ({ ...h, kind: 'date' as const })),
                             ...s.classificationHistory.map(h => ({ ...h, kind: 'class' as const }))]
@@ -270,15 +320,6 @@ export default function SlipReport() {
             </tbody>
           </table>
         </div>
-      )}
-
-      {insightLine && (
-        <p className="text-xs text-muted-foreground">
-          {insightLine}
-          {highRep && (
-            <span className="block mt-1">⚠ {highRep.rep} has a {Math.round(highRep.slipRate * 100)}% slip rate — review commit discipline in 1:1s.</span>
-          )}
-        </p>
       )}
     </div>
   );

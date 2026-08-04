@@ -7,10 +7,13 @@ import {
   classifyCleanup,
   analyzeAnchors,
   groupByCAM,
+  groupByOwner,
   buildCleanupEmailPrompt,
   buildCleanupEmail,
+  buildOwnerCleanupEmail,
   isActionable,
   type CamCleanupGroup,
+  type OwnerCleanupGroup,
   type CleanupStage,
   type CleanupClassification,
   type AnchorRole,
@@ -60,6 +63,15 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
   const [loadingCam, setLoadingCam] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
   const [openContext, setOpenContext] = useState<string | null>(null);
+  const [emailMode, setEmailMode] = useState<'cam' | 'owner'>('cam');
+  const [openOwner, setOpenOwner] = useState<string | null>(null);
+
+  // Confirm-or-close deadline for per-owner emails: 15 days out (the cadence window).
+  const deadline = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }, []);
 
   // Exclude DRs in terminal states — they don't need cleanup
   const eligibleDrs = useMemo(
@@ -184,6 +196,26 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
     toast({ title: 'Outlook opened — recipients & subject filled. Paste (⌘V) for the formatted list.' });
   };
 
+  // ---- Per-owner emails: one per deal owner, their records only, no CAM/stats/methodology ----
+  const ownerGroups = useMemo<OwnerCleanupGroup[]>(() => groupByOwner(items), [items]);
+
+  const copyOwnerEmail = async (group: OwnerCleanupGroup) => {
+    const { subject, body, html } = buildOwnerCleanupEmail(group, deadline);
+    const header = `To: ${group.ownerEmail || '(no owner email)'}\nSubject: ${subject}`;
+    const plain = `${header}\n\n${body}`;
+    const htmlPayload = `${escapeHtml(header).replace(/\n/g, '<br>')}<br><br>${html}`;
+    const ok = await copyRich(plain, htmlPayload);
+    toast(ok ? { title: 'Copied (formatted)' } : { title: 'Copy failed', variant: 'destructive' });
+  };
+
+  const openOwnerInMail = async (group: OwnerCleanupGroup) => {
+    const { subject, body, html } = buildOwnerCleanupEmail(group, deadline);
+    await copyRich(body, html);
+    const link = `mailto:${group.ownerEmail}?subject=${encodeURIComponent(subject)}`;
+    window.open(link);
+    toast({ title: 'Outlook opened — recipient & subject filled. Paste (⌘V) for the table.' });
+  };
+
   if (dealRegistrations.length === 0) return null;
 
   const totalActionable = items.filter(i => i.cleanupStage !== 'exempt').length;
@@ -268,11 +300,23 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                 ))}
               </div>
 
-              {/* Per-CAM email accordion */}
-              {groups.length > 0 && (
+              {/* Email drafts — by CAM (group) or by owner (individual, for one-at-a-time sends) */}
+              {(groups.length > 0 || ownerGroups.length > 0) && (
                 <div className="space-y-2 pt-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Email Drafts by CAM</h4>
-                  {groups.map(group => {
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {emailMode === 'cam' ? 'Email Drafts by CAM' : 'Email Drafts by Owner'}
+                    </h4>
+                    <div className="flex gap-0.5 bg-secondary rounded-md p-0.5">
+                      {([['cam', 'By CAM'], ['owner', 'By Owner']] as const).map(([k, l]) => (
+                        <button key={k} onClick={() => setEmailMode(k)}
+                          className={`px-3 py-1 text-[11px] font-medium rounded transition-colors ${emailMode === k ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {emailMode === 'cam' && groups.map(group => {
                     const isOpen = openCam === group.cam;
                     const isLoading = loadingCam === group.cam;
                     const emailText = emails[group.cam];
@@ -364,6 +408,56 @@ export default function DrCleanupPlanSection({ dealRegistrations }: Props) {
                       </div>
                     );
                   })}
+
+                  {emailMode === 'owner' && (
+                    ownerGroups.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground py-2">No owners with actionable records.</p>
+                    ) : ownerGroups.map(group => {
+                      const isOpen = openOwner === group.owner;
+                      const { subject, body } = buildOwnerCleanupEmail(group, deadline);
+                      return (
+                        <div key={group.owner} className="border border-border rounded-md">
+                          <div className="flex items-center justify-between gap-3 px-3 py-2 flex-wrap">
+                            <button
+                              onClick={() => setOpenOwner(isOpen ? null : group.owner)}
+                              className="flex items-center gap-2 text-left flex-1 min-w-0"
+                            >
+                              {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium flex items-center gap-3 flex-wrap">
+                                  <span>{group.owner}</span>
+                                  <span className="text-muted-foreground">·</span>
+                                  <span>{group.deals.length} deal{group.deals.length === 1 ? '' : 's'}</span>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground truncate">
+                                  {group.ownerEmail || '(no owner email)'}
+                                </div>
+                              </div>
+                            </button>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => copyOwnerEmail(group)}>
+                                <Copy size={12} /> Copy (formatted)
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openOwnerInMail(group)} disabled={!group.ownerEmail}>
+                                <ExternalLink size={12} /> Open in Outlook
+                              </Button>
+                            </div>
+                          </div>
+                          {isOpen && (
+                            <div className="border-t border-border bg-secondary/10 p-3 space-y-2">
+                              <div className="text-[11px] font-mono space-y-0.5">
+                                <div><span className="text-muted-foreground">To:</span> {group.ownerEmail || '(no owner email)'}</div>
+                                <div><span className="text-muted-foreground">Subject:</span> {subject}</div>
+                              </div>
+                              <pre className="text-xs font-mono whitespace-pre-wrap bg-background border border-border rounded p-3 max-h-96 overflow-auto">
+                                {body}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               )}
             </>

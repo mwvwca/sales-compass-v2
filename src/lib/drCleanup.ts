@@ -511,6 +511,84 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
 }
 
 // ============================================================
+// Per-owner email — one email per deal owner (rep), their records only.
+// No CAM recipient, no aggregate stats, no methodology. For sending individually.
+// ============================================================
+
+export interface OwnerCleanupGroup {
+  owner: string;      // rep / deal owner name
+  ownerEmail: string; // derived owner email ('' when unassigned)
+  deals: CleanupClassification[];
+}
+
+/**
+ * Group actionable cleanup items by deal owner (rep). Excludes exempt anchors and
+ * 'monitoring' (<15 days, no action yet) — one group per owner, containing only that
+ * owner's actionable records.
+ */
+export function groupByOwner(items: CleanupClassification[]): OwnerCleanupGroup[] {
+  const groups = new Map<string, OwnerCleanupGroup>();
+  for (const item of items) {
+    if (item.cleanupStage === 'exempt' || item.cleanupStage === 'monitoring') continue;
+    const owner = item.dr.repName?.trim() || '(unassigned)';
+    let g = groups.get(owner);
+    if (!g) {
+      g = { owner, ownerEmail: owner === '(unassigned)' ? '' : nameToEmail(owner), deals: [] };
+      groups.set(owner, g);
+    }
+    g.deals.push(item);
+  }
+  return Array.from(groups.values()).sort((a, b) => b.deals.length - a.deals.length);
+}
+
+/**
+ * Build a single owner's cleanup email: short template + a plain table of
+ * Account, Reseller, Product, Stage, Close Date, Days Since Activity. Subject carries
+ * the record count and the confirm-or-close deadline. No CAM, stats, or methodology.
+ */
+export function buildOwnerCleanupEmail(
+  group: OwnerCleanupGroup,
+  deadline: string,
+): { subject: string; body: string; html: string } {
+  const ownerFirst = (group.owner.split(/\s+/)[0] || group.owner).trim();
+  const n = group.deals.length;
+  const subject = `Deal registration cleanup — ${n} registration${n === 1 ? '' : 's'} to confirm or close by ${deadline}`;
+
+  const rows = [...group.deals].sort((a, b) => b.daysSinceActivity - a.daysSinceActivity);
+  const cols = ['Account', 'Reseller', 'Product', 'Stage', 'Close Date', 'Days Since Activity'];
+  const data = rows.map(d => [
+    d.dr.accountName || '(no account)',
+    d.dr.resolvedReseller || d.dr.resellerName || d.dr.distributorReseller || '—',
+    d.dr.product || '—',
+    d.dr.stage || '—',
+    d.dr.closeDate || '—',
+    `${d.daysSinceActivity}d`,
+  ]);
+
+  const intro = `The registration${n === 1 ? '' : 's'} below ${n === 1 ? 'has' : 'have'} gone quiet. Please confirm ${n === 1 ? 'it is' : 'they are'} still active, or let me know to close ${n === 1 ? 'it' : 'them'}, by ${deadline}.`;
+
+  // Plain text — aligned monospace-friendly table.
+  const widths = cols.map((h, i) => Math.max(h.length, ...data.map(r => r[i].length)));
+  const line = (r: string[]) => r.map((v, i) => v.padEnd(widths[i])).join('  ');
+  const P: string[] = [`Hi ${ownerFirst},`, '', intro, '', line(cols), ...data.map(line), '', 'Thanks,', 'Michael Wells'];
+
+  // HTML — real table for Outlook paste.
+  const esc = escapeHtml;
+  const th = (t: string) => `<th style="text-align:left;padding:4px 12px 4px 0;border-bottom:1px solid #d1d5db;font-size:12px;color:#6b7280;white-space:nowrap">${esc(t)}</th>`;
+  const td = (t: string) => `<td style="padding:4px 12px 4px 0;border-bottom:1px solid #eee;font-size:13px;white-space:nowrap">${esc(t)}</td>`;
+  const H: string[] = [
+    `<div style="margin:0 0 10px">Hi ${esc(ownerFirst)},</div>`,
+    `<div style="margin:0 0 12px">${esc(intro)}</div>`,
+    `<table style="border-collapse:collapse"><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>`,
+    ...data.map(r => `<tr>${r.map(td).join('')}</tr>`),
+    `</tbody></table>`,
+    `<div style="margin:12px 0 0">Thanks,<br>Michael Wells</div>`,
+  ];
+
+  return { subject, body: P.join('\n'), html: H.join('') };
+}
+
+// ============================================================
 // Briefing summary
 // ============================================================
 

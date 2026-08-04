@@ -89,7 +89,8 @@ export function buildRepScorecard(repId: string, ctx: ScorecardContext, opts: Sc
 
   // ---- pipeline ----
   const stale = openOpps.filter(o => dealRiskSignals(o, index, today).daysSinceMovement >= STALE_DAYS).length;
-  const slipped = computeSlips(opportunities, changelog, currentQuarter).filter(s => s.repName === repName).length;
+  // Count only — snapshots (used to enrich the original close date) don't affect the count.
+  const slipped = computeSlips(opportunities, changelog, [], currentQuarter).filter(s => s.repName === repName).length;
 
   // ---- at-risk deals (flags computed NOW; single-threaded/sentiment from transcripts) ----
   const atRisk: AtRiskDeal[] = [];
