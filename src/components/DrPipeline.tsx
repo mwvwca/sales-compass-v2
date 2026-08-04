@@ -23,7 +23,7 @@ const STAGE_ORDER = ['Unqualified', 'Qualified 5%', 'Discovery 25%', 'Technical 
 const DEFAULT_STATUSES: DrStatus[] = ['active', 'sql', 'stale', 'padded', 'converted', 'closed_won', 'closed_lost'];
 
 type Period = 'this-month' | 'last-month' | 'this-quarter' | 'last-quarter' | 'this-year' | 'all';
-const DEFAULT_PERIOD: Period = 'this-quarter';
+const DEFAULT_PERIOD: Period = 'this-year';
 
 function fmtMoney(n: number): string {
   if (!n) return '$0';
