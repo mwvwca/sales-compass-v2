@@ -94,7 +94,27 @@ describe('isActionable / actionable subject count', () => {
       cls({ cleanupStage: 'ready_to_close', daysSinceActivity: 50, dr: { accountName: 'A' } }),
       cls({ cleanupStage: 'monitoring', daysSinceActivity: 5, dr: { accountName: 'B' } }),
     ]);
-    expect(buildCleanupEmail(g).subject).toContain('(1 registrations)');
+    expect(buildCleanupEmail(g).subject).toContain('(1 registration)');
+  });
+});
+
+describe('buildCleanupEmail — LRT (Long Range) split', () => {
+  it('routes LRT deals to a Long Range bucket, out of the close cadence', () => {
+    const g = group([
+      cls({ cleanupStage: 'ready_to_close', daysSinceActivity: 50, dr: { accountName: 'Acme', opportunityName: 'Acme — MDR' } }),
+      cls({ cleanupStage: 'ready_to_close', daysSinceActivity: 60, dr: { accountName: 'BigCo', opportunityName: 'LRT - BigCo - MDR' } }),
+    ]);
+    const { subject, body, html } = buildCleanupEmail(g);
+    // Subject splits the counts: 1 cadence registration, 1 long range.
+    expect(subject).toContain('(1 registration · 1 long range)');
+    // A Long Range section exists, and the LRT deal is not counted under Closing.
+    expect(body).toContain('Long Range (LRT)');
+    expect(html).toContain('Long Range (LRT)');
+    expect(body).toContain('1 closing');       // only the non-LRT deal
+    expect(body).toContain('1 long range');
+    // The LRT deal appears after the Long Range header, the normal deal before it.
+    const lrIdx = body.indexOf('Long Range (LRT)');
+    expect(body.indexOf('LRT - BigCo - MDR')).toBeGreaterThan(lrIdx);
   });
 });
 

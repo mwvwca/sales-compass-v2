@@ -373,6 +373,7 @@ type AeBuckets = {
   finalNotice: CleanupClassification[];
   outreach: CleanupClassification[];
   needsAttention: CleanupClassification[];
+  longRange: CleanupClassification[];
 };
 
 /**
@@ -388,16 +389,20 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   // Orphan clusters (immediateAction) no longer fall into "Closing" by virtue of
   // being immediate — Closing is strictly the 45+ day ready_to_close tier. Orphan
   // clusters get their own "Needs attention" bucket, deduped to one row per account.
-  const actionableCount = group.deals.filter(d => d.cleanupStage !== 'monitoring').length;
-  const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' && !d.immediateAction);
-  const confirmQualified = group.deals.filter(d => d.cleanupStage === 'confirm_qualified' && !d.immediateAction);
-  const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction);
-  const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction);
+  // "LRT" opportunities are Long Range (owner-flagged viable, needs time) — split them out of
+  // the close cadence into their own bucket, same as the per-owner email.
+  const isLR = (d: CleanupClassification) => isLongRange(d.dr.opportunityName);
+  const actionableCount = group.deals.filter(d => d.cleanupStage !== 'monitoring' && !isLR(d)).length;
+  const closing = group.deals.filter(d => d.cleanupStage === 'ready_to_close' && !d.immediateAction && !isLR(d));
+  const confirmQualified = group.deals.filter(d => d.cleanupStage === 'confirm_qualified' && !d.immediateAction && !isLR(d));
+  const finalNotice = group.deals.filter(d => d.cleanupStage === 'final_notice' && !d.immediateAction && !isLR(d));
+  const outreach = group.deals.filter(d => d.cleanupStage === 'partner_outreach' && !d.immediateAction && !isLR(d));
+  const longRange = group.deals.filter(d => d.cleanupStage !== 'monitoring' && isLR(d));
   const needsAttention: CleanupClassification[] = [];
   {
     const seen = new Set<string>();
     for (const d of group.deals) {
-      if (!d.immediateAction) continue;
+      if (!d.immediateAction || isLR(d)) continue;
       const key = (d.dr.accountName || '(no account)').toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -409,7 +414,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   const byAe = new Map<string, AeBuckets>();
   const ensure = (ae: string): AeBuckets => {
     let b = byAe.get(ae);
-    if (!b) { b = { closing: [], confirmQualified: [], finalNotice: [], outreach: [], needsAttention: [] }; byAe.set(ae, b); }
+    if (!b) { b = { closing: [], confirmQualified: [], finalNotice: [], outreach: [], needsAttention: [], longRange: [] }; byAe.set(ae, b); }
     return b;
   };
   const aeOf = (d: CleanupClassification) => d.dr.repName?.trim() || '(unassigned AE)';
@@ -418,8 +423,9 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   for (const d of finalNotice) ensure(aeOf(d)).finalNotice.push(d);
   for (const d of outreach) ensure(aeOf(d)).outreach.push(d);
   for (const d of needsAttention) ensure(aeOf(d)).needsAttention.push(d);
+  for (const d of longRange) ensure(aeOf(d)).longRange.push(d);
   const aes = Array.from(byAe.entries()).sort((a, b) => {
-    const total = (x: AeBuckets) => x.closing.length + x.confirmQualified.length + x.finalNotice.length + x.outreach.length + x.needsAttention.length;
+    const total = (x: AeBuckets) => x.closing.length + x.confirmQualified.length + x.finalNotice.length + x.outreach.length + x.needsAttention.length + x.longRange.length;
     return total(b[1]) - total(a[1]) || a[0].localeCompare(b[0]);
   });
 
@@ -440,6 +446,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
     finalNotice: '#b45309',
     outreach: '#1d4ed8',
     needsAttention: '#92400e',
+    longRange: '#6d28d9',
   };
 
   // Greeting + intro paragraphs.
@@ -454,13 +461,14 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   }
 
   // Totals count line — each count colored to match its bucket below.
-  P.push(`${closing.length} closing · ${confirmQualified.length} confirm · ${finalNotice.length} final notice · ${outreach.length} outreach · ${needsAttention.length} need attention`);
+  P.push(`${closing.length} closing · ${confirmQualified.length} confirm · ${finalNotice.length} final notice · ${outreach.length} outreach · ${needsAttention.length} need attention${longRange.length ? ` · ${longRange.length} long range` : ''}`);
   const countHtml = [
     `<span style="color:${BUCKET_COLOR.closing}">${esc(`${closing.length} closing`)}</span>`,
     `<span style="color:${BUCKET_COLOR.confirmQualified}">${esc(`${confirmQualified.length} confirm`)}</span>`,
     `<span style="color:${BUCKET_COLOR.finalNotice}">${esc(`${finalNotice.length} final notice`)}</span>`,
     `<span style="color:${BUCKET_COLOR.outreach}">${esc(`${outreach.length} outreach`)}</span>`,
     `<span style="color:${BUCKET_COLOR.needsAttention}">${esc(`${needsAttention.length} need attention`)}</span>`,
+    ...(longRange.length ? [`<span style="color:${BUCKET_COLOR.longRange}">${esc(`${longRange.length} long range`)}</span>`] : []),
   ].join(' · ');
   H.push(`<div style="font-weight:600;margin:0 0 14px">${countHtml}</div>`);
 
@@ -491,6 +499,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
     if (b.finalNotice.length) counts.push(`${b.finalNotice.length} final notice`);
     if (b.outreach.length) counts.push(`${b.outreach.length} outreach`);
     if (b.needsAttention.length) counts.push(`${b.needsAttention.length} need attention`);
+    if (b.longRange.length) counts.push(`${b.longRange.length} long range`);
     const countsStr = counts.join(' · ');
     P.push('', `AE: ${ae} — ${countsStr}`); // plain: blank line before each AE header
     H.push(`<div style="font-weight:600;font-size:15px;margin:14px 0 0;padding-bottom:5px;border-bottom:1px solid #e5e7eb">${esc(ae)}<span style="font-weight:400;color:#6b7280;font-size:13px"> — ${esc(countsStr)}</span></div>`);
@@ -499,6 +508,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
     renderBucket('Final notice — confirm within 15 days or it will be closed', b.finalNotice, false, BUCKET_COLOR.finalNotice);
     renderBucket('Outreach — quiet 15+ days, please confirm status', b.outreach, false, BUCKET_COLOR.outreach);
     renderBucket('Needs attention — no activity on any registration; engage or close', b.needsAttention, true, BUCKET_COLOR.needsAttention);
+    renderBucket('Long Range (LRT) — flagged viable, needs time; kept out of the cadence', b.longRange, false, BUCKET_COLOR.longRange);
   }
 
   // Sign-off.
@@ -506,7 +516,7 @@ export function buildCleanupEmail(group: CamCleanupGroup): { subject: string; bo
   H.push(`<div style="margin:14px 0 10px">${esc('Happy to discuss any of these on a call if useful.')}</div>`);
   H.push(`<div>${esc('Best,')}<br>${esc('Michael Wells')}<br>${esc('Sales Manager, N-able')}</div>`);
 
-  const subject = `Deal Registration Cleanup Cadence — Action Required (${actionableCount} registrations)`;
+  const subject = `Deal Registration Cleanup Cadence — Action Required (${actionableCount} registration${actionableCount === 1 ? '' : 's'}${longRange.length ? ` · ${longRange.length} long range` : ''})`;
   return { subject, body: P.join('\n'), html: H.join('') };
 }
 
