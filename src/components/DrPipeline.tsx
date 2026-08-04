@@ -22,7 +22,7 @@ import { useSortableRows, SortHeader } from '@/components/sortableTable';
 const STAGE_ORDER = ['Unqualified', 'Qualified 5%', 'Discovery 25%', 'Technical 50%', 'Commercial 75%', 'Purchasing 90%'];
 const DEFAULT_STATUSES: DrStatus[] = ['active', 'sql', 'stale', 'padded', 'converted', 'closed_won', 'closed_lost'];
 
-type Period = 'this-month' | 'last-month' | 'this-quarter' | 'last-quarter' | 'all';
+type Period = 'this-month' | 'last-month' | 'this-quarter' | 'last-quarter' | 'this-year' | 'all';
 const DEFAULT_PERIOD: Period = 'this-quarter';
 
 function fmtMoney(n: number): string {
@@ -63,6 +63,9 @@ function getPeriodRange(period: Period): { start: Date | null; end: Date | null 
   const qStart = Math.floor(m / 3) * 3;
   if (period === 'this-quarter') {
     return { start: new Date(Date.UTC(y, qStart, 1)), end: new Date(Date.UTC(y, qStart + 3, 1) - 1) };
+  }
+  if (period === 'this-year') {
+    return { start: new Date(Date.UTC(y, 0, 1)), end: new Date(Date.UTC(y + 1, 0, 1) - 1) };
   }
   // last-quarter
   return { start: new Date(Date.UTC(y, qStart - 3, 1)), end: new Date(Date.UTC(y, qStart, 1) - 1) };
@@ -1200,6 +1203,7 @@ export default function DrPipeline() {
                   <option value="last-month">Last month</option>
                   <option value="this-quarter">This quarter</option>
                   <option value="last-quarter">Last quarter</option>
+                  <option value="this-year">This year</option>
                   <option value="all">All time</option>
                 </select>
               </label>
@@ -2068,6 +2072,7 @@ export default function DrPipeline() {
                     <option value="last-month">Last month</option>
                     <option value="this-quarter">This quarter</option>
                     <option value="last-quarter">Last quarter</option>
+                    <option value="this-year">This year</option>
                     <option value="all">All time</option>
                   </select>
                 </label>
