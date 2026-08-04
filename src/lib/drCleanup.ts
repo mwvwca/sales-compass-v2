@@ -1,5 +1,5 @@
 import type { DealRegistration } from '@/types/forecast';
-import { sfdcAccountUrl } from './sfdc';
+import { sfdcAccountUrl, sfdcOpportunityUrl } from './sfdc';
 import { escapeHtml } from './richClipboard';
 
 // A "qualified" registration (reached SQL or >=25% probability) is escalated to a
@@ -541,6 +541,11 @@ export function groupByOwner(items: CleanupClassification[]): OwnerCleanupGroup[
   return Array.from(groups.values()).sort((a, b) => b.deals.length - a.deals.length);
 }
 
+/** "LRT" token in an opportunity name = Long Range Opportunity (owner-flagged as viable, needs time). */
+export function isLongRange(name: string | undefined): boolean {
+  return /\bLRT\b/i.test(name || '');
+}
+
 /**
  * Build a single owner's cleanup email: short template + a plain table of
  * Account, Reseller, Product, Stage, Close Date, Days Since Activity. Subject carries
@@ -551,39 +556,72 @@ export function buildOwnerCleanupEmail(
   deadline: string,
 ): { subject: string; body: string; html: string } {
   const ownerFirst = (group.owner.split(/\s+/)[0] || group.owner).trim();
-  const n = group.deals.length;
-  const subject = `Deal registration cleanup — ${n} registration${n === 1 ? '' : 's'} to confirm or close by ${deadline}`;
+  const byStale = (a: CleanupClassification, b: CleanupClassification) => b.daysSinceActivity - a.daysSinceActivity;
 
-  const rows = [...group.deals].sort((a, b) => b.daysSinceActivity - a.daysSinceActivity);
-  const cols = ['Account', 'Reseller', 'Product', 'Stage', 'Close Date', 'Days Since Activity'];
-  const data = rows.map(d => [
-    d.dr.accountName || '(no account)',
+  // "LRT" in the opportunity name = Long Range Opportunity — the owner has flagged it viable
+  // but needing time to work. Split those out so they aren't pushed to confirm-or-close.
+  const standard = group.deals.filter(d => !isLongRange(d.dr.opportunityName)).sort(byStale);
+  const lrt = group.deals.filter(d => isLongRange(d.dr.opportunityName)).sort(byStale);
+  const nS = standard.length, nL = lrt.length;
+
+  const subjectParts: string[] = [];
+  if (nS) subjectParts.push(`${nS} registration${nS === 1 ? '' : 's'} to confirm or close by ${deadline}`);
+  if (nL) subjectParts.push(`${nL} long range`);
+  const subject = `Deal registration cleanup — ${subjectParts.join(' · ') || 'no registrations'}`;
+
+  const cols = ['Opportunity', 'Reseller', 'Product', 'Stage', 'Close Date', 'Days Since Activity'];
+  const cellsOf = (d: CleanupClassification) => [
+    d.dr.opportunityName || '(no name)',
     d.dr.resolvedReseller || d.dr.resellerName || d.dr.distributorReseller || '—',
     d.dr.product || '—',
     d.dr.stage || '—',
     d.dr.closeDate || '—',
     `${d.daysSinceActivity}d`,
-  ]);
-
-  const intro = `The registration${n === 1 ? '' : 's'} below ${n === 1 ? 'has' : 'have'} gone quiet. Please confirm ${n === 1 ? 'it is' : 'they are'} still active, or let me know to close ${n === 1 ? 'it' : 'them'}, by ${deadline}.`;
-
-  // Plain text — aligned monospace-friendly table.
-  const widths = cols.map((h, i) => Math.max(h.length, ...data.map(r => r[i].length)));
-  const line = (r: string[]) => r.map((v, i) => v.padEnd(widths[i])).join('  ');
-  const P: string[] = [`Hi ${ownerFirst},`, '', intro, '', line(cols), ...data.map(line), '', 'Thanks,', 'Michael Wells'];
-
-  // HTML — real table for Outlook paste.
-  const esc = escapeHtml;
-  const th = (t: string) => `<th style="text-align:left;padding:4px 12px 4px 0;border-bottom:1px solid #d1d5db;font-size:12px;color:#6b7280;white-space:nowrap">${esc(t)}</th>`;
-  const td = (t: string) => `<td style="padding:4px 12px 4px 0;border-bottom:1px solid #eee;font-size:13px;white-space:nowrap">${esc(t)}</td>`;
-  const H: string[] = [
-    `<div style="margin:0 0 10px">Hi ${esc(ownerFirst)},</div>`,
-    `<div style="margin:0 0 12px">${esc(intro)}</div>`,
-    `<table style="border-collapse:collapse"><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>`,
-    ...data.map(r => `<tr>${r.map(td).join('')}</tr>`),
-    `</tbody></table>`,
-    `<div style="margin:12px 0 0">Thanks,<br>Michael Wells</div>`,
   ];
+
+  const esc = escapeHtml;
+  const cellStyle = 'padding:4px 12px 4px 0;border-bottom:1px solid #eee;font-size:13px;white-space:nowrap';
+  const th = (t: string) => `<th style="text-align:left;padding:4px 12px 4px 0;border-bottom:1px solid #d1d5db;font-size:12px;color:#6b7280;white-space:nowrap">${esc(t)}</th>`;
+  const oppCell = (d: CleanupClassification) => {
+    const name = esc(d.dr.opportunityName || '(no name)');
+    const url = d.dr.opportunityId ? sfdcOpportunityUrl(d.dr.opportunityId) : undefined;
+    const inner = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${name}</a>` : name;
+    return `<td style="${cellStyle}">${inner}</td>`;
+  };
+
+  // Build a table (plain lines + html) for one deal list; the Opportunity cell links to Salesforce.
+  const buildTable = (deals: CleanupClassification[]) => {
+    const data = deals.map(cellsOf);
+    const widths = cols.map((h, i) => Math.max(h.length, ...data.map(r => r[i].length)));
+    const line = (r: string[]) => r.map((v, i) => v.padEnd(widths[i])).join('  ');
+    const plain = [line(cols), ...data.map(line)];
+    const htmlRows = deals.map((d, i) => {
+      const rest = data[i].slice(1).map(v => `<td style="${cellStyle}">${esc(v)}</td>`).join('');
+      return `<tr>${oppCell(d)}${rest}</tr>`;
+    });
+    const html = `<table style="border-collapse:collapse"><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>${htmlRows.join('')}</tbody></table>`;
+    return { plain, html };
+  };
+
+  const P: string[] = [`Hi ${ownerFirst},`, ''];
+  const H: string[] = [`<div style="margin:0 0 10px">Hi ${esc(ownerFirst)},</div>`];
+
+  if (nS) {
+    const intro = `The registration${nS === 1 ? '' : 's'} below ${nS === 1 ? 'has' : 'have'} gone quiet. Please confirm ${nS === 1 ? 'it is' : 'they are'} still active, or let me know to close ${nS === 1 ? 'it' : 'them'}, by ${deadline}.`;
+    const t = buildTable(standard);
+    P.push(intro, '', ...t.plain, '');
+    H.push(`<div style="margin:0 0 12px">${esc(intro)}</div>`, t.html);
+  }
+
+  if (nL) {
+    const lintro = `Long Range Opportunit${nL === 1 ? 'y' : 'ies'} (LRT) — flagged as viable but needing more time to work. No action needed; listed so ${nL === 1 ? 'it stays' : 'they stay'} out of the cleanup cadence.`;
+    const t = buildTable(lrt);
+    P.push('', 'Long Range (LRT)', lintro, '', ...t.plain, '');
+    H.push(`<div style="margin:16px 0 4px;font-weight:600">Long Range (LRT)</div><div style="margin:0 0 12px">${esc(lintro)}</div>`, t.html);
+  }
+
+  P.push('', 'Thanks,', 'Michael Wells');
+  H.push(`<div style="margin:12px 0 0">Thanks,<br>Michael Wells</div>`);
 
   return { subject, body: P.join('\n'), html: H.join('') };
 }
