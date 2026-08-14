@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { usePersistedState } from '@/hooks/use-persisted-state';
 import { useForecast } from '@/context/ForecastContext';
 import { buildChangelogIndex, flagDeal } from '@/lib/dealRisk';
-import { normalizeRepName } from '@/lib/repUtils';
+import { normalizeRepName, buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
 import { computeHudPipe } from '@/lib/forecastClassification';
 import {
   getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter,
@@ -100,12 +100,17 @@ export default function ForecastDashboard() {
   // Inactive reps are hidden ONLY from the rep breakdown table and the rep filter dropdown.
   // Every aggregate (HUD totals, goals, variance, coverage, etc.) uses the full unfiltered dataset.
   const inactiveSet = useMemo(() => new Set(reps.filter(r => r.isActive === false).map(r => r.name)), [reps]);
+  // Configured rep roster (the "team"), normalized once. Opportunities owned by
+  // someone off this roster are excluded at read time from every category rollup,
+  // rep-attainment row, coverage, and quota view below — nothing is persisted, so an
+  // owner change in a later import self-corrects.
+  const teamRepNameSet = useMemo(() => buildTeamRepNameSet(reps), [reps]);
   const allRepNames = useMemo(() => {
     const names = new Set<string>();
-    for (const o of opportunities) names.add(o.repName);
+    for (const o of opportunities) if (isTeamOwned(o, teamRepNameSet)) names.add(o.repName);
     for (const r of reps) names.add(r.name);
     return Array.from(names).sort();
-  }, [opportunities, reps]);
+  }, [opportunities, reps, teamRepNameSet]);
   const repNames = useMemo(() => allRepNames.filter(n => !inactiveSet.has(n)), [allRepNames, inactiveSet]);
 
   const activeRepNames = repNames;
@@ -125,22 +130,24 @@ export default function ForecastDashboard() {
 
   const listOpps = useMemo(() => {
     return opportunities.filter(o => {
+      if (!isTeamOwned(o, teamRepNameSet)) return false;
       if (!o.closeDate) return false;
       if (o.classification === 'lost') return false;
       if (o.stage.toLowerCase().trim() === 'closed lost') return false;
       if (!baseFilter(o)) return false;
       return inScope(o.closeDate);
     });
-  }, [opportunities, inScope, selectedRep]);
+  }, [opportunities, inScope, selectedRep, teamRepNameSet]);
 
   const lostOpps = useMemo(() => {
     return opportunities.filter(o => {
+      if (!isTeamOwned(o, teamRepNameSet)) return false;
       if (!o.closeDate) return false;
       if (o.classification !== 'lost' && o.stage.toLowerCase().trim() !== 'closed lost') return false;
       if (!baseFilter(o)) return false;
       return inScope(o.closeDate);
     });
-  }, [opportunities, inScope, selectedRep]);
+  }, [opportunities, inScope, selectedRep, teamRepNameSet]);
 
   // HUD totals (exclude omitted and rejected from totals)
   const hudOpps = useMemo(() => listOpps.filter(o => o.classification !== 'omitted' && o.classification !== 'rejected'), [listOpps]);
