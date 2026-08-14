@@ -201,12 +201,21 @@ export default function DealView({ selectedOppId, onSelect }: DealViewProps) {
                 <span className="inline-flex items-center gap-1.5">
                   {opp.repName || '(unassigned)'}
                   {!isTeamOwned(opp, teamRepNameSet) && (
-                    <span
-                      className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                      title="Owner is not on the configured rep roster — excluded from forecast rollups, coverage, and quota"
-                    >
-                      not on team
-                    </span>
+                    opp.transferredOutFrom ? (
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                        title={`Transferred out of the team from ${opp.transferredOutFrom}${opp.transferredOutAt ? ` on ${opp.transferredOutAt.slice(0, 10)}` : ''} — excluded from forecast rollups, coverage, and quota`}
+                      >
+                        transferred out
+                      </span>
+                    ) : (
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                        title="Owner is not on the configured rep roster — excluded from forecast rollups, coverage, and quota"
+                      >
+                        not on team
+                      </span>
+                    )
                   )}
                 </span>
               </HeaderField>

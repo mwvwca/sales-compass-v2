@@ -164,8 +164,9 @@ export default function DrPipeline() {
   const [showUploader, setShowUploader] = useState(false);
   const [pending, setPending] = useState<{
     records: RawDrRecord[]; asOfDate: string; fileName: string; errors: string[];
-    preview: { newCount: number; updatedCount: number; rejectedCount: number; withdrawnCount: number; convertedCount: number };
-    notOnTeamCount: number;
+    preview: { newCount: number; updatedCount: number; rejectedCount: number; withdrawnCount: number; convertedCount: number; droppedCount: number };
+    droppedNewOffTeam: number;
+    keptTransferredOut: number;
   } | null>(null);
 
   // Global filters: persisted for the session so switching tabs (e.g. to open
@@ -838,18 +839,27 @@ export default function DrPipeline() {
   const handleParsed = useCallback((records: RawDrRecord[], asOfDate: string, fileName: string, errors: string[]) => {
     const dryId = '__preview__';
     const dryAt = new Date().toISOString();
-    const { stats } = mergeDrBatch(dealRegistrations, records, opportunities, dryId, dryAt);
-    // Count incoming records whose owner is not on the configured rep roster, so an
-    // unknown owner is surfaced before the merge rather than silently absorbed.
-    const notOnTeamCount = records.filter(r => !isTeamOwned(r, teamRepNameSet)).length;
-    setPending({ records, asOfDate, fileName, errors, preview: stats, notOnTeamCount });
+    const { stats } = mergeDrBatch(dealRegistrations, records, opportunities, dryId, dryAt, teamRepNameSet);
+    // Split incoming off-team records for the preview: unseen ones will be DROPPED
+    // (never stored); already-seen ones are KEPT and flagged transferred-out.
+    const existingIds = new Set(dealRegistrations.map(d => d.opportunityId));
+    let droppedNewOffTeam = 0;
+    let keptTransferredOut = 0;
+    if (teamRepNameSet.size > 0) {
+      for (const r of records) {
+        if (isTeamOwned(r, teamRepNameSet)) continue;
+        if (existingIds.has(r.opportunityId)) keptTransferredOut++;
+        else droppedNewOffTeam++;
+      }
+    }
+    setPending({ records, asOfDate, fileName, errors, preview: stats, droppedNewOffTeam, keptTransferredOut });
   }, [dealRegistrations, opportunities, teamRepNameSet]);
 
   const confirmImport = () => {
     if (!pending) return;
     const importedAt = new Date().toISOString();
     const batchId = `batch_${Date.now()}`;
-    const { merged } = mergeDrBatch(dealRegistrations, pending.records, opportunities, batchId, importedAt);
+    const { merged, stats } = mergeDrBatch(dealRegistrations, pending.records, opportunities, batchId, importedAt, teamRepNameSet);
     importDrBatch(pending.records, {
       fileName: pending.fileName,
       asOfDate: pending.asOfDate,
@@ -858,9 +868,10 @@ export default function DrPipeline() {
     setPending(null); setShowUploader(false);
     const oppsWithSfId = opportunities.filter(o => o.salesforceId).length;
     const closedWonMatches = merged.filter(d => d.status === 'closed_won').length;
+    const droppedNote = stats.droppedCount > 0 ? ` · ${stats.droppedCount} off-team dropped` : '';
     toast({
       title: 'DR Import Complete',
-      description: `${pending.records.length} records parsed · ${closedWonMatches} closed won matched · ${oppsWithSfId}/${opportunities.length} pipeline opps have Salesforce ID`,
+      description: `${pending.records.length} records parsed · ${closedWonMatches} closed won matched${droppedNote} · ${oppsWithSfId}/${opportunities.length} pipeline opps have Salesforce ID`,
     });
   };
 
@@ -1169,9 +1180,14 @@ export default function DrPipeline() {
                   {pending.errors.length > 0 && (
                     <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">{pending.errors.length} parse warning(s)</p>
                   )}
-                  {pending.notOnTeamCount > 0 && (
+                  {pending.droppedNewOffTeam > 0 && (
                     <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
-                      {pending.notOnTeamCount} record{pending.notOnTeamCount === 1 ? '' : 's'} owned by someone not on the team — stored and shown in the detail list, but excluded from the funnel and pipeline value. Add the owner as a rep to include them.
+                      {pending.droppedNewOffTeam} new record{pending.droppedNewOffTeam === 1 ? '' : 's'} owned by someone not on the team and never seen before — these will be dropped, not stored. Add the owner as a rep first if they should be kept.
+                    </p>
+                  )}
+                  {pending.keptTransferredOut > 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                      {pending.keptTransferredOut} previously-owned record{pending.keptTransferredOut === 1 ? '' : 's'} now owned off-team — kept and updated so status stays current, flagged “transferred out”, and excluded from the funnel and pipeline value.
                     </p>
                   )}
                   <div className="flex gap-2">
@@ -2255,12 +2271,21 @@ export default function DrPipeline() {
                             <span className="inline-flex items-center gap-1">
                               {d.repName || '—'}
                               {!isTeamOwned(d, teamRepNameSet) && (
-                                <span
-                                  className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                                  title="Owner is not on the configured rep roster — excluded from the funnel and pipeline value"
-                                >
-                                  not on team
-                                </span>
+                                d.transferredOutFrom ? (
+                                  <span
+                                    className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                    title={`Transferred out of the team from ${d.transferredOutFrom}${d.transferredOutAt ? ` on ${d.transferredOutAt.slice(0, 10)}` : ''} — excluded from the funnel and pipeline value`}
+                                  >
+                                    transferred out
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                    title="Owner is not on the configured rep roster — excluded from the funnel and pipeline value"
+                                  >
+                                    not on team
+                                  </span>
+                                )
                               )}
                             </span>
                           </td>
@@ -2302,6 +2327,16 @@ export default function DrPipeline() {
                                     Stage: <span className="text-foreground">{matchOpp.stage}</span>
                                     {' · '}Amount: <span className="text-foreground">{fmtMoney(matchOpp.amount)}</span>
                                     {' · '}Close: <span className="text-foreground">{matchOpp.closeDate || '—'}</span>
+                                  </span>
+                                </div>
+                              )}
+                              {d.transferredOutFrom && (
+                                <div className="text-xs">
+                                  <span className="inline-block px-1.5 py-0.5 bg-amber-500/15 text-amber-700 dark:text-amber-400 rounded text-[10px] font-medium mr-2">Transferred out</span>
+                                  <span className="text-muted-foreground">
+                                    From <span className="text-foreground">{d.transferredOutFrom}</span>
+                                    {d.transferredOutAt && (<>{' · '}on <span className="text-foreground">{d.transferredOutAt.slice(0, 10)}</span></>)}
+                                    {' · '}now owned by <span className="text-foreground">{d.repName || '(unassigned)'}</span>
                                   </span>
                                 </div>
                               )}

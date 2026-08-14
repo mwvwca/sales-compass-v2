@@ -125,10 +125,13 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
     removed: items.filter(i => i.changeType === 'removed').length,
     selected: items.filter(i => i.selected).length,
     removedSelected: items.filter(i => i.changeType === 'removed' && i.selected).length,
-    // Incoming rows whose owner is not on the configured rep roster — imported and
-    // stored, but excluded from forecast rollups/coverage/quota until the owner is
-    // added as a rep. Surfaced so an unknown owner is never silent.
-    notOnTeam: items.filter(i => i.changeType !== 'removed' && !isTeamOwned(i.opportunity, teamRepNameSet)).length,
+    // Incoming NEW rows owned off the roster and never seen before — these are dropped
+    // on import (not stored), so an unknown owner is never silently absorbed. Gated on a
+    // non-empty roster: with no reps configured nothing is dropped, so show nothing.
+    droppedNewOffTeam: teamRepNameSet.size === 0 ? 0 : items.filter(i => i.changeType === 'new' && !isTeamOwned(i.opportunity, teamRepNameSet)).length,
+    // Incoming rows that already exist but are now owned off the roster — kept and
+    // updated so status stays current, flagged "transferred out", excluded from rollups.
+    transferredOut: teamRepNameSet.size === 0 ? 0 : items.filter(i => (i.changeType === 'updated' || i.changeType === 'unchanged') && !isTeamOwned(i.opportunity, teamRepNameSet)).length,
   }), [items, teamRepNameSet]);
 
   const [showUnchanged, setShowUnchanged] = useState(false);
@@ -233,12 +236,20 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
               <Trash2 size={12} /> {counts.removed} removed {showRemoved ? '(hide)' : '(show)'}
             </button>
           )}
-          {counts.notOnTeam > 0 && (
+          {counts.droppedNewOffTeam > 0 && (
             <span
               className="flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded"
-              title="Owner not on the configured rep roster — stored, but excluded from forecast rollups, coverage, and quota until added as a rep"
+              title="New and owned off the roster, never seen before — dropped on import, not stored. Add the owner as a rep first to keep them."
             >
-              <AlertTriangle size={12} /> {counts.notOnTeam} not on team
+              <AlertTriangle size={12} /> {counts.droppedNewOffTeam} off-team dropped
+            </span>
+          )}
+          {counts.transferredOut > 0 && (
+            <span
+              className="flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded"
+              title="Previously owned by a rep, now owned off the roster — kept and updated, flagged transferred out, excluded from forecast rollups, coverage, and quota"
+            >
+              <AlertTriangle size={12} /> {counts.transferredOut} transferred out
             </span>
           )}
           <button

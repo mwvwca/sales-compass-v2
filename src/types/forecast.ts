@@ -44,6 +44,11 @@ export interface Opportunity {
   managerNote?: string;
   /** Direct Salesforce link to the opportunity — from the Opportunity Name cell hyperlink, else derived from salesforceId. */
   opportunityUrl?: string;
+  /** Set when ownership moved from a rep on the roster to someone off it: the prior
+   *  team owner's name and the ISO date the change was first seen on import. Derived
+   *  at ingest from the ownership transition; cleared if ownership returns to the team. */
+  transferredOutFrom?: string;
+  transferredOutAt?: string;
 }
 
 export interface MonthlyRepCommit {
@@ -200,6 +205,12 @@ export interface DealRegistration {
   rejectedAt?: string;
   convertedAt?: string;
 
+  /** Set when ownership moved from a rep on the roster to someone off it: the prior
+   *  team owner's name and the ISO date the change was first seen on import. Derived
+   *  at ingest from the ownership transition; cleared if ownership returns to the team. */
+  transferredOutFrom?: string;
+  transferredOutAt?: string;
+
   // Cohort/cycle analytics (populated when matched to a closed won opp)
   closedWonDate?: string;
   cycleDays?: number;
@@ -222,6 +233,8 @@ export type RawDrRecord = Omit<
   | 'closedWonDate'
   | 'cycleDays'
   | 'inPeriodWon'
+  | 'transferredOutFrom'
+  | 'transferredOutAt'
 >;
 
 export interface DrBatch {
