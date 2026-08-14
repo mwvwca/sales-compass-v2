@@ -5,6 +5,7 @@ import {
   stripDrBatches,
   stripImports,
   compactForecastState,
+  snapshotReductionByOpp,
   HISTORY_PER_OPP_LIMIT,
 } from '@/lib/storageCompaction';
 import type { OpportunitySnapshot, ChangeLogEntry, DrBatch, ImportRecord } from '@/types/forecast';
@@ -58,6 +59,51 @@ describe('compactSnapshots', () => {
     ];
     const out = compactSnapshots(snaps);
     expect(out).toHaveLength(2); // same signature but different opps — both kept
+  });
+
+  it('collapses rename-only snapshots (name is NOT part of the signature)', () => {
+    // The confirmed case: 006Vy00001CHe1d renamed 4x on 2026-02-05 with no change to
+    // amount / closeDate / stage. All four collapse to one.
+    const id = '006Vy00001CHe1d';
+    const snaps = [
+      snap({ opportunityId: id, importDate: '2026-02-05T10:12:00Z', name: 'Cove Backup' }),
+      snap({ opportunityId: id, importDate: '2026-02-05T10:18:00Z', name: 'Cove Backup (SHI)' }),
+      snap({ opportunityId: id, importDate: '2026-02-05T10:24:00Z', name: 'Filtration Group / Cove' }),
+      snap({ opportunityId: id, importDate: '2026-02-05T10:28:00Z', name: 'Filtration Group / SHI / Cove Backup' }),
+    ];
+    const out = compactSnapshots(snaps);
+    expect(out).toHaveLength(1);
+    // the surviving snapshot still carries a name for display
+    expect(out[0].name).toBeTruthy();
+  });
+
+  it('still keeps a snapshot when amount / closeDate / stage / owner genuinely change', () => {
+    const id = 'A';
+    const snaps = [
+      snap({ opportunityId: id, importDate: '2026-01-01T00:00:00Z' }),
+      snap({ opportunityId: id, importDate: '2026-01-02T00:00:00Z', name: 'renamed', amount: 5000 }), // amount change → kept
+      snap({ opportunityId: id, importDate: '2026-01-03T00:00:00Z', name: 'renamed again', stage: 'Technical' }), // stage change → kept
+      snap({ opportunityId: id, importDate: '2026-01-04T00:00:00Z', repName: 'New Owner' }), // owner transfer → kept
+    ];
+    const out = compactSnapshots(snaps);
+    expect(out).toHaveLength(4);
+  });
+});
+
+describe('snapshotReductionByOpp', () => {
+  it('reports per-opp reductions sorted by largest, with total before/after', () => {
+    const before = [
+      snap({ opportunityId: 'X', importDate: '2026-02-05T10:12:00Z', name: 'n1' }),
+      snap({ opportunityId: 'X', importDate: '2026-02-05T10:18:00Z', name: 'n2' }),
+      snap({ opportunityId: 'X', importDate: '2026-02-05T10:24:00Z', name: 'n3' }),
+      snap({ opportunityId: 'Y', importDate: '2026-01-01T00:00:00Z', name: 'y' }),
+    ];
+    const after = compactSnapshots(before);
+    const red = snapshotReductionByOpp(before, after);
+    expect(red.totalBefore).toBe(4);
+    expect(red.totalAfter).toBe(2); // X collapses 3→1, Y stays 1
+    expect(red.byOpp[0]).toMatchObject({ opportunityId: 'X', before: 3, after: 1, removed: 2, name: 'n3' });
+    expect(red.byOpp.find(r => r.opportunityId === 'Y')).toBeUndefined(); // no reduction → omitted
   });
 });
 

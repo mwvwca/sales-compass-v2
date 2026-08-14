@@ -27,7 +27,7 @@ import { normalizeProbability } from '@/lib/probability';
 import { resolveImportedClassification, backfillReopenedClassifications } from '@/lib/forecastClassification';
 import { normalizeRepName, buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
 import { cleanupOffTeamDrs, cleanupOffTeamOpps } from '@/lib/offTeamCleanup';
-import { compactForecastState } from '@/lib/storageCompaction';
+import { compactForecastState, snapshotReductionByOpp } from '@/lib/storageCompaction';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
@@ -50,8 +50,11 @@ const STORAGE_KEYS = {
   migrations: 'forecast_migrations',
 };
 
-// Set once the one-time storage compaction has run on this device.
-const COMPACTION_FLAG = 'forecast_compaction_v1';
+// Set once the one-time storage compaction has run on this device. v2 re-runs the
+// compaction with the corrected snapshot signature (opportunity NAME no longer keys the
+// de-dup), so rename-only snapshots that v1 kept are collapsed and inflated per-record
+// snapshot history is healed. Must re-run past v1.
+const COMPACTION_FLAG = 'forecast_compaction_v2';
 // Set once the terminal-DR-status backfill has run on this device.
 const DR_TERMINAL_BACKFILL_FLAG = 'forecast_dr_terminal_backfill_v1';
 // Set once the reopened-classification heal has run on this device. v2 extends the heal to
@@ -422,6 +425,16 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     );
 
     console.log(`[storage] Compacted localStorage from ${report.beforeKB}KB to ${report.afterKB}KB`);
+
+    // Snapshot-count heal diagnostics (v2): total before/after, the confirmed rename case,
+    // and the ten records with the largest reduction. Surfaces the real numbers per device.
+    const red = snapshotReductionByOpp(state.snapshots, snapshots);
+    const CONFIRMED_ID = '006Vy00001CHe1d';
+    const confirmedBefore = state.snapshots.filter(s => s.opportunityId === CONFIRMED_ID).length;
+    const confirmedAfter = snapshots.filter(s => s.opportunityId === CONFIRMED_ID).length;
+    console.log(`[storage] Snapshot heal: total ${red.totalBefore} → ${red.totalAfter} (−${red.totalBefore - red.totalAfter}). ${CONFIRMED_ID}: ${confirmedBefore} → ${confirmedAfter}.`);
+    console.log('[storage] Top 10 snapshot-count reductions:', red.byOpp.slice(0, 10).map(r => `${r.opportunityId} (${r.name}): ${r.before}→${r.after} (−${r.removed})`));
+
     markMigrationRan(COMPACTION_FLAG);
 
     if (report.changed) {
