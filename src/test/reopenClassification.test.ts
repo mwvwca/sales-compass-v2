@@ -133,3 +133,44 @@ describe('backfillReopenedClassifications — heal already-stranded records', ()
     expect(twice.healed).toBe(0);
   });
 });
+
+describe('backfillReopenedClassifications — provenance guard (protects manual calls on re-run)', () => {
+  const manualClass = (opportunityId: string, newValue: string, importDate: string) => ({
+    opportunityId, field: 'classification', newValue, importDate, fileName: '(manual)',
+  });
+
+  it('does NOT heal a qualified open omitted deal a manager set manually', () => {
+    const o = opp({ salesforceId: '006Vy00000man01', classification: 'omitted', stage: 'Technical', probability: 0.5 });
+    const { healed, opportunities } = backfillReopenedClassifications(
+      [o], [], [manualClass('006Vy00000man01', 'omitted', '2026-08-01T00:00:00Z')],
+    );
+    expect(healed).toBe(0);
+    expect(opportunities[0].classification).toBe('omitted');
+  });
+
+  it('still heals a derived (non-manual) stranded omitted with no manual changelog', () => {
+    const o = opp({ salesforceId: '006Vy00000der01', classification: 'omitted', stage: 'Technical', probability: 0.5 });
+    const { healed } = backfillReopenedClassifications([o], [], []); // no manual provenance
+    expect(healed).toBe(1);
+  });
+
+  it('uses the LATEST manual entry — heals when the manager later moved off the protected value', () => {
+    // Manager set omitted, then manually moved it to commit; current is omitted again via import churn.
+    // Latest manual call was 'commit' (not the current 'omitted'), so the omit is not a live manual call → heal.
+    const o = opp({ salesforceId: '006Vy00000lat01', classification: 'omitted', stage: 'Technical', probability: 0.5 });
+    const { healed } = backfillReopenedClassifications([o], [], [
+      manualClass('006Vy00000lat01', 'omitted', '2026-07-01T00:00:00Z'),
+      manualClass('006Vy00000lat01', 'commit', '2026-08-01T00:00:00Z'),
+    ]);
+    expect(healed).toBe(1);
+  });
+
+  it('protects a manually-set closed_won on an open stage even with prior-close evidence', () => {
+    const o = opp({ salesforceId: '006Vy00000man02', classification: 'closed_won', stage: 'Commercial' });
+    const priorClosed = [{ opportunityId: '006Vy00000man02', stage: 'Closed Won' }];
+    const { healed } = backfillReopenedClassifications(
+      [o], priorClosed, [manualClass('006Vy00000man02', 'closed_won', '2026-08-05T00:00:00Z')],
+    );
+    expect(healed).toBe(0);
+  });
+});

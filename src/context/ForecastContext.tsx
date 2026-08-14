@@ -43,6 +43,11 @@ const STORAGE_KEYS = {
   drBatches: 'forecast_dr_batches',
   managerQuotas: 'forecast_manager_quotas',
   weeklySnapshots: 'forecast_weekly_snapshots',
+  // Record of which one-time migrations have run, keyed by flag → ISO timestamp.
+  // Persisted like every other slice (localStorage + Supabase app_state), so a
+  // migration that ran on one device is not re-run on another device for the same
+  // account. Legacy per-flag localStorage keys are still honored as a fallback.
+  migrations: 'forecast_migrations',
 };
 
 // Set once the one-time storage compaction has run on this device.
@@ -200,6 +205,8 @@ interface ForecastState {
   drBatches: DrBatch[];
   managerQuotas: ManagerQuota[];
   weeklySnapshots: WeeklySnapshot[];
+  /** flagKey → ISO timestamp of when a one-time migration ran (account-following). */
+  migrations: Record<string, string>;
 
 
   loading: boolean;
@@ -303,9 +310,27 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     drBatches: loadFromStorage<DrBatch[]>(STORAGE_KEYS.drBatches, []),
     managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
     weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
+    migrations: loadFromStorage<Record<string, string>>(STORAGE_KEYS.migrations, {}),
 
     loading: false,
   }));
+
+  // ---- One-time migration flag helpers (account-following via app_state) ----
+  // A migration has run if the cloud-synced `migrations` map records it, OR a legacy
+  // per-flag localStorage key is present (so devices that ran under the old code never
+  // re-run). Reading state.migrations here is safe: these are consulted only after
+  // hydration, by which point app_state has overlaid the flags.
+  const hasLegacyLocalFlag = (flagKey: string): boolean => {
+    try { return !!localStorage.getItem(flagKey); } catch { return false; }
+  };
+  const hasMigrationRun = (migrations: Record<string, string>, flagKey: string): boolean =>
+    !!migrations[flagKey] || hasLegacyLocalFlag(flagKey);
+  // Record a migration as run in the account-following map (→ app_state via the save
+  // effect) and mirror to the legacy localStorage key. Idempotent per flag.
+  const markMigrationRan = useCallback((flagKey: string) => {
+    setState(s => (s.migrations[flagKey] ? s : { ...s, migrations: { ...s.migrations, [flagKey]: new Date().toISOString() } }));
+    try { localStorage.setItem(flagKey, new Date().toISOString()); } catch { /* ignore */ }
+  }, []);
 
   // One-time cloud hydration: overlay Supabase app_state onto the localStorage
   // state (cloud wins per key when present). Never blocks — on error or after a
@@ -371,10 +396,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated || compactionRanRef.current) return;
     compactionRanRef.current = true;
-    try {
-      if (localStorage.getItem(COMPACTION_FLAG)) return;
-    } catch {
-      return; // storage blocked (e.g. iOS private mode) — nothing to compact
+    if (hasMigrationRun(state.migrations, COMPACTION_FLAG)) {
+      if (!state.migrations[COMPACTION_FLAG]) markMigrationRan(COMPACTION_FLAG); // seed app_state from legacy local flag
+      return;
     }
 
     const { snapshots, changelog, drBatches, imports, report } = compactForecastState(
@@ -398,7 +422,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     );
 
     console.log(`[storage] Compacted localStorage from ${report.beforeKB}KB to ${report.afterKB}KB`);
-    try { localStorage.setItem(COMPACTION_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+    markMigrationRan(COMPACTION_FLAG);
 
     if (report.changed) {
       setState(s => ({ ...s, snapshots, changelog, drBatches, imports }));
@@ -414,15 +438,14 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated || backfillRanRef.current) return;
     backfillRanRef.current = true;
-    try {
-      if (localStorage.getItem(DR_TERMINAL_BACKFILL_FLAG)) return;
-    } catch {
-      return; // storage blocked — skip
+    if (hasMigrationRun(state.migrations, DR_TERMINAL_BACKFILL_FLAG)) {
+      if (!state.migrations[DR_TERMINAL_BACKFILL_FLAG]) markMigrationRan(DR_TERMINAL_BACKFILL_FLAG); // seed app_state from legacy local flag
+      return;
     }
 
     const { drs, restored } = backfillDrTerminalStatuses(state.dealRegistrations);
     console.log(`[dr-backfill] Restored ${restored} terminal DR status${restored === 1 ? '' : 'es'} (won/lost/rejected) from stored evidence`);
-    try { localStorage.setItem(DR_TERMINAL_BACKFILL_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+    markMigrationRan(DR_TERMINAL_BACKFILL_FLAG);
 
     if (restored > 0) {
       setState(s => ({ ...s, dealRegistrations: drs }));
@@ -439,15 +462,17 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated || reopenBackfillRanRef.current) return;
     reopenBackfillRanRef.current = true;
-    try {
-      if (localStorage.getItem(REOPEN_CLASS_BACKFILL_FLAG)) return;
-    } catch {
-      return; // storage blocked — skip
+    if (hasMigrationRun(state.migrations, REOPEN_CLASS_BACKFILL_FLAG)) {
+      if (!state.migrations[REOPEN_CLASS_BACKFILL_FLAG]) markMigrationRan(REOPEN_CLASS_BACKFILL_FLAG); // seed app_state from legacy local flag
+      return;
     }
 
-    const { opportunities, healed } = backfillReopenedClassifications(state.opportunities, state.snapshots);
-    console.log(`[reopen-backfill] Healed ${healed} stranded classification${healed === 1 ? '' : 's'} → unclassified (open stage; reopened lost/closed_won w/ prior-close evidence, or omitted at/above qualification)`);
-    try { localStorage.setItem(REOPEN_CLASS_BACKFILL_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+    // Pass the changelog so the heal skips deals whose current classification is a
+    // manager's own latest manual call — see backfillReopenedClassifications' provenance
+    // guard. Critical when this re-runs once on a fresh device for a legacy account.
+    const { opportunities, healed } = backfillReopenedClassifications(state.opportunities, state.snapshots, state.changelog);
+    console.log(`[reopen-backfill] Healed ${healed} stranded classification${healed === 1 ? '' : 's'} → unclassified (open stage; reopened lost/closed_won w/ prior-close evidence, or omitted at/above qualification; manual classifications preserved)`);
+    markMigrationRan(REOPEN_CLASS_BACKFILL_FLAG);
 
     if (healed > 0) {
       setState(s => ({ ...s, opportunities }));
@@ -464,17 +489,16 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated || offteamCleanupRanRef.current) return;
     offteamCleanupRanRef.current = true;
-    try {
-      if (localStorage.getItem(OFFTEAM_CLEANUP_FLAG)) return;
-    } catch {
-      return; // storage blocked — skip
+    if (hasMigrationRun(state.migrations, OFFTEAM_CLEANUP_FLAG)) {
+      if (!state.migrations[OFFTEAM_CLEANUP_FLAG]) markMigrationRan(OFFTEAM_CLEANUP_FLAG); // seed app_state from legacy local flag
+      return;
     }
-    if (state.reps.length === 0) return; // no roster yet — retry next session
+    if (state.reps.length === 0) return; // no roster yet — retry next session (flag not set)
 
     const drRes = cleanupOffTeamDrs(state.dealRegistrations, state.drBatches, state.reps);
     const oppRes = cleanupOffTeamOpps(state.opportunities, state.reps);
     console.log(`[offteam-cleanup] Deleted ${drRes.deleted} DR + ${oppRes.deleted} opp record(s) first seen on the 8/10 import owned off-team; retained ${drRes.retained} DR + ${oppRes.retained} opp off-team record(s) seen earlier.`);
-    try { localStorage.setItem(OFFTEAM_CLEANUP_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+    markMigrationRan(OFFTEAM_CLEANUP_FLAG);
 
     const totalDeleted = drRes.deleted + oppRes.deleted;
     if (totalDeleted > 0) {
@@ -507,6 +531,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.drBatches, state.drBatches);
     saveToStorage(STORAGE_KEYS.managerQuotas, state.managerQuotas);
     saveToStorage(STORAGE_KEYS.weeklySnapshots, state.weeklySnapshots);
+    saveToStorage(STORAGE_KEYS.migrations, state.migrations);
 
 
     const sizeKB = getStorageSizeKB();
@@ -555,6 +580,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.drBatches,
     state.managerQuotas,
     state.weeklySnapshots,
+    state.migrations,
   ]);
 
   const addRep = useCallback((rep: Rep) => {

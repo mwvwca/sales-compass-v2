@@ -113,11 +113,24 @@ export function isOpenStage(stage: string | undefined): boolean {
  *
  * Resets qualifying deals to 'unclassified' and drops stale Closed-Lost metadata, so they
  * re-enter open pipeline and the next import reclassifies them from fresh forecast evidence
- * (e.g. a Best Case + Upside deal → 'upside'). Pure and idempotent — a second pass heals 0.
+ * (e.g. a Best Case + Upside deal → 'upside'). Pure, and idempotent on unchanged input — a
+ * second pass heals 0.
+ *
+ * PROVENANCE GUARD. This is the one flag-gated backfill that rewrites a manager-editable
+ * field (classification). Its migration flag now lives in the cloud (app_state), but a fresh
+ * device on a legacy account — where the first run only left a localStorage flag — can still
+ * re-run it once against already-migrated cloud data. In that window a manager may have
+ * DELIBERATELY set an open, qualified deal to 'omitted' (or manually to closed_won/lost);
+ * without provenance the heal would silently undo that. Classification changelog entries are
+ * only ever written by the manual classify action (fileName '(manual)'; imports never log
+ * classification), so `changelog` is a reliable, cloud-synced record of manual calls. A deal
+ * whose CURRENT classification equals its latest manual classification entry is a live manager
+ * decision and is left untouched.
  */
 export function backfillReopenedClassifications(
   opps: Opportunity[],
   snapshots: { opportunityId: string; stage: string }[],
+  changelog: { opportunityId: string; field: string; newValue: string; importDate: string; fileName: string }[] = [],
 ): { opportunities: Opportunity[]; healed: number } {
   // Opportunity ids (by history key = salesforceId) that were Closed Won/Lost in some prior
   // snapshot — the deal genuinely settled and later reopened.
@@ -125,10 +138,27 @@ export function backfillReopenedClassifications(
   for (const s of snapshots) {
     if (isClosedWonLostStage(s.stage)) everClosed.add(s.opportunityId);
   }
+
+  // Latest MANUAL classification value per history key. Every classification changelog entry
+  // is manual by construction, but the fileName check keeps the intent explicit and safe if
+  // that ever changes.
+  const latestManualClass = new Map<string, string>();
+  const latestManualAt = new Map<string, string>();
+  for (const e of changelog) {
+    if (e.field !== 'classification' || e.fileName !== '(manual)') continue;
+    const prevAt = latestManualAt.get(e.opportunityId);
+    if (!prevAt || e.importDate.localeCompare(prevAt) >= 0) {
+      latestManualAt.set(e.opportunityId, e.importDate);
+      latestManualClass.set(e.opportunityId, e.newValue);
+    }
+  }
+
   let healed = 0;
   const next = opps.map(o => {
     if (!isOpenStage(o.stage)) return o;
     const histKey = o.salesforceId ?? o.id;
+    // Provenance guard: current classification is the manager's own latest manual call — leave it.
+    if (latestManualClass.get(histKey) === o.classification) return o;
     const reopenedTerminal =
       (o.classification === 'lost' || o.classification === 'closed_won') && everClosed.has(histKey);
     const strandedOmitted =
