@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForecast } from '@/context/ForecastContext';
-import type { Opportunity, OpportunitySnapshot, Quarter } from '@/types/forecast';
+import type { Opportunity, Quarter } from '@/types/forecast';
 import { getQuarter, getCurrentQuarter, getQuarterMonths } from '@/types/forecast';
 import { getStagePercentage } from '@/lib/utils';
+import { STALE_DAYS } from '@/lib/dealRisk';
+import { stageHistoryFor, daysSinceStageChange, compareStageStaleSignal } from '@/lib/stageStaleness';
 import { AlertTriangle, TrendingUp, TrendingDown, Target, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -35,8 +37,11 @@ interface PipelineRec {
   message: string;
 }
 
+// Logged once per page load so the stage-staleness old-vs-new comparison prints without UI noise.
+let stageSignalLogged = false;
+
 export default function SalesIntelligence({ opportunities, selectedQuarter, selectedRep }: Props) {
-  const { snapshots } = useForecast();
+  const { snapshots, opportunities: allBookOpps } = useForecast();
   const [open, setOpen] = useState(false);
 
   const currentQuarter = getCurrentQuarter();
@@ -73,10 +78,8 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
       }
 
       // 2. Close date slipping (check snapshots)
-      const history = snapshots
-        .filter(s => s.opportunityId === (opp.salesforceId || opp.id) || s.opportunityId === opp.id)
-        .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
-      
+      const history = stageHistoryFor(opp, snapshots);
+
       const dateSlips = history.reduce((count, snap, i) => {
         if (i === 0) return 0;
         const prev = new Date(history[i - 1].closeDate);
@@ -104,13 +107,12 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
         reasons.push(`Only ${stagePct}% stage with ${daysToClose} days to close`);
       }
 
-      // 5. Stage hasn't advanced across imports
-      if (history.length >= 3) {
-        const stages = history.map(h => h.stage);
-        const uniqueStages = new Set(stages);
-        if (uniqueStages.size === 1) {
-          reasons.push(`Stage unchanged across ${history.length} imports`);
-        }
+      // 5. Stage stalled — days since the stage last changed (falls back to first-seen when
+      // it never changed). A direct time measure, not a snapshot/import count; uses the same
+      // 30-day staleness standard as the rest of the app (dealRisk STALE_DAYS).
+      const stageStaleDays = daysSinceStageChange(history, opp, now);
+      if (stageStaleDays !== null && stageStaleDays >= STALE_DAYS) {
+        reasons.push(`Stage unchanged for ${stageStaleDays} days`);
       }
 
       if (reasons.length > 0) {
@@ -124,6 +126,19 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
       return order[a.level] - order[b.level];
     });
   }, [allOpps, snapshots]);
+
+  // One-time visibility into the stage-staleness signal change: how many open deals fire the
+  // retired snapshot-count proxy vs the new days-based rule, and their overlap. Logged once per
+  // page load so the real per-account numbers surface without recurring UI noise.
+  useEffect(() => {
+    if (stageSignalLogged || snapshots.length === 0) return;
+    // Report across the WHOLE book of open deals (not just the dashboard's current scope).
+    const openOpps = allBookOpps.filter(o => !isResolved(o));
+    const c = compareStageStaleSignal(openOpps, snapshots, STALE_DAYS, new Date());
+    console.log(`[risk] Stage-stalled signal (whole book) — old proxy fires ${c.oldFire.length}, new (${STALE_DAYS}d) fires ${c.newFire.length}, overlap ${c.overlap} (old-only ${c.oldOnly}, new-only ${c.newOnly})`);
+    stageSignalLogged = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allBookOpps, snapshots]);
 
   // ─── Win/Loss Pattern Analysis ───
   const winLossStats = useMemo((): WinLossStat[] => {

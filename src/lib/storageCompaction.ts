@@ -63,7 +63,14 @@ export function stripImports(imports: ImportRecord[]): ImportRecord[] {
 }
 
 function snapshotSignature(s: OpportunitySnapshot): string {
-  return [s.amount, s.closeDate, s.stage, s.classification, s.name, s.repName].join('|');
+  // Fields whose change makes a snapshot worth keeping. The opportunity NAME is
+  // deliberately excluded: a rename is cosmetic and does not represent a real change
+  // to the deal, so including it caused rename-only snapshots to survive de-dup and
+  // inflate per-record snapshot counts (which feed the import-count staleness proxy).
+  // amount / closeDate / stage / classification (forecast category) / repName (owner —
+  // an ownership transfer is material) all stay: each is a genuine change. The snapshot
+  // object still stores `name`; this only governs what counts as a change for de-dup.
+  return [s.amount, s.closeDate, s.stage, s.classification, s.repName].join('|');
 }
 
 /**
@@ -135,6 +142,45 @@ export interface CompactionReport {
   changed: boolean;
   removedSnapshots: number;
   removedChangelog: number;
+}
+
+export interface OppSnapshotReduction {
+  opportunityId: string;
+  name: string;
+  before: number;
+  after: number;
+  removed: number;
+}
+
+/**
+ * Per-opportunity snapshot-count reduction between a before and after snapshot list —
+ * for reporting how much rename-inflated history a compaction healed. Sorted by the
+ * largest reduction first. `name` is the most recent snapshot name for readability.
+ */
+export function snapshotReductionByOpp(
+  before: OpportunitySnapshot[],
+  after: OpportunitySnapshot[],
+): { totalBefore: number; totalAfter: number; byOpp: OppSnapshotReduction[] } {
+  const beforeCount = new Map<string, number>();
+  const latestName = new Map<string, { name: string; importDate: string }>();
+  for (const s of before) {
+    beforeCount.set(s.opportunityId, (beforeCount.get(s.opportunityId) ?? 0) + 1);
+    const cur = latestName.get(s.opportunityId);
+    if (!cur || s.importDate.localeCompare(cur.importDate) >= 0) {
+      latestName.set(s.opportunityId, { name: s.name, importDate: s.importDate });
+    }
+  }
+  const afterCount = new Map<string, number>();
+  for (const s of after) afterCount.set(s.opportunityId, (afterCount.get(s.opportunityId) ?? 0) + 1);
+
+  const byOpp: OppSnapshotReduction[] = [];
+  for (const [opportunityId, b] of beforeCount) {
+    const a = afterCount.get(opportunityId) ?? 0;
+    if (b - a <= 0) continue;
+    byOpp.push({ opportunityId, name: latestName.get(opportunityId)?.name ?? '', before: b, after: a, removed: b - a });
+  }
+  byOpp.sort((x, y) => y.removed - x.removed || y.before - x.before);
+  return { totalBefore: before.length, totalAfter: after.length, byOpp };
 }
 
 /** Slices this compaction touches; other persisted slices pass through untouched. */
