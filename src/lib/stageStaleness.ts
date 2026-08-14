@@ -53,6 +53,27 @@ export function daysSinceStageChange(
   return Math.floor((now.getTime() - t) / 86_400_000);
 }
 
+/** ISO date of the opportunity's most recent snapshot, or undefined when it has none. */
+export function lastSnapshotISO(history: Pick<OpportunitySnapshot, 'importDate'>[]): string | undefined {
+  return history.length ? history[history.length - 1].importDate : undefined;
+}
+
+/**
+ * Schema-free approximation of "absent from the most recent import": returns the date of the
+ * opportunity's latest snapshot when that snapshot predates the latest import date, else
+ * undefined. Every imported opportunity is snapshotted at import time, so a latest snapshot
+ * older than the latest import means the deal was not in that import. This is an interim
+ * stand-in for a real `consecutiveMissedImports >= 1` absence flag: once that lands, swap it in.
+ */
+export function absentFromLatestImport(
+  history: Pick<OpportunitySnapshot, 'importDate'>[],
+  latestImportDate: string | undefined,
+): string | undefined {
+  const last = lastSnapshotISO(history);
+  if (!last || !latestImportDate) return undefined;
+  return last < latestImportDate ? last : undefined;
+}
+
 /** The retired proxy rule, kept only to report old-vs-new coverage. */
 export function oldStageStuckFires(history: StageSnap[]): boolean {
   if (history.length < 3) return false;
@@ -65,27 +86,40 @@ export interface StageSignalComparison {
   overlap: number;
   oldOnly: number;
   newOnly: number;
+  /** Open deals whose latest snapshot predates the latest import (absence proxy). */
+  absent: number;
+  /** Of newFire, how many are absent — relabeled "not seen since" rather than stalled. */
+  relabeled: number;
 }
 
 /**
  * Compare which open opportunities fire the old proxy vs the new days-based rule on the
- * same (already-healed) snapshot data. `openOpps` should already exclude resolved deals.
+ * same (already-healed) snapshot data, and how many the absence proxy would relabel.
+ * `openOpps` should already exclude resolved AND non-team-owned deals. `latestImportDate`
+ * (the most recent opportunity-import date) enables the absence approximation.
  */
 export function compareStageStaleSignal(
   openOpps: Opportunity[],
   snapshots: OpportunitySnapshot[],
   staleDays: number,
   now: Date,
+  latestImportDate?: string,
 ): StageSignalComparison {
   const oldFire: string[] = [];
   const newFire: string[] = [];
+  let absent = 0;
+  let relabeled = 0;
   for (const opp of openOpps) {
     const history = stageHistoryFor(opp, snapshots);
     if (oldStageStuckFires(history)) oldFire.push(opp.id);
     const days = daysSinceStageChange(history, opp, now);
-    if (days !== null && days >= staleDays) newFire.push(opp.id);
+    const fires = days !== null && days >= staleDays;
+    if (fires) newFire.push(opp.id);
+    const isAbsent = !!absentFromLatestImport(history, latestImportDate);
+    if (isAbsent) absent++;
+    if (fires && isAbsent) relabeled++;
   }
   const newSet = new Set(newFire);
   const overlap = oldFire.filter(id => newSet.has(id)).length;
-  return { oldFire, newFire, overlap, oldOnly: oldFire.length - overlap, newOnly: newFire.length - overlap };
+  return { oldFire, newFire, overlap, oldOnly: oldFire.length - overlap, newOnly: newFire.length - overlap, absent, relabeled };
 }
