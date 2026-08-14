@@ -15,6 +15,7 @@ import { sfdcOpportunityUrl, sfdcAccountUrl } from '@/lib/sfdc';
 import { openOpportunity } from '@/lib/openOpportunity';
 import { computeDealQualityCore, MIN_RESOLVED } from '@/lib/dealQuality';
 import { STATUS_CHIPS, statusBadgeCls, statusLabel } from '@/lib/drStatus';
+import { buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
 import { useSortableRows, SortHeader } from '@/components/sortableTable';
 
 
@@ -164,6 +165,7 @@ export default function DrPipeline() {
   const [pending, setPending] = useState<{
     records: RawDrRecord[]; asOfDate: string; fileName: string; errors: string[];
     preview: { newCount: number; updatedCount: number; rejectedCount: number; withdrawnCount: number; convertedCount: number };
+    notOnTeamCount: number;
   } | null>(null);
 
   // Global filters: persisted for the session so switching tabs (e.g. to open
@@ -199,6 +201,13 @@ export default function DrPipeline() {
     () => new Set(reps.filter(r => r.isActive === false).map(r => r.name)),
     [reps]
   );
+
+  // The configured rep roster (the "team"), normalized once. A record whose CURRENT
+  // owner is off this roster (e.g. the 8/10 import carried in records owned by someone
+  // not on the team) is excluded from the funnel and every dollar rollup below via
+  // isTeamOwned — derived at read time, nothing stamped on the record, so an owner
+  // change in a later import self-corrects.
+  const teamRepNameSet = useMemo(() => buildTeamRepNameSet(reps), [reps]);
 
   const allCams = useMemo(() => {
     const set = new Set<string>();
@@ -289,12 +298,13 @@ export default function DrPipeline() {
   // Section-B "scope" ignores statuses (so all rows show) but applies cam/rep/period
   const scopeNoStatus = useMemo(() => {
     return dealRegistrations.filter(d => {
+      if (!isTeamOwned(d, teamRepNameSet)) return false;
       if (camFilter !== 'all' && (d.channelAccountManager || '(none)') !== camFilter) return false;
       if (repFilter !== 'all' && d.repName !== repFilter) return false;
       if (!inRange(d.createdDate, periodRange)) return false;
       return true;
     });
-  }, [dealRegistrations, camFilter, repFilter, periodRange]);
+  }, [dealRegistrations, camFilter, repFilter, periodRange, teamRepNameSet]);
 
   const oppMap = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
 
@@ -670,17 +680,43 @@ export default function DrPipeline() {
   }, [funnelMonthOffset]);
   const funnelMonthLabel = funnelMonthDate.toLocaleString('default', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-  // Funnel uses period filter, not month override unless user navigates
+  // Funnel uses period filter, not month override unless user navigates. The funnel
+  // is a team-only view: non-team-owned DRs never count toward stage rungs. `filtered`
+  // (the detail list) intentionally still contains them — labeled, not dropped.
   const funnelDeals = useMemo(() => {
-    if (funnelMonthOffset === 0) return filtered;
+    if (funnelMonthOffset === 0) return filtered.filter(d => isTeamOwned(d, teamRepNameSet));
     const start = funnelMonthDate;
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1) - 1);
     return dealRegistrations.filter(d => {
+      if (!isTeamOwned(d, teamRepNameSet)) return false;
       if (!d.createdDate) return false;
       const t = new Date(d.createdDate).getTime();
       return t >= start.getTime() && t <= end.getTime();
     });
-  }, [filtered, funnelMonthOffset, funnelMonthDate, dealRegistrations]);
+  }, [filtered, funnelMonthOffset, funnelMonthDate, dealRegistrations, teamRepNameSet]);
+
+  // What the funnel drops for being off-team, split open vs terminal, in the SAME
+  // scope the funnel uses (`filtered`). Surfaced next to the funnel so off-team dollars
+  // are never silently removed. Terminal = won/lost/rejected/withdrawn.
+  const funnelExclusion = useMemo(() => {
+    const TERMINAL = new Set<DrStatus>(['closed_won', 'closed_lost', 'rejected', 'withdrawn']);
+    const scope = funnelMonthOffset === 0
+      ? filtered
+      : dealRegistrations.filter(d => {
+          if (!d.createdDate) return false;
+          const t = new Date(d.createdDate).getTime();
+          return t >= funnelMonthDate.getTime()
+            && t <= new Date(Date.UTC(funnelMonthDate.getUTCFullYear(), funnelMonthDate.getUTCMonth() + 1, 1) - 1).getTime();
+        });
+    let openCount = 0, openAmt = 0, termCount = 0, termAmt = 0;
+    for (const d of scope) {
+      if (isTeamOwned(d, teamRepNameSet)) continue;
+      const amt = d.amount || 0;
+      if (TERMINAL.has(d.status)) { termCount++; termAmt += amt; }
+      else { openCount++; openAmt += amt; }
+    }
+    return { openCount, openAmt, termCount, termAmt, total: openCount + termCount };
+  }, [filtered, dealRegistrations, funnelMonthOffset, funnelMonthDate, teamRepNameSet]);
 
   const stageRows = useMemo(() => {
     const total = funnelDeals.length || 1;
@@ -803,8 +839,11 @@ export default function DrPipeline() {
     const dryId = '__preview__';
     const dryAt = new Date().toISOString();
     const { stats } = mergeDrBatch(dealRegistrations, records, opportunities, dryId, dryAt);
-    setPending({ records, asOfDate, fileName, errors, preview: stats });
-  }, [dealRegistrations, opportunities]);
+    // Count incoming records whose owner is not on the configured rep roster, so an
+    // unknown owner is surfaced before the merge rather than silently absorbed.
+    const notOnTeamCount = records.filter(r => !isTeamOwned(r, teamRepNameSet)).length;
+    setPending({ records, asOfDate, fileName, errors, preview: stats, notOnTeamCount });
+  }, [dealRegistrations, opportunities, teamRepNameSet]);
 
   const confirmImport = () => {
     if (!pending) return;
@@ -1038,11 +1077,11 @@ export default function DrPipeline() {
   // Headline defensible pipeline value
   const defensiblePipelineValue = useMemo(() => {
     return filtered
-      .filter(d => currentlySql(d) && (d.amount ?? 0) > 0 &&
+      .filter(d => isTeamOwned(d, teamRepNameSet) && currentlySql(d) && (d.amount ?? 0) > 0 &&
         d.status !== 'closed_won' && d.status !== 'closed_lost' &&
         d.status !== 'rejected' && d.status !== 'withdrawn')
       .reduce((s, d) => s + (d.amount || 0), 0);
-  }, [filtered]);
+  }, [filtered, teamRepNameSet]);
 
   // No-reseller hygiene list
   const noResellerRows = useMemo(() => {
@@ -1129,6 +1168,11 @@ export default function DrPipeline() {
                   </div>
                   {pending.errors.length > 0 && (
                     <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">{pending.errors.length} parse warning(s)</p>
+                  )}
+                  {pending.notOnTeamCount > 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                      {pending.notOnTeamCount} record{pending.notOnTeamCount === 1 ? '' : 's'} owned by someone not on the team — stored and shown in the detail list, but excluded from the funnel and pipeline value. Add the owner as a rep to include them.
+                    </p>
                   )}
                   <div className="flex gap-2">
                     <Button size="sm" onClick={confirmImport}>Confirm merge</Button>
@@ -2059,6 +2103,14 @@ export default function DrPipeline() {
                     </div>
                   </Fragment>
                 ))}
+                {funnelExclusion.total > 0 && (
+                  <p className="pt-2 mt-1 border-t border-border text-[11px] text-muted-foreground">
+                    Excluded {funnelExclusion.total} not-on-team registration{funnelExclusion.total === 1 ? '' : 's'}:{' '}
+                    <span className="text-amber-600 dark:text-amber-400">{funnelExclusion.openCount} open ({fmtDollar(funnelExclusion.openAmt)})</span>
+                    {' · '}
+                    <span>{funnelExclusion.termCount} terminal ({fmtDollar(funnelExclusion.termAmt)})</span>
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2199,7 +2251,19 @@ export default function DrPipeline() {
                               </a>
                             </span>
                           </td>
-                          <td className="px-2 py-1.5">{d.repName}</td>
+                          <td className="px-2 py-1.5">
+                            <span className="inline-flex items-center gap-1">
+                              {d.repName || '—'}
+                              {!isTeamOwned(d, teamRepNameSet) && (
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                  title="Owner is not on the configured rep roster — excluded from the funnel and pipeline value"
+                                >
+                                  not on team
+                                </span>
+                              )}
+                            </span>
+                          </td>
                           <td className="px-2 py-1.5">{d.channelAccountManager || '—'}</td>
                           <td className="px-2 py-1.5">{d.stage}</td>
                           <td className={`text-right px-2 py-1.5 ${colorAge(d.ageDays)}`}>{d.ageDays}d</td>

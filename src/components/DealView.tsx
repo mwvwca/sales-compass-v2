@@ -7,6 +7,7 @@ import { sfdcOpportunityUrl } from '@/lib/sfdc';
 import { buildChangelogIndex, flagDeal } from '@/lib/dealRisk';
 import { normSfId } from '@/lib/drMerge';
 import { statusBadgeCls, statusLabel } from '@/lib/drStatus';
+import { buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
 import { qualityFor, type NextStepCache } from '@/lib/nextStepClassify';
 import { loadNextStepCache } from '@/lib/nextStepCacheApi';
 import { loadCurrentSignalsByOpp, loadTranscripts } from '@/lib/transcriptsApi';
@@ -56,7 +57,8 @@ function SectionCard({ title, action, children }: { title: string; action?: Reac
 }
 
 export default function DealView({ selectedOppId, onSelect }: DealViewProps) {
-  const { opportunities, changelog, dealRegistrations } = useForecast();
+  const { opportunities, changelog, dealRegistrations, reps } = useForecast();
+  const teamRepNameSet = useMemo(() => buildTeamRepNameSet(reps), [reps]);
   const [query, setQuery] = useState('');
   const [cache, setCache] = useState<NextStepCache>({});
   const [signalsByOpp, setSignalsByOpp] = useState<Record<string, TranscriptSignals>>({});
@@ -195,7 +197,19 @@ export default function DealView({ selectedOppId, onSelect }: DealViewProps) {
               {opp.accountName && <p className="text-xs text-muted-foreground">{opp.accountName}</p>}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <HeaderField label="Owner">{opp.repName || '(unassigned)'}</HeaderField>
+              <HeaderField label="Owner">
+                <span className="inline-flex items-center gap-1.5">
+                  {opp.repName || '(unassigned)'}
+                  {!isTeamOwned(opp, teamRepNameSet) && (
+                    <span
+                      className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                      title="Owner is not on the configured rep roster — excluded from forecast rollups, coverage, and quota"
+                    >
+                      not on team
+                    </span>
+                  )}
+                </span>
+              </HeaderField>
               <HeaderField label="Amount">{fmt(opp.amount || 0)}</HeaderField>
               <HeaderField label="Stage">{formatStageWithPct(opp.stage)}</HeaderField>
               <HeaderField label="Probability">{Math.round((opp.probability ?? 0) * 100)}%</HeaderField>

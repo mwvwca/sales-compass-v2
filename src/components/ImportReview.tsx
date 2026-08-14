@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useForecast } from '@/context/ForecastContext';
 import type { Opportunity } from '@/types/forecast';
 import { resolveImportedClassification } from '@/lib/forecastClassification';
-import { normalizeRepName } from '@/lib/repUtils';
+import { normalizeRepName, buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
 import { Check, Plus, RefreshCw, Minus, Trash2, AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -41,7 +41,8 @@ interface ReviewItem {
 }
 
 export default function ImportReview({ incoming, fileName, onDone, onCancel, detectedHeaders = [], columnMapping = {} }: Props) {
-  const { opportunities, importOpportunities, archiveToGraveyard } = useForecast();
+  const { opportunities, importOpportunities, archiveToGraveyard, reps } = useForecast();
+  const teamRepNameSet = useMemo(() => buildTeamRepNameSet(reps), [reps]);
 
   const existingById = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
   const existingBySfId = useMemo(
@@ -124,7 +125,11 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
     removed: items.filter(i => i.changeType === 'removed').length,
     selected: items.filter(i => i.selected).length,
     removedSelected: items.filter(i => i.changeType === 'removed' && i.selected).length,
-  }), [items]);
+    // Incoming rows whose owner is not on the configured rep roster — imported and
+    // stored, but excluded from forecast rollups/coverage/quota until the owner is
+    // added as a rep. Surfaced so an unknown owner is never silent.
+    notOnTeam: items.filter(i => i.changeType !== 'removed' && !isTeamOwned(i.opportunity, teamRepNameSet)).length,
+  }), [items, teamRepNameSet]);
 
   const [showUnchanged, setShowUnchanged] = useState(false);
   const [showRemoved, setShowRemoved] = useState(true);
@@ -227,6 +232,14 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
             >
               <Trash2 size={12} /> {counts.removed} removed {showRemoved ? '(hide)' : '(show)'}
             </button>
+          )}
+          {counts.notOnTeam > 0 && (
+            <span
+              className="flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded"
+              title="Owner not on the configured rep roster — stored, but excluded from forecast rollups, coverage, and quota until added as a rep"
+            >
+              <AlertTriangle size={12} /> {counts.notOnTeam} not on team
+            </span>
           )}
           <button
             onClick={handleToggleAllUnmatched}

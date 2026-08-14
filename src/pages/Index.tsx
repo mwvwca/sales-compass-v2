@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import ForecastDashboard from '@/components/ForecastDashboard';
 import RepGoalSetup from '@/components/RepGoalSetup';
 import ImportSheet from '@/components/ImportSheet';
@@ -11,6 +11,7 @@ import DrPipeline from '@/components/DrPipeline';
 import DrCleanupPlanSection from '@/components/DrCleanupPlan';
 import InspectionPrep from '@/components/InspectionPrep';
 import { useForecast } from '@/context/ForecastContext';
+import { buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
 import SlipReport from '@/components/SlipReport';
 import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBriefing';
 import RepScorecard from '@/components/RepScorecard';
@@ -339,14 +340,22 @@ const Index = () => {
 };
 
 const DrCleanupTab = () => {
-  const { dealRegistrations } = useForecast();
+  const { dealRegistrations, reps } = useForecast();
+  // Cleanup emails only address the team's own registrations. Records whose CURRENT
+  // owner is off the configured rep roster are excluded here (derived at read time),
+  // so no partner/owner ever gets a cleanup email about an off-team registration.
+  const teamRepNameSet = useMemo(() => buildTeamRepNameSet(reps), [reps]);
+  const teamDealRegistrations = useMemo(
+    () => dealRegistrations.filter(d => isTeamOwned(d, teamRepNameSet)),
+    [dealRegistrations, teamRepNameSet],
+  );
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-sm font-semibold">Pipeline Cleanup</h2>
         <p className="text-xs text-muted-foreground mt-0.5">Anchor-aware partner outreach cadence for stale and padded deal registrations.</p>
       </div>
-      <DrCleanupPlanSection dealRegistrations={dealRegistrations} />
+      <DrCleanupPlanSection dealRegistrations={teamDealRegistrations} />
     </div>
   );
 };
