@@ -5,6 +5,7 @@ import {
   oldStageStuckFires,
   compareStageStaleSignal,
   stageHistoryFor,
+  absentFromLatestImport,
 } from '@/lib/stageStaleness';
 import type { Opportunity, OpportunitySnapshot } from '@/types/forecast';
 
@@ -79,6 +80,33 @@ describe('old vs new comparison', () => {
     expect(c.overlap).toBe(1);
     expect(c.oldOnly).toBe(0);
     expect(c.newOnly).toBe(0);
+  });
+
+  it('flags absence when the latest snapshot predates the latest import, and relabels a stalled fire', () => {
+    const latestImport = '2026-02-20T00:00:00Z';
+    // Absent: last snapshot 2026-01-10 (< latest import 2026-02-20); never changed → stalled + absent.
+    const absentSnaps = [snap({ opportunityId: 'A', importDate: '2026-01-10T00:00:00Z', stage: 'Discovery' })];
+    expect(absentFromLatestImport(stageHistoryFor(opp({ id: 'A' }), absentSnaps), latestImport)).toBe('2026-01-10T00:00:00Z');
+    const c = compareStageStaleSignal([opp({ id: 'A' })], absentSnaps, 30, NOW, latestImport);
+    expect(c.newFire).toEqual(['A']);
+    expect(c.absent).toBe(1);
+    expect(c.relabeled).toBe(1); // the stalled fire is actually an absence
+
+    // Present: last snapshot == latest import → not absent, stays a normal stalled fire.
+    const presentSnaps = [
+      snap({ opportunityId: 'B', importDate: '2026-01-10T00:00:00Z', stage: 'Discovery' }),
+      snap({ opportunityId: 'B', importDate: latestImport, stage: 'Discovery' }),
+    ];
+    expect(absentFromLatestImport(stageHistoryFor(opp({ id: 'B' }), presentSnaps), latestImport)).toBeUndefined();
+    const c2 = compareStageStaleSignal([opp({ id: 'B' })], presentSnaps, 30, NOW, latestImport);
+    expect(c2.absent).toBe(0);
+    expect(c2.relabeled).toBe(0);
+  });
+
+  it('reports no absence when there is no latest-import date', () => {
+    const snaps = [snap({ opportunityId: 'A', importDate: '2026-01-10T00:00:00Z', stage: 'Discovery' })];
+    expect(absentFromLatestImport(stageHistoryFor(opp({ id: 'A' }), snaps), undefined)).toBeUndefined();
+    expect(compareStageStaleSignal([opp({ id: 'A' })], snaps, 30, NOW).absent).toBe(0);
   });
 
   it('new rule does NOT fire on a recently-advanced deal that the old proxy would have flagged by count', () => {

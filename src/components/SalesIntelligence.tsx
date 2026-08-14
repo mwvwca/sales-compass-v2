@@ -4,7 +4,8 @@ import type { Opportunity, Quarter } from '@/types/forecast';
 import { getQuarter, getCurrentQuarter, getQuarterMonths } from '@/types/forecast';
 import { getStagePercentage } from '@/lib/utils';
 import { STALE_DAYS } from '@/lib/dealRisk';
-import { stageHistoryFor, daysSinceStageChange, compareStageStaleSignal } from '@/lib/stageStaleness';
+import { stageHistoryFor, daysSinceStageChange, compareStageStaleSignal, absentFromLatestImport } from '@/lib/stageStaleness';
+import { buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
 import { AlertTriangle, TrendingUp, TrendingDown, Target, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -41,12 +42,23 @@ interface PipelineRec {
 let stageSignalLogged = false;
 
 export default function SalesIntelligence({ opportunities, selectedQuarter, selectedRep }: Props) {
-  const { snapshots, opportunities: allBookOpps } = useForecast();
+  const { snapshots, opportunities: allBookOpps, reps, imports } = useForecast();
   const [open, setOpen] = useState(false);
 
   const currentQuarter = getCurrentQuarter();
 
   const allOpps = opportunities;
+
+  // Configured rep roster — non-team-owned deals never generate rep-facing risk work
+  // (consistent with their exclusion everywhere else). Derived at read time.
+  const teamRepNameSet = useMemo(() => buildTeamRepNameSet(reps), [reps]);
+  // Latest opportunity-import date, for the interim absence approximation (a deal whose
+  // most recent snapshot predates this was not in the latest import). DR imports don't
+  // write opportunity snapshots, so they can't move this.
+  const latestImportDate = useMemo(
+    () => (imports.length ? imports.reduce((max, r) => (r.date > max ? r.date : max), imports[0].date) : undefined),
+    [imports],
+  );
 
   const TERMINAL_STAGES = new Set(['closed won', 'closed lost', 'rejected']);
   // Resolution keys STRICTLY on the current stage: a deal is resolved only when its stage is
@@ -69,6 +81,10 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
 
     for (const opp of allOpps) {
       if (isResolved(opp)) continue;
+      // Gate: a deal owned by someone off the roster is excluded from every rollup and
+      // view; it must not generate risk flags either. Without this, the 94 off-team
+      // records would start firing as stalled once the days-based rule went live.
+      if (!isTeamOwned(opp, teamRepNameSet)) continue;
       const reasons: string[] = [];
 
       // 1. Close date in the past
@@ -112,7 +128,16 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
       // 30-day staleness standard as the rest of the app (dealRisk STALE_DAYS).
       const stageStaleDays = daysSinceStageChange(history, opp, now);
       if (stageStaleDays !== null && stageStaleDays >= STALE_DAYS) {
-        reasons.push(`Stage unchanged for ${stageStaleDays} days`);
+        // A deal absent from the latest import is not stale, it is unreachable — relabel so a
+        // rep is not prompted to "work" a deal that has dropped out of Salesforce. Interim
+        // absence proxy: latest snapshot predates the latest import. Swap in a real
+        // consecutiveMissedImports >= 1 flag once absence tracking lands.
+        const absentSince = absentFromLatestImport(history, latestImportDate);
+        if (absentSince) {
+          reasons.push(`Not seen since ${new Date(absentSince).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`);
+        } else {
+          reasons.push(`Stage unchanged for ${stageStaleDays} days`);
+        }
       }
 
       if (reasons.length > 0) {
@@ -125,20 +150,20 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
       const order = { high: 0, medium: 1, low: 2 };
       return order[a.level] - order[b.level];
     });
-  }, [allOpps, snapshots]);
+  }, [allOpps, snapshots, teamRepNameSet, latestImportDate]);
 
-  // One-time visibility into the stage-staleness signal change: how many open deals fire the
-  // retired snapshot-count proxy vs the new days-based rule, and their overlap. Logged once per
-  // page load so the real per-account numbers surface without recurring UI noise.
+  // One-time visibility (whole book, team-owned only): old proxy vs new days-based rule and
+  // overlap, plus how many stalled-firing deals the interim absence proxy relabels as
+  // "not seen since" (most recent snapshot predates the latest import). Real per-account
+  // numbers surface here without recurring UI noise. Logged once per page load.
   useEffect(() => {
     if (stageSignalLogged || snapshots.length === 0) return;
-    // Report across the WHOLE book of open deals (not just the dashboard's current scope).
-    const openOpps = allBookOpps.filter(o => !isResolved(o));
-    const c = compareStageStaleSignal(openOpps, snapshots, STALE_DAYS, new Date());
-    console.log(`[risk] Stage-stalled signal (whole book) — old proxy fires ${c.oldFire.length}, new (${STALE_DAYS}d) fires ${c.newFire.length}, overlap ${c.overlap} (old-only ${c.oldOnly}, new-only ${c.newOnly})`);
+    const openTeamOpps = allBookOpps.filter(o => !isResolved(o) && isTeamOwned(o, teamRepNameSet));
+    const c = compareStageStaleSignal(openTeamOpps, snapshots, STALE_DAYS, new Date(), latestImportDate);
+    console.log(`[risk] Stage-stalled signal (whole book, team-owned) — old proxy fires ${c.oldFire.length}, new (${STALE_DAYS}d) fires ${c.newFire.length}, overlap ${c.overlap} (old-only ${c.oldOnly}, new-only ${c.newOnly}). Absent from latest import (${latestImportDate?.slice(0, 10) ?? 'n/a'}): ${c.absent} deals; of new fires, ${c.relabeled} relabeled "not seen since".`);
     stageSignalLogged = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allBookOpps, snapshots]);
+  }, [allBookOpps, snapshots, teamRepNameSet, latestImportDate]);
 
   // ─── Win/Loss Pattern Analysis ───
   const winLossStats = useMemo((): WinLossStat[] => {
