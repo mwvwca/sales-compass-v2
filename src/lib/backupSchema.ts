@@ -156,6 +156,8 @@ const dealRegistrationSchema = z.object({
   status: drStatusEnum.optional().default('active'),
   rejectedAt: z.string().optional(),
   convertedAt: z.string().optional(),
+  transferredOutFrom: z.string().max(200).optional(),
+  transferredOutAt: z.string().optional(),
   // Legacy fields tolerated (ignored)
   importedAt: z.string().optional(),
   batchId: z.string().optional(),

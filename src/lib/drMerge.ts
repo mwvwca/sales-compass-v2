@@ -7,6 +7,7 @@ import type {
 import { getQuarter } from '@/types/forecast';
 import { parseExcelDate } from './drParser';
 import { currentlySql, daysSinceActivity, isTerminalStage } from './drSql';
+import { isTeamOwned } from './repUtils';
 
 export interface DrBatchStats {
   newCount: number;
@@ -14,6 +15,9 @@ export interface DrBatchStats {
   rejectedCount: number;
   withdrawnCount: number;
   convertedCount: number;
+  /** Incoming records dropped for being owned by someone off the roster AND never
+   *  seen before (no existing record for the opportunityId). Not stored. */
+  droppedCount: number;
 }
 
 const PRE_SQL_PROB = 0.25;
@@ -133,6 +137,7 @@ export function mergeDrBatch(
   opportunities: Opportunity[],
   batchId: string,
   importedAt: string,
+  teamRepNames: Set<string> = new Set(),
 ): { merged: DealRegistration[]; stats: DrBatchStats } {
   const existingMap = new Map(existing.map(d => [d.opportunityId, d]));
   const incomingMap = new Map(incoming.map(d => [d.opportunityId, d]));
@@ -147,6 +152,7 @@ export function mergeDrBatch(
   let rejectedCount = 0;
   let withdrawnCount = 0;
   let convertedCount = 0;
+  let droppedCount = 0;
 
   const merged: DealRegistration[] = [];
 
@@ -160,6 +166,16 @@ export function mergeDrBatch(
     const isOpenSql = isSql && !isTerminalStage(inc.stage);
 
     if (!prev) {
+      // Drop an unseen record owned by someone off the roster. Only records the app
+      // has already seen (once owned by a rep on the list) are allowed to persist an
+      // off-team owner — see the `prev` branch, which keeps them and stamps the
+      // transferred-out indicator. This keeps never-relevant deals out of storage.
+      // Gated on a non-empty roster: with no reps configured, membership is unknowable
+      // and dropping everything would be wrong, so ingest normally in that case.
+      if (teamRepNames.size > 0 && !isTeamOwned(inc, teamRepNames)) {
+        droppedCount++;
+        continue;
+      }
       newCount++;
       const rec: DealRegistration = {
         ...inc,
@@ -190,6 +206,22 @@ export function mergeDrBatch(
       // sqlDate is PERMANENT once set — never wipe it (the deal qualified at least once).
       // Only stamp from an OPEN qualified stage.
       const sqlDate = prev.sqlDate ?? (isOpenSql ? importedAt.slice(0, 10) : undefined);
+
+      // Transferred-out indicator: this record already existed, so it is allowed to
+      // keep an off-team owner. Stamp the prior team owner + date on the transition
+      // team → off-team; clear it if ownership returns to the roster; otherwise carry
+      // the existing stamp forward. Ownership itself still updates as normal below.
+      const wasTeam = isTeamOwned(prev, teamRepNames);
+      const nowTeam = isTeamOwned(inc, teamRepNames);
+      let transferredOutFrom = prev.transferredOutFrom;
+      let transferredOutAt = prev.transferredOutAt;
+      if (nowTeam) {
+        transferredOutFrom = undefined;
+        transferredOutAt = undefined;
+      } else if (wasTeam) {
+        transferredOutFrom = prev.repName;
+        transferredOutAt = importedAt;
+      }
 
       const rec: DealRegistration = {
         ...prev,
@@ -222,6 +254,8 @@ export function mergeDrBatch(
         status: prev.status,
         convertedAt: prev.convertedAt,
         rejectedAt: prev.rejectedAt,
+        transferredOutFrom,
+        transferredOutAt,
       };
       merged.push(rec);
     }
@@ -361,7 +395,7 @@ export function mergeDrBatch(
   }
 
   console.log(`[drMerge] After merge: ${merged.filter(d => d.accountUrl).length} of ${merged.length} records have accountUrl`);
-  return { merged, stats: { newCount, updatedCount, rejectedCount, withdrawnCount, convertedCount } };
+  return { merged, stats: { newCount, updatedCount, rejectedCount, withdrawnCount, convertedCount, droppedCount } };
 }
 
 /**

@@ -25,7 +25,8 @@ import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, qua
 import { mergeDrBatch, backfillDrTerminalStatuses } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
 import { resolveImportedClassification, backfillReopenedClassifications } from '@/lib/forecastClassification';
-import { normalizeRepName } from '@/lib/repUtils';
+import { normalizeRepName, buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
+import { cleanupOffTeamDrs, cleanupOffTeamOpps } from '@/lib/offTeamCleanup';
 import { compactForecastState } from '@/lib/storageCompaction';
 
 const STORAGE_KEYS = {
@@ -51,6 +52,9 @@ const DR_TERMINAL_BACKFILL_FLAG = 'forecast_dr_terminal_backfill_v1';
 // Set once the reopened-classification heal has run on this device. v2 extends the heal to
 // stranded open-stage 'omitted' deals at/above qualification, so it must re-run past v1.
 const REOPEN_CLASS_BACKFILL_FLAG = 'forecast_reopen_class_backfill_v2';
+// Set once the one-time off-team 8/10 cleanup has run on this device. Deletes stored
+// records owned by someone off the roster that were first seen on the 8/10 import.
+const OFFTEAM_CLEANUP_FLAG = 'forecast_offteam_cleanup_8_10_v1';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -282,6 +286,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const compactionRanRef = useRef(false);
   const backfillRanRef = useRef(false);
   const reopenBackfillRanRef = useRef(false);
+  const offteamCleanupRanRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
 
   const [state, setState] = useState<ForecastState>(() => ({
@@ -450,6 +455,38 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
+  // One-time cleanup of the bad 8/10 import: delete stored DRs and opportunities that
+  // are owned by someone off the rep roster AND were first seen on that import. Records
+  // whose off-team owner arrived on an earlier import (a genuine transfer-out of a
+  // once-team-owned deal) are retained. Runs once per device after hydration, guarded
+  // by a persisted flag. Skipped when no roster is loaded — with an empty roster every
+  // record reads as off-team, so we must not judge membership yet.
+  useEffect(() => {
+    if (!hydrated || offteamCleanupRanRef.current) return;
+    offteamCleanupRanRef.current = true;
+    try {
+      if (localStorage.getItem(OFFTEAM_CLEANUP_FLAG)) return;
+    } catch {
+      return; // storage blocked — skip
+    }
+    if (state.reps.length === 0) return; // no roster yet — retry next session
+
+    const drRes = cleanupOffTeamDrs(state.dealRegistrations, state.drBatches, state.reps);
+    const oppRes = cleanupOffTeamOpps(state.opportunities, state.reps);
+    console.log(`[offteam-cleanup] Deleted ${drRes.deleted} DR + ${oppRes.deleted} opp record(s) first seen on the 8/10 import owned off-team; retained ${drRes.retained} DR + ${oppRes.retained} opp off-team record(s) seen earlier.`);
+    try { localStorage.setItem(OFFTEAM_CLEANUP_FLAG, new Date().toISOString()); } catch { /* ignore */ }
+
+    const totalDeleted = drRes.deleted + oppRes.deleted;
+    if (totalDeleted > 0) {
+      setState(s => ({ ...s, dealRegistrations: drRes.drs, opportunities: oppRes.opps }));
+      toast({
+        title: 'Cleaned up off-team records',
+        description: `Removed ${totalDeleted} record${totalDeleted === 1 ? '' : 's'} first imported 8/10 and owned off the team; retained ${drRes.retained + oppRes.retained} previously-owned record${drRes.retained + oppRes.retained === 1 ? '' : 's'}.`,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   useEffect(() => {
     const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
     if (prunedSnapshots.length !== state.snapshots.length) {
@@ -565,14 +602,26 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       const newChanges: ChangeLogEntry[] = [];
       const newSnapshots: OpportunitySnapshot[] = [];
       const processedExistingIds = new Set<string>();
+      const teamRepNames = buildTeamRepNameSet(s.reps);
 
-      const merged = opps.map(o => {
+      const merged: Opportunity[] = [];
+      for (const o of opps) {
         const sfid = o.salesforceId;
         const existing =
           (sfid && existingBySfId.get(sfid)) ||
           existingById.get(o.id) ||
           (sfid && existingById.get(sfid)) ||
           undefined;
+
+        // Drop an unseen record owned by someone off the roster — never seen before
+        // (no existing match) AND off-team. Only records the app already has (once
+        // owned by a rep on the list) may persist an off-team owner; those fall to the
+        // `existing` branch below, which keeps them and stamps the transferred-out flag.
+        // Gated on a non-empty roster: with no reps configured we cannot judge
+        // membership, so ingest normally rather than dropping everything.
+        if (!existing && teamRepNames.size > 0 && !isTeamOwned(o, teamRepNames)) {
+          continue;
+        }
 
         // Preserve internal UUID for existing records; mint a fresh UUID for truly new ones.
         const stableId = existing ? existing.id : crypto.randomUUID();
@@ -634,9 +683,24 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             && resolvedClassification !== 'omitted' && resolvedClassification !== 'rejected';
           const clearedByReopen = wasTerminal && nowOpen;
 
+          // Transferred-out indicator: this opp already existed, so it may keep an
+          // off-team owner. Stamp the prior team owner + date on the team → off-team
+          // transition; clear it if ownership returns to the roster; else carry forward.
+          const wasTeam = isTeamOwned(existing, teamRepNames);
+          const nowTeam = isTeamOwned(o, teamRepNames);
+          let transferredOutFrom = existing.transferredOutFrom;
+          let transferredOutAt = existing.transferredOutAt;
+          if (nowTeam) {
+            transferredOutFrom = undefined;
+            transferredOutAt = undefined;
+          } else if (wasTeam) {
+            transferredOutFrom = existing.repName;
+            transferredOutAt = importDate;
+          }
+
           // Full field replacement: every field from incoming Salesforce export overwrites
           // the stored record. Only app-generated fields not present in the export are preserved.
-          return {
+          merged.push({
             ...o,
             id: stableId,
             salesforceId: sfid ?? existing.salesforceId,
@@ -660,11 +724,14 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             classification: resolvedClassification,
             previousClassification: existing.classification !== resolvedClassification ? existing.classification : existing.previousClassification,
             movedAt: existing.classification !== resolvedClassification ? new Date().toISOString() : existing.movedAt,
-          };
+            transferredOutFrom,
+            transferredOutAt,
+          });
+          continue;
         }
 
-        return { ...o, id: stableId, salesforceId: sfid };
-      });
+        merged.push({ ...o, id: stableId, salesforceId: sfid });
+      }
 
       const kept = s.opportunities.filter(o => !processedExistingIds.has(o.id));
       return {
@@ -918,7 +985,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   ) => {
     setState(s => {
       const batchId = crypto.randomUUID();
-      const { merged, stats } = mergeDrBatch(s.dealRegistrations, incoming, s.opportunities, batchId, batchMeta.importedAt);
+      const teamRepNames = buildTeamRepNameSet(s.reps);
+      const { merged, stats } = mergeDrBatch(s.dealRegistrations, incoming, s.opportunities, batchId, batchMeta.importedAt, teamRepNames);
       const batch: DrBatch = {
         id: batchId,
         importedAt: batchMeta.importedAt,
