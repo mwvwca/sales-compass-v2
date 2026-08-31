@@ -152,7 +152,9 @@ export function mergeDrBatch(
   let rejectedCount = 0;
   let withdrawnCount = 0;
   let convertedCount = 0;
-  let droppedCount = 0;
+  // Retained at 0 for stat/UI shape stability: nothing is dropped for being off-team
+  // any more (the roster classifies owners instead), so this never increments.
+  const droppedCount = 0;
 
   const merged: DealRegistration[] = [];
 
@@ -166,16 +168,12 @@ export function mergeDrBatch(
     const isOpenSql = isSql && !isTerminalStage(inc.stage);
 
     if (!prev) {
-      // Drop an unseen record owned by someone off the roster. Only records the app
-      // has already seen (once owned by a rep on the list) are allowed to persist an
-      // off-team owner — see the `prev` branch, which keeps them and stamps the
-      // transferred-out indicator. This keeps never-relevant deals out of storage.
-      // Gated on a non-empty roster: with no reps configured, membership is unknowable
-      // and dropping everything would be wrong, so ingest normally in that case.
-      if (teamRepNames.size > 0 && !isTeamOwned(inc, teamRepNames)) {
-        droppedCount++;
-        continue;
-      }
+      // No off-team drop. Every record is ingested regardless of owner; the roster
+      // classifies the owner (unknown owners auto-add as 'not_team' at import) and
+      // isTeamOwned() at render time keeps off-team records out of funnel totals,
+      // rollups, and cleanup emails while leaving them visible and labelled.
+      // Dropping here would defeat the point: a deal reassigned to someone new would
+      // never reach storage to be classified at all.
       newCount++;
       const rec: DealRegistration = {
         ...inc,

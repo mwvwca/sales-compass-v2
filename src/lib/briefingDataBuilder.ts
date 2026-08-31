@@ -17,6 +17,7 @@ import type { BriefingMode } from './briefingPrompts';
 import { classifyCleanup, buildCleanupSummary, type CleanupSummary } from './drCleanup';
 import { sfdcOpportunityUrl, buildAccountUrlMap, accountUrlForOpportunity } from './sfdc';
 import { computeDealQualityCore, MIN_RESOLVED } from './dealQuality';
+import { isTeamStatus } from './repUtils';
 
 export interface BriefingPayload {
   mode: BriefingMode;
@@ -153,7 +154,8 @@ export function buildBriefingPayload(input: BuilderInput): BriefingPayload {
   const lastImportDate = lastImport?.date || '';
   const lastImportFile = lastImport?.fileName || '';
 
-  const activeReps = input.reps.filter(r => r.isActive !== false);
+  // Team members only — an off-team owner contributes to no rollup.
+  const activeReps = input.reps.filter(r => isTeamStatus(r) && r.isActive !== false);
   
 
   const opps = input.opportunities;

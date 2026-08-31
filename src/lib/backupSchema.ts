@@ -5,6 +5,11 @@ const classificationEnum = z.enum(['commit', 'upside', 'closed_won', 'unclassifi
 const repSchema = z.object({
   id: z.string(),
   name: z.string().max(200),
+  // Roster membership + first-seen. Optional so pre-roster backups still restore;
+  // cleanReps defaults a missing status to 'team' (such entries were the hand-
+  // maintained team list) and a missing firstSeen to ''.
+  status: z.enum(['team', 'not_team']).optional(),
+  firstSeen: z.string().optional(),
   quarterlyGoals: z.record(z.string(), z.number().finite().min(0)),
   isActive: z.boolean().optional(),
   inactivatedAt: z.string().optional(),

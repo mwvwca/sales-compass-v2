@@ -14,6 +14,7 @@ import { FLAG_META } from '@/components/riskChips';
 import { openOpportunity } from '@/lib/openOpportunity';
 import { coachOneOnOne } from '@/lib/coach1on1Api';
 import type { CoachResult, CoachVerdict, CoachPayload } from '@/lib/coach1on1';
+import { isTeamStatus } from '@/lib/repUtils';
 
 const fmtMoney = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const fmtPct = (n: number | null | undefined, digits = 0) => (n == null ? '—' : `${(n * 100).toFixed(digits)}%`);
@@ -136,8 +137,10 @@ function OneOnOneCapture({ repId }: { repId: string }) {
 export default function RepScorecard() {
   const { reps, opportunities, changelog, dealRegistrations, managerQuotas } = useForecast();
 
+  // Team members only: the roster also holds every off-team owner (auto-added at
+  // import), and the scorecard is a rep-coaching view for the team.
   const pickReps = useMemo(
-    () => reps.filter(r => r.isActive !== false).sort((a, b) => a.name.localeCompare(b.name)),
+    () => reps.filter(r => isTeamStatus(r) && r.isActive !== false).sort((a, b) => a.name.localeCompare(b.name)),
     [reps],
   );
   const [repId, setRepId] = useState<string>(() => pickReps[0]?.id ?? '');
