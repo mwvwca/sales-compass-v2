@@ -128,7 +128,10 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
     // Incoming NEW rows owned off the roster and never seen before — these are dropped
     // on import (not stored), so an unknown owner is never silently absorbed. Gated on a
     // non-empty roster: with no reps configured nothing is dropped, so show nothing.
-    droppedNewOffTeam: teamRepNameSet.size === 0 ? 0 : items.filter(i => i.changeType === 'new' && !isTeamOwned(i.opportunity, teamRepNameSet)).length,
+    // New records whose owner is not on the roster as 'team'. These are INGESTED and
+    // retained (the roster auto-adds the owner as not_team); they are simply excluded
+    // from funnel totals, rollups, and cleanup emails until the owner is classified.
+    newOffTeam: teamRepNameSet.size === 0 ? 0 : items.filter(i => i.changeType === 'new' && !isTeamOwned(i.opportunity, teamRepNameSet)).length,
     // Incoming rows that already exist but are now owned off the roster — kept and
     // updated so status stays current, flagged "transferred out", excluded from rollups.
     transferredOut: teamRepNameSet.size === 0 ? 0 : items.filter(i => (i.changeType === 'updated' || i.changeType === 'unchanged') && !isTeamOwned(i.opportunity, teamRepNameSet)).length,
@@ -236,12 +239,12 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
               <Trash2 size={12} /> {counts.removed} removed {showRemoved ? '(hide)' : '(show)'}
             </button>
           )}
-          {counts.droppedNewOffTeam > 0 && (
+          {counts.newOffTeam > 0 && (
             <span
-              className="flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded"
-              title="New and owned off the roster, never seen before — dropped on import, not stored. Add the owner as a rep first to keep them."
+              className="flex items-center gap-1 text-muted-foreground bg-secondary/40 px-2 py-0.5 rounded"
+              title="New and owned by someone not on the team roster. Stored and visible, but excluded from funnel totals, forecast rollups, and DR cleanup emails until you classify the owner in the Owner Roster."
             >
-              <AlertTriangle size={12} /> {counts.droppedNewOffTeam} off-team dropped
+              <AlertTriangle size={12} /> {counts.newOffTeam} off-team (kept)
             </span>
           )}
           {counts.transferredOut > 0 && (

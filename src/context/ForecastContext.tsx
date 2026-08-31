@@ -25,7 +25,7 @@ import { getMonthKey, getWeeksInMonth, getDateAtUtcStart, getCurrentQuarter, qua
 import { mergeDrBatch, backfillDrTerminalStatuses } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
 import { resolveImportedClassification, backfillReopenedClassifications } from '@/lib/forecastClassification';
-import { normalizeRepName, buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
+import { normalizeRepName, buildTeamRepNameSet, isTeamOwned, rosterKey, ownerNamesIn, unknownOwnerNames, type RepStatus } from '@/lib/repUtils';
 import { cleanupOffTeamDrs, cleanupOffTeamOpps } from '@/lib/offTeamCleanup';
 import { compactForecastState, snapshotReductionByOpp } from '@/lib/storageCompaction';
 
@@ -48,6 +48,8 @@ const STORAGE_KEYS = {
   // migration that ran on one device is not re-run on another device for the same
   // account. Legacy per-flag localStorage keys are still honored as a fallback.
   migrations: 'forecast_migrations',
+  // Pending new-owner review notice; persisted so it survives a reload until dismissed.
+  newOwnerNotice: 'forecast_new_owner_notice',
 };
 
 // Set once the one-time storage compaction has run on this device. v2 re-runs the
@@ -63,6 +65,11 @@ const REOPEN_CLASS_BACKFILL_FLAG = 'forecast_reopen_class_backfill_v2';
 // Set once the one-time off-team 8/10 cleanup has run on this device. Deletes stored
 // records owned by someone off the roster that were first seen on the 8/10 import.
 const OFFTEAM_CLEANUP_FLAG = 'forecast_offteam_cleanup_8_10_v1';
+// Set once the roster seed has run on this device. Adds a 'not_team' roster entry for
+// every owner name already present in stored opportunities / deal registrations, so
+// membership is explicit for everyone the app has ever seen rather than implied by
+// absence. Existing reps are seeded as 'team' by cleanReps.
+const ROSTER_SEED_FLAG = 'forecast_roster_seed_v1';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -133,7 +140,15 @@ function cleanSnapshots(raw: unknown): OpportunitySnapshot[] {
 
 function cleanReps(raw: unknown): Rep[] {
   const arr = Array.isArray(raw) ? raw : [];
-  return arr.map((r: any) => ({ ...r, isActive: r.isActive === undefined ? true : !!r.isActive }));
+  return arr.map((r: any) => ({
+    ...r,
+    name: rosterKey(r.name),
+    isActive: r.isActive === undefined ? true : !!r.isActive,
+    // A roster entry written before membership was explicit WAS the hand-maintained
+    // team list, so it seeds as 'team'. Only the import auto-add creates 'not_team'.
+    status: r.status === 'not_team' ? 'not_team' : 'team',
+    firstSeen: typeof r.firstSeen === 'string' && r.firstSeen ? r.firstSeen : '',
+  })) as Rep[];
 }
 
 function cleanDealRegistrations(raw: unknown): DealRegistration[] {
@@ -194,6 +209,12 @@ function pruneSnapshots(snapshots: OpportunitySnapshot[], limit: number): Opport
   return pruned;
 }
 
+/** Owner names an import added to the roster as 'not_team', awaiting user classification. */
+export interface NewOwnerNotice {
+  names: string[];
+  detectedAt: string;
+}
+
 interface ForecastState {
   reps: Rep[];
   opportunities: Opportunity[];
@@ -210,6 +231,9 @@ interface ForecastState {
   weeklySnapshots: WeeklySnapshot[];
   /** flagKey → ISO timestamp of when a one-time migration ran (account-following). */
   migrations: Record<string, string>;
+  /** Owner names auto-added as 'not_team' by the most recent import, pending review.
+   *  null once dismissed. Persisted so it survives a reload. */
+  newOwnerNotice: NewOwnerNotice | null;
 
 
   loading: boolean;
@@ -222,6 +246,10 @@ interface ForecastContextValue extends ForecastState {
   updateRep: (rep: Rep) => void;
   deleteRep: (id: string) => void;
   setRepActiveStatus: (repId: string, isActive: boolean, note?: string) => void;
+  /** Toggle roster membership for one owner. Takes effect on the next render — no reimport. */
+  setRepStatus: (repId: string, status: RepStatus) => void;
+  /** Clear the pending new-owner review notice. */
+  dismissNewOwnerNotice: () => void;
   importOpportunities: (opps: Opportunity[], fileName: string) => void;
   classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted' | 'rejected') => void;
   archiveToGraveyard: (id: string, reason?: string) => void;
@@ -297,6 +325,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const backfillRanRef = useRef(false);
   const reopenBackfillRanRef = useRef(false);
   const offteamCleanupRanRef = useRef(false);
+  const rosterSeedRanRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
 
   const [state, setState] = useState<ForecastState>(() => ({
@@ -314,6 +343,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
     weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
     migrations: loadFromStorage<Record<string, string>>(STORAGE_KEYS.migrations, {}),
+    newOwnerNotice: loadFromStorage<NewOwnerNotice | null>(STORAGE_KEYS.newOwnerNotice, null),
 
     loading: false,
   }));
@@ -524,6 +554,83 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
+  // One-time roster seed. Makes membership explicit for every owner the app has ever
+  // seen: existing reps are already 'team' (cleanReps), and every other owner name in
+  // stored opportunities / DRs is added as 'not_team'. Runs once per device after
+  // hydration, guarded by a persisted flag.
+  //
+  // Also heals case drift ahead of the switch to exact, case-sensitive matching: if a
+  // stored team rep's name differs from the observed Salesforce spelling only by case
+  // or inner whitespace, the rep is renamed to the Salesforce form. Without this, a
+  // roster entry someone typed as "mark belanger" would stop matching "Mark Belanger"
+  // and silently drop that rep's whole book off-team.
+  useEffect(() => {
+    if (!hydrated || rosterSeedRanRef.current) return;
+    rosterSeedRanRef.current = true;
+    if (hasMigrationRun(state.migrations, ROSTER_SEED_FLAG)) {
+      if (!state.migrations[ROSTER_SEED_FLAG]) markMigrationRan(ROSTER_SEED_FLAG); // seed app_state from legacy local flag
+      return;
+    }
+
+    const seenOwners = new Set<string>([
+      ...ownerNamesIn(state.opportunities),
+      ...ownerNamesIn(state.dealRegistrations),
+    ]);
+    // Nothing observed yet — retry next session rather than sealing an empty roster.
+    if (seenOwners.size === 0 && state.reps.length === 0) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Earliest date each owner name was actually observed, from the records the app
+    // already holds. Backdating beats stamping everyone with today: if every entry
+    // read "today", a recent first-seen date would signal nothing and the name-drift
+    // tell would be useless from the start.
+    const earliest = new Map<string, string>();
+    const note = (name: string | null | undefined, iso: string | undefined) => {
+      const key = rosterKey(name);
+      const date = (iso ?? '').slice(0, 10);
+      if (!key || !date) return;
+      const cur = earliest.get(key);
+      if (!cur || date < cur) earliest.set(key, date);
+    };
+    for (const o of state.opportunities) note(o.repName, o.importDate);
+    for (const d of state.dealRegistrations) note(d.repName, d.firstSeenAt);
+    const firstSeenFor = (name: string) => earliest.get(name) || today;
+
+    const byLoose = new Map<string, string>();
+    for (const o of seenOwners) byLoose.set(normalizeRepName(o), o);
+
+    let renamed = 0;
+    let dated = 0;
+    const healed = state.reps.map(r => {
+      const key = rosterKey(r.name);
+      // A stored name that no longer appears in the data but matches an observed name
+      // loosely is case/spacing drift from before matching went exact — adopt the
+      // Salesforce spelling so the rep does not silently fall off the team.
+      const observed = !key || seenOwners.has(key) ? undefined : byLoose.get(normalizeRepName(key));
+      const name = observed && observed !== key ? observed : key;
+      if (observed && observed !== key) renamed++;
+      if (!r.firstSeen) dated++;
+      return { ...r, name, firstSeen: r.firstSeen || firstSeenFor(name) };
+    });
+
+    const added = unknownOwnerNames(healed, seenOwners).map(name => ({
+      id: crypto.randomUUID(),
+      name,
+      status: 'not_team' as const,
+      firstSeen: firstSeenFor(name),
+      quarterlyGoals: {},
+      isActive: true,
+    }));
+
+    console.log(`[roster-seed] ${healed.filter(r => r.status === 'team').length} team, ${added.length} owner(s) added as not_team, ${renamed} name(s) healed to the Salesforce spelling, ${dated} first-seen date(s) backdated from stored records.`);
+    markMigrationRan(ROSTER_SEED_FLAG);
+    if (added.length > 0 || renamed > 0 || dated > 0) {
+      setState(s => ({ ...s, reps: [...healed, ...added] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   useEffect(() => {
     const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
     if (prunedSnapshots.length !== state.snapshots.length) {
@@ -545,6 +652,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.managerQuotas, state.managerQuotas);
     saveToStorage(STORAGE_KEYS.weeklySnapshots, state.weeklySnapshots);
     saveToStorage(STORAGE_KEYS.migrations, state.migrations);
+    saveToStorage(STORAGE_KEYS.newOwnerNotice, state.newOwnerNotice);
 
 
     const sizeKB = getStorageSizeKB();
@@ -594,6 +702,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.managerQuotas,
     state.weeklySnapshots,
     state.migrations,
+    state.newOwnerNotice,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
@@ -602,6 +711,16 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
 
   const updateRep = useCallback((rep: Rep) => {
     setState(s => ({ ...s, reps: s.reps.map(r => r.id === rep.id ? rep : r) }));
+  }, []);
+
+  // Membership toggle. Nothing is stamped on any deal record — isTeamOwned() reads the
+  // roster at render time, so the change lands on the next render with no reimport.
+  const setRepStatus = useCallback((repId: string, status: RepStatus) => {
+    setState(s => ({ ...s, reps: s.reps.map(r => r.id === repId ? { ...r, status } : r) }));
+  }, []);
+
+  const dismissNewOwnerNotice = useCallback(() => {
+    setState(s => ({ ...s, newOwnerNotice: null }));
   }, []);
 
   const deleteRep = useCallback((id: string) => {
@@ -641,7 +760,25 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       const newChanges: ChangeLogEntry[] = [];
       const newSnapshots: OpportunitySnapshot[] = [];
       const processedExistingIds = new Set<string>();
-      const teamRepNames = buildTeamRepNameSet(s.reps);
+
+      // Auto-add every owner name this import carries that the roster has not seen,
+      // as 'not_team'. Unknown owners must never silently inflate funnel totals,
+      // forecast rollups, or DR cleanup emails — and a record owned by an unknown
+      // person must still be STORED, or a deal reassigned outside the old Salesforce
+      // owner filter (the Avreo / 006Vy00000nstHq case) would simply vanish.
+      const newOwners = unknownOwnerNames(s.reps, ownerNamesIn(opps));
+      const rosterAdditions: Rep[] = newOwners.map(name => ({
+        id: crypto.randomUUID(),
+        name,
+        status: 'not_team' as const,
+        firstSeen: importDate.slice(0, 10),
+        quarterlyGoals: {},
+        isActive: true,
+      }));
+      const reps = rosterAdditions.length > 0 ? [...s.reps, ...rosterAdditions] : s.reps;
+      // Membership for THIS import is judged against the roster including the
+      // additions, so a brand-new owner reads as off-team immediately.
+      const teamRepNames = buildTeamRepNameSet(reps);
 
       const merged: Opportunity[] = [];
       for (const o of opps) {
@@ -652,15 +789,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           (sfid && existingById.get(sfid)) ||
           undefined;
 
-        // Drop an unseen record owned by someone off the roster — never seen before
-        // (no existing match) AND off-team. Only records the app already has (once
-        // owned by a rep on the list) may persist an off-team owner; those fall to the
-        // `existing` branch below, which keeps them and stamps the transferred-out flag.
-        // Gated on a non-empty roster: with no reps configured we cannot judge
-        // membership, so ingest normally rather than dropping everything.
-        if (!existing && teamRepNames.size > 0 && !isTeamOwned(o, teamRepNames)) {
-          continue;
-        }
+        // No off-team drop. Records owned by someone off the roster are ingested,
+        // retained, and shown with the "not on team" label; isTeamOwned() at render
+        // time is what keeps them out of funnel totals, rollups, and cleanup emails.
 
         // Preserve internal UUID for existing records; mint a fresh UUID for truly new ones.
         const stableId = existing ? existing.id : crypto.randomUUID();
@@ -784,10 +915,17 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       const kept = s.opportunities.filter(o => !processedExistingIds.has(o.id));
       return {
         ...s,
+        reps,
         opportunities: [...kept, ...merged],
         imports: [...s.imports, record],
         changelog: [...s.changelog, ...newChanges],
         snapshots: [...s.snapshots, ...newSnapshots],
+        // Non-blocking notice for the user to classify. Also the name-drift safety
+        // net: a Salesforce spelling variant of a known person arrives here as a new
+        // owner, defaulted safely to off-team, instead of silently splitting a book.
+        newOwnerNotice: newOwners.length > 0
+          ? { names: newOwners, detectedAt: importDate }
+          : s.newOwnerNotice,
       };
     });
   }, []);
@@ -1033,7 +1171,19 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   ) => {
     setState(s => {
       const batchId = crypto.randomUUID();
-      const teamRepNames = buildTeamRepNameSet(s.reps);
+      // Same roster auto-add as the opportunity import: an owner the roster has never
+      // seen is added as 'not_team' so the DR still lands and is classified explicitly.
+      const newOwners = unknownOwnerNames(s.reps, ownerNamesIn(incoming));
+      const rosterAdditions: Rep[] = newOwners.map(name => ({
+        id: crypto.randomUUID(),
+        name,
+        status: 'not_team' as const,
+        firstSeen: batchMeta.importedAt.slice(0, 10),
+        quarterlyGoals: {},
+        isActive: true,
+      }));
+      const reps = rosterAdditions.length > 0 ? [...s.reps, ...rosterAdditions] : s.reps;
+      const teamRepNames = buildTeamRepNameSet(reps);
       const { merged, stats } = mergeDrBatch(s.dealRegistrations, incoming, s.opportunities, batchId, batchMeta.importedAt, teamRepNames);
       const batch: DrBatch = {
         id: batchId,
@@ -1048,8 +1198,12 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       };
       return {
         ...s,
+        reps,
         dealRegistrations: merged,
         drBatches: [...s.drBatches, batch],
+        newOwnerNotice: newOwners.length > 0
+          ? { names: newOwners, detectedAt: batchMeta.importedAt }
+          : s.newOwnerNotice,
       };
     });
   }, []);
@@ -1203,6 +1357,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     updateRep,
     deleteRep,
     setRepActiveStatus,
+    setRepStatus,
+    dismissNewOwnerNotice,
     importOpportunities,
     classifyOpportunity,
     updateOpportunityAmount,

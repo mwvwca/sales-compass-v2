@@ -1,7 +1,23 @@
+/**
+ * A roster entry, keyed on the Salesforce "Opportunity Owner" display name.
+ *
+ * This is the single source of truth for team membership: `status` drives
+ * isTeamOwned(), evaluated at render time. Every owner name ever seen in an import
+ * gets an entry — team members and everyone else alike — so an owner is never
+ * silently unclassified. Persisted with the rest of app state (localStorage mirror,
+ * Supabase `app_state` key `forecast_reps`).
+ */
 export interface Rep {
   id: string;
+  /** Trimmed "Opportunity Owner" display name. The roster key; matched exactly, case-sensitively. */
   name: string;
+  /** Team membership. Unknown owners are auto-added as 'not_team' at import — see repUtils. */
+  status: 'team' | 'not_team';
+  /** ISO date this owner name was first seen. A familiar person with a recent
+   *  first-seen date is the tell for a Salesforce name variant. */
+  firstSeen: string;
   quarterlyGoals: Record<string, number>;
+  /** Employment/roster activity — NOT membership. An inactive rep is still on the team. */
   isActive: boolean;
   inactivatedAt?: string;
   inactivatedNote?: string;

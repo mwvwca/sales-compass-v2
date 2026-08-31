@@ -7,7 +7,7 @@ import type {
 const TODAY = new Date('2026-06-18T00:00:00Z');
 const OPTS = { today: TODAY, currentQuarter: '2026-Q2' as Quarter };
 
-const REP: Rep = { id: 'r1', name: 'Jane Doe', quarterlyGoals: { '2026-Q2': 500_000 }, isActive: true } as Rep;
+const REP: Rep = { id: 'r1', name: 'Jane Doe', status: 'team', firstSeen: '2026-01-01', quarterlyGoals: { '2026-Q2': 500_000 }, isActive: true };
 
 function opp(over: Partial<Opportunity> & { id: string }): Opportunity {
   return {

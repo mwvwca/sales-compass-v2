@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import ForecastSnapshotView from '@/components/ForecastSnapshot';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { normalizeRepName } from '@/lib/repUtils';
+import { normalizeRepName, isTeamStatus } from '@/lib/repUtils';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBackupNow } from '@/lib/backupUtils';
 import { getMonthLabel, getMonthKey, getQuarter, getWeeksInMonth, getDateAtUtcStart, type ForecastSnapshot } from '@/types/forecast';
@@ -152,7 +152,8 @@ export default function RepGoalSetup() {
       .filter(m => m.monthKey === selectedMonth)
       .reduce((s, m) => s + m.commitAmount, 0);
     const quarter = getQuarter(`${selectedMonth}-01T00:00:00Z`);
-    const quotaTotal = reps.reduce((s, r) => s + ((r.quarterlyGoals[quarter] || 0) / 3), 0);
+    // Team members only: an off-team owner contributes to no rollup, quota included.
+    const quotaTotal = reps.filter(isTeamStatus).reduce((s, r) => s + ((r.quarterlyGoals[quarter] || 0) / 3), 0);
     const gap = quotaTotal - commitTotal;
     return { commitTotal, quotaTotal, gap };
   }, [monthlyRepCommits, selectedMonth, reps]);
@@ -164,12 +165,24 @@ export default function RepGoalSetup() {
     for (let q = 1; q <= 4; q++) {
       yearQuarters[`${year}-Q${q}`] = goalValue;
     }
+    // Duplicate detection stays LOOSE (case-insensitive) so typing "mark belanger"
+    // finds the existing "Mark Belanger" rather than creating a second entry. Roster
+    // MEMBERSHIP is still the strict, case-sensitive name — see repUtils.
     const normalizedName = normalizeRepName(name);
     const existing = reps.find(r => normalizeRepName(r.name) === normalizedName);
     if (existing) {
-      updateRep({ ...existing, quarterlyGoals: { ...existing.quarterlyGoals, ...yearQuarters } });
+      // Setting a quarterly goal on a name is an explicit statement that the person is
+      // on the team, so an owner previously auto-added as not_team is promoted here.
+      updateRep({ ...existing, status: 'team', quarterlyGoals: { ...existing.quarterlyGoals, ...yearQuarters } });
     } else {
-      addRep({ id: crypto.randomUUID(), name: name.trim(), quarterlyGoals: yearQuarters, isActive: true });
+      addRep({
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        status: 'team',
+        firstSeen: new Date().toISOString().slice(0, 10),
+        quarterlyGoals: yearQuarters,
+        isActive: true,
+      });
     }
     setName('');
     setGoal('');
@@ -194,12 +207,15 @@ export default function RepGoalSetup() {
   };
 
   const defaultQuarters = [1, 2, 3, 4].map(q => `${year}-Q${q}`);
-  const quarters = Array.from(new Set([...defaultQuarters, ...reps.flatMap(r => Object.keys(r.quarterlyGoals))])).sort();
+  const quarters = Array.from(new Set([...defaultQuarters, ...reps.filter(isTeamStatus).flatMap(r => Object.keys(r.quarterlyGoals))])).sort();
 
   // ----- Active/Inactive partitioning -----
+  // Goals apply to team members only. Owners auto-added as not_team at import live in
+  // the Owner Roster panel above; they must not clutter the goal editor.
   const isRepActive = (r: typeof reps[0]) => r.isActive !== false;
-  const activeReps = useMemo(() => reps.filter(isRepActive), [reps]);
-  const inactiveReps = useMemo(() => reps.filter(r => !isRepActive(r)), [reps]);
+  const teamReps = useMemo(() => reps.filter(isTeamStatus), [reps]);
+  const activeReps = useMemo(() => teamReps.filter(isRepActive), [teamReps]);
+  const inactiveReps = useMemo(() => teamReps.filter(r => !isRepActive(r)), [teamReps]);
 
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [deactivateNote, setDeactivateNote] = useState('');

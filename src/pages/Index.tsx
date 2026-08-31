@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import ForecastDashboard from '@/components/ForecastDashboard';
 import RepGoalSetup from '@/components/RepGoalSetup';
+import OwnerRoster from '@/components/OwnerRoster';
 import ImportSheet from '@/components/ImportSheet';
 import ImportChangeLog from '@/components/ImportChangeLog';
 import { useDataBackup } from '@/components/DataBackup';
@@ -242,6 +243,9 @@ const Index = () => {
             <div className="mb-4">
               <h2 className="text-sm font-semibold">Rep Quarterly Goals</h2>
               <p className="text-xs text-muted-foreground mt-0.5">Set each rep's quarterly target. Click a value to edit.</p>
+            </div>
+            <div className="mb-6">
+              <OwnerRoster />
             </div>
             <RepGoalSetup />
           </div>

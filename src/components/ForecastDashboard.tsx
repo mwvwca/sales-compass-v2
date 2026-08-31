@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { usePersistedState } from '@/hooks/use-persisted-state';
 import { useForecast } from '@/context/ForecastContext';
 import { buildChangelogIndex, flagDeal } from '@/lib/dealRisk';
-import { normalizeRepName, buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
+import { normalizeRepName, buildTeamRepNameSet, isTeamOwned, isTeamStatus } from '@/lib/repUtils';
 import { computeHudPipe } from '@/lib/forecastClassification';
 import {
   getQuarter, getMonthKey, getMonthLabel, getQuarterMonths, getCurrentQuarter,
@@ -17,6 +17,7 @@ import SalesIntelligence from './SalesIntelligence';
 import CommitAccuracySection from './CommitAccuracySection';
 import CoverageTrendCard from './CoverageTrendCard';
 import OmittedWonBanner from './OmittedWonBanner';
+import NewOwnerBanner from './NewOwnerBanner';
 
 import { Switch } from '@/components/ui/switch';
 import { ChevronLeft, ChevronRight, Camera } from 'lucide-react';
@@ -108,7 +109,10 @@ export default function ForecastDashboard() {
   const allRepNames = useMemo(() => {
     const names = new Set<string>();
     for (const o of opportunities) if (isTeamOwned(o, teamRepNameSet)) names.add(o.repName);
-    for (const r of reps) names.add(r.name);
+    // Roster entries with no deals yet still get a row — but ONLY team members. The
+    // roster also holds every off-team owner now (auto-added at import), and those
+    // must not appear in the team rep breakdown or the rep filter.
+    for (const r of reps) if (isTeamStatus(r)) names.add(r.name);
     return Array.from(names).sort();
   }, [opportunities, reps, teamRepNameSet]);
   const repNames = useMemo(() => allRepNames.filter(n => !inactiveSet.has(n)), [allRepNames, inactiveSet]);
@@ -379,6 +383,7 @@ export default function ForecastDashboard() {
 
   return (
     <div className="space-y-6">
+      <NewOwnerBanner />
       <OmittedWonBanner />
       {/* Unified scope controls */}
       <div className="flex items-center gap-3 flex-wrap">
