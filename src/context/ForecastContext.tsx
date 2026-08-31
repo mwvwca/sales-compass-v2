@@ -26,6 +26,8 @@ import { mergeDrBatch, backfillDrTerminalStatuses } from '@/lib/drMerge';
 import { normalizeProbability } from '@/lib/probability';
 import { resolveImportedClassification, backfillReopenedClassifications } from '@/lib/forecastClassification';
 import { normalizeRepName, buildTeamRepNameSet, isTeamOwned, rosterKey, ownerNamesIn, unknownOwnerNames, type RepStatus } from '@/lib/repUtils';
+import { applyIngestGate, buildKnownIdSet } from '@/lib/ingestGate';
+import { planWideImportPurge, applyWideImportPurge, purgeBreakdown, PURGE_MIN, PURGE_MAX } from '@/lib/wideImportPurge';
 import { cleanupOffTeamDrs, cleanupOffTeamOpps } from '@/lib/offTeamCleanup';
 import { compactForecastState, snapshotReductionByOpp } from '@/lib/storageCompaction';
 
@@ -70,6 +72,11 @@ const OFFTEAM_CLEANUP_FLAG = 'forecast_offteam_cleanup_8_10_v1';
 // membership is explicit for everyone the app has ever seen rather than implied by
 // absence. Existing reps are seeded as 'team' by cleanReps.
 const ROSTER_SEED_FLAG = 'forecast_roster_seed_v1';
+// Set once the 2026-08-31 wide-import purge has run for this ACCOUNT. Unlike the older
+// flags this one is deliberately checked and written only in state.migrations (which
+// follows the account via app_state) with no legacy localStorage mirror: a destructive
+// one-time purge must not re-run on a second device just because a local key is absent.
+const WIDE_IMPORT_PURGE_FLAG = 'forecast_wide_import_purge_2026_08_31_v1';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -270,6 +277,8 @@ interface ForecastContextValue extends ForecastState {
   /** Clear the pending new-owner review notice. */
   dismissNewOwnerNotice: () => void;
   importOpportunities: (opps: Opportunity[], fileName: string) => void;
+  /** Record a failed import attempt so it leaves a trace. A silent death must be impossible. */
+  logFailedImport: (fileName: string, error: unknown) => void;
   classifyOpportunity: (id: string, classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted' | 'rejected') => void;
   archiveToGraveyard: (id: string, reason?: string) => void;
   restoreFromGraveyard: (id: string) => void;
@@ -345,6 +354,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   const reopenBackfillRanRef = useRef(false);
   const offteamCleanupRanRef = useRef(false);
   const rosterSeedRanRef = useRef(false);
+  const widePurgeRanRef = useRef(false);
   const lastSavedRef = useRef<Record<string, string>>({});
 
   const [state, setState] = useState<ForecastState>(() => ({
@@ -379,6 +389,13 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     !!migrations[flagKey] || hasLegacyLocalFlag(flagKey);
   // Record a migration as run in the account-following map (→ app_state via the save
   // effect) and mirror to the legacy localStorage key. Idempotent per flag.
+  // Account-following only: writes state.migrations (→ app_state) and deliberately
+  // does NOT mirror to a legacy localStorage key. For a destructive one-time migration,
+  // a missing local key on another device must not license a second run.
+  const markServerMigrationRan = useCallback((flagKey: string) => {
+    setState(s => (s.migrations[flagKey] ? s : { ...s, migrations: { ...s.migrations, [flagKey]: new Date().toISOString() } }));
+  }, []);
+
   const markMigrationRan = useCallback((flagKey: string) => {
     setState(s => (s.migrations[flagKey] ? s : { ...s, migrations: { ...s.migrations, [flagKey]: new Date().toISOString() } }));
     try { localStorage.setItem(flagKey, new Date().toISOString()); } catch { /* ignore */ }
@@ -650,6 +667,46 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
+  // One-time purge of the foreign records the 2026-08-31 wide import admitted before
+  // the ingest gate existed. Runs once per ACCOUNT after hydration (see
+  // markServerMigrationRan). Guarded by a sanity band: if the computed removal set is
+  // not between PURGE_MIN and PURGE_MAX it refuses to delete anything and reports the
+  // breakdown by owner, leaving the flag unset so it can be re-evaluated next load.
+  useEffect(() => {
+    if (!hydrated || widePurgeRanRef.current) return;
+    widePurgeRanRef.current = true;
+    if (state.migrations[WIDE_IMPORT_PURGE_FLAG]) return;
+    // Roster must be loaded: with an empty roster every record reads as off-team and
+    // the purge would target the whole book.
+    if (state.reps.length === 0 || state.opportunities.length === 0) return;
+
+    const plan = planWideImportPurge(state.opportunities, state.changelog, state.snapshots, state.reps);
+    const c = plan.counts;
+
+    if (!plan.withinBand) {
+      console.warn(
+        `[wide-purge] ABORTED — computed ${c.opportunitiesRemoved} removals, outside the expected ${PURGE_MIN}-${PURGE_MAX} band. Nothing deleted; flag left unset. Breakdown by owner: ${purgeBreakdown(plan) || '(none)'}`,
+      );
+      toast({
+        title: 'Wide-import purge skipped',
+        description: `Computed ${c.opportunitiesRemoved} records to remove, outside the expected ${PURGE_MIN}–${PURGE_MAX} range. Nothing was deleted — see the console for the per-owner breakdown.`,
+      });
+      return;
+    }
+
+    const next = applyWideImportPurge(plan, state.opportunities, state.changelog, state.snapshots);
+    console.log(
+      `[wide-purge] Removed ${c.opportunitiesRemoved} opportunity record(s), ${c.changelogRemoved} changelog entr(ies), ${c.snapshotsRemoved} snapshot(s). Opportunities ${c.opportunitiesBefore} → ${c.opportunitiesAfter}. By owner: ${purgeBreakdown(plan)}`,
+    );
+    markServerMigrationRan(WIDE_IMPORT_PURGE_FLAG);
+    setState(s => ({ ...s, opportunities: next.opportunities, changelog: next.changelog, snapshots: next.snapshots }));
+    toast({
+      title: 'Removed foreign records from the 8/31 wide import',
+      description: `${c.opportunitiesRemoved} opportunities, ${c.changelogRemoved} changelog entries and ${c.snapshotsRemoved} snapshots deleted. ${c.opportunitiesBefore} → ${c.opportunitiesAfter} opportunities.`,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   useEffect(() => {
     const prunedSnapshots = pruneSnapshots(state.snapshots, MAX_SNAPSHOTS);
     if (prunedSnapshots.length !== state.snapshots.length) {
@@ -776,10 +833,29 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  // A parse or merge that throws used to leave nothing behind — the 20MB attempt on
+  // 2026-08-31 logged no trace at all. Every failure now writes an import log entry.
+  const logFailedImport = useCallback((fileName: string, error: unknown) => {
+    const message = error instanceof Error
+      ? (error.message || error.name)
+      : String(error ?? 'Unknown error');
+    console.error(`[import] FAILED "${fileName}": ${message}`, error);
+    setState(s => ({
+      ...s,
+      imports: [...s.imports, {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        fileName,
+        opportunityCount: 0,
+        status: 'failed' as const,
+        error: message.slice(0, 500),
+      }],
+    }));
+  }, []);
+
   const importOpportunities = useCallback((opps: Opportunity[], fileName: string) => {
     const importId = crypto.randomUUID();
     const importDate = new Date().toISOString();
-    const record: ImportRecord = { id: importId, date: importDate, fileName, opportunityCount: opps.length };
 
     setState(s => {
       const existingBySfId = new Map<string, Opportunity>();
@@ -793,10 +869,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       const processedExistingIds = new Set<string>();
 
       // Auto-add every owner name this import carries that the roster has not seen,
-      // as 'not_team'. Unknown owners must never silently inflate funnel totals,
-      // forecast rollups, or DR cleanup emails — and a record owned by an unknown
-      // person must still be STORED, or a deal reassigned outside the old Salesforce
-      // owner filter (the Avreo / 006Vy00000nstHq case) would simply vanish.
+      // as 'not_team'. Derived from the FULL file, before the gate runs: an owner whose
+      // rows are all discarded must still reach the roster and the new-owner notice, or
+      // the user could never classify them onto the team.
       const newOwners = unknownOwnerNames(s.reps, ownerNamesIn(opps));
       const rosterAdditions: Rep[] = newOwners.map(name => ({
         id: crypto.randomUUID(),
@@ -811,8 +886,32 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       // additions, so a brand-new owner reads as off-team immediately.
       const teamRepNames = buildTeamRepNameSet(reps);
 
+      // Ingest gate — the single choke point every forecast import passes through,
+      // applied after parsing and BEFORE any merge. A discarded row produces no
+      // opportunity record, no changelog entry and no snapshot entry, because nothing
+      // downstream of here ever sees it. See lib/ingestGate for the admission rule.
+      const gate = applyIngestGate(opps, teamRepNames, buildKnownIdSet(s.opportunities));
+      const admitted = gate.kept;
+      if (gate.counts.discarded > 0) {
+        const top = Object.entries(gate.discardedByOwner)
+          .sort((a, b) => (b[1] as number) - (a[1] as number)).slice(0, 15)
+          .map(([n, c]) => `${n} (${c})`).join(', ');
+        console.log(`[ingest-gate] ${fileName}: kept ${gate.counts.keptTeam} team + ${gate.counts.keptKnownId} known-ID, discarded ${gate.counts.discarded} of ${opps.length}. Discarded owners: ${top}`);
+      }
+      // Built inside the updater so the gate counts come from the state actually
+      // merged against — never mutated from outside, which would be wrong under a
+      // double-invoked updater.
+      const record: ImportRecord = {
+        id: importId,
+        date: importDate,
+        fileName,
+        opportunityCount: admitted.length,
+        status: 'ok',
+        gate: { ...gate.counts },
+      };
+
       const merged: Opportunity[] = [];
-      for (const o of opps) {
+      for (const o of admitted) {
         const sfid = o.salesforceId;
         const existing =
           (sfid && existingBySfId.get(sfid)) ||
@@ -1391,6 +1490,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setRepStatus,
     dismissNewOwnerNotice,
     importOpportunities,
+    logFailedImport,
     classifyOpportunity,
     updateOpportunityAmount,
     updateOpportunity,

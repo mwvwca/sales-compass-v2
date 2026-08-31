@@ -4,6 +4,7 @@ import RepGoalSetup from '@/components/RepGoalSetup';
 import OwnerRoster from '@/components/OwnerRoster';
 import ImportSheet from '@/components/ImportSheet';
 import ImportChangeLog from '@/components/ImportChangeLog';
+import ImportLog from '@/components/ImportLog';
 import { useDataBackup } from '@/components/DataBackup';
 import SalesDataSync from '@/components/SalesDataSync';
 import OpportunityGraveyard from '@/components/OpportunityGraveyard';
@@ -258,6 +259,7 @@ const Index = () => {
                 <p className="text-xs text-muted-foreground mt-0.5">Drop your weekly Salesforce opportunity export. Columns are auto-mapped.</p>
               </div>
               <ImportSheet />
+              <ImportLog />
               <ImportChangeLog />
             </div>
             <div className="border-t border-border pt-8">

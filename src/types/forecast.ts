@@ -147,7 +147,19 @@ export interface ImportRecord {
   id: string;
   date: string;
   fileName: string;
+  /** Rows actually merged (post-gate). 0 on a failed import. */
   opportunityCount: number;
+  /** 'failed' when the import threw. Absent on records written before this existed,
+   *  which are all successful imports — treat a missing status as 'ok'. */
+  status?: 'ok' | 'failed';
+  /** Error message when status is 'failed'. A silent death must be impossible. */
+  error?: string;
+  /** Ingest-gate outcome for this import — see lib/ingestGate. */
+  gate?: {
+    keptTeam: number;
+    keptKnownId: number;
+    discarded: number;
+  };
 }
 
 export interface ChangeLogEntry {

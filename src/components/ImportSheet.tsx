@@ -9,6 +9,7 @@ import { resolveReseller } from '@/lib/resellerUtils';
 import { originFromUrls, resolveOpportunityUrl } from '@/lib/opportunityUrl';
 import ImportReview from './ImportReview';
 import { notifyImportComplete } from './WeeklyBriefing';
+import { useForecast } from '@/context/ForecastContext';
 
 interface ColumnMapping {
   id: string;
@@ -188,6 +189,7 @@ function autoMap(headers: string[]): Partial<ColumnMapping> {
 }
 
 export default function ImportSheet() {
+  const { logFailedImport } = useForecast();
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastImport, setLastImport] = useState<{ name: string; count: number } | null>(null);
@@ -195,6 +197,13 @@ export default function ImportSheet() {
 
   const processFile = useCallback((file: File) => {
     setError(null);
+    // Every abort path goes through this: a validation failure is just as silent a
+    // death as a thrown error if it only sets a transient message that the next
+    // upload clears. Both now leave an import-log entry.
+    const fail = (message: string) => {
+      logFailedImport(file.name, new Error(message));
+      setError(message);
+    };
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -205,7 +214,7 @@ export default function ImportSheet() {
         const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
         if (rawRows.length === 0) {
-          setError('No data found in the file.');
+          fail('No data found in the file.');
           return;
         }
 
@@ -252,12 +261,12 @@ export default function ImportSheet() {
         }
 
         if (rows.length === 0) {
-          setError('No data rows found after header.');
+          fail('No data rows found after header.');
           return;
         }
 
         if (!mapping.id && !mapping.name) {
-          setError('Could not find Opportunity ID or Name column. Ensure your export has standard Salesforce column names.');
+          fail('Could not find Opportunity ID or Name column. Ensure your export has standard Salesforce column names.');
           return;
         }
 
@@ -269,7 +278,7 @@ export default function ImportSheet() {
         });
 
         if (validRows.length === 0) {
-          setError('No valid opportunity rows found after header.');
+          fail('No valid opportunity rows found after header.');
           return;
         }
 
@@ -366,11 +375,13 @@ export default function ImportSheet() {
 
         setReview({ opps, fileName: file.name, headers, mapping: mapping as Record<string, string> });
       } catch (err) {
-        setError('Failed to parse file. Ensure it is a valid Excel or CSV file.');
+        // Record the attempt: a parse failure previously left no trace anywhere.
+        logFailedImport(file.name, err);
+        setError(`Failed to parse file: ${err instanceof Error ? err.message : 'unreadable'}. Ensure it is a valid Excel or CSV file.`);
       }
     };
     reader.readAsArrayBuffer(file);
-  }, []);
+  }, [logFailedImport]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
