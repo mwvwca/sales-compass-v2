@@ -41,7 +41,7 @@ interface ReviewItem {
 }
 
 export default function ImportReview({ incoming, fileName, onDone, onCancel, detectedHeaders = [], columnMapping = {} }: Props) {
-  const { opportunities, importOpportunities, archiveToGraveyard, reps } = useForecast();
+  const { opportunities, importOpportunities, archiveToGraveyard, reps, logFailedImport } = useForecast();
   const teamRepNameSet = useMemo(() => buildTeamRepNameSet(reps), [reps]);
 
   const existingById = useMemo(() => new Map(opportunities.map(o => [o.id, o])), [opportunities]);
@@ -149,15 +149,21 @@ export default function ImportReview({ incoming, fileName, onDone, onCancel, det
   }, [items, showUnchanged, showRemoved]);
 
   const handleApprove = () => {
-    // Import selected new/updated/unchanged
-    const toImport = items.filter(i => i.selected && i.changeType !== 'removed').map(i => i.opportunity);
-    if (toImport.length > 0) {
-      importOpportunities(toImport, fileName);
-    }
-    // Archive selected removed to graveyard (instead of hard delete)
-    const toRemove = items.filter(i => i.selected && i.changeType === 'removed');
-    for (const item of toRemove) {
-      archiveToGraveyard(item.opportunity.id, 'Removed from import file');
+    // Any throw between here and onDone() must leave a trace in the import log rather
+    // than dying silently, which is what the 20MB attempt on 2026-08-31 did.
+    try {
+      // Import selected new/updated/unchanged
+      const toImport = items.filter(i => i.selected && i.changeType !== 'removed').map(i => i.opportunity);
+      if (toImport.length > 0) {
+        importOpportunities(toImport, fileName);
+      }
+      // Archive selected removed to graveyard (instead of hard delete)
+      const toRemove = items.filter(i => i.selected && i.changeType === 'removed');
+      for (const item of toRemove) {
+        archiveToGraveyard(item.opportunity.id, 'Removed from import file');
+      }
+    } catch (err) {
+      logFailedImport(fileName, err);
     }
     onDone();
   };
