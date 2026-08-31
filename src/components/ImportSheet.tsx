@@ -15,6 +15,7 @@ interface ColumnMapping {
   name: string;
   repName: string;
   amount: string;
+  amountMonthly?: string;
   closeDate: string;
   stage: string;
   probability: string;
@@ -53,6 +54,11 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'rep': 'repName',
   'rep name': 'repName',
   'amount': 'amount',
+  // Salesforce "Amount (Monthly) (converted)" — sits between Amount and Close Date in the
+  // export. Matched on the normalized (lowercased, punctuation-stripped) header, so the
+  // exact casing and parenthesisation in the file do not matter.
+  'amount monthly converted': 'amountMonthly',
+  'amount monthly': 'amountMonthly',
   'close date': 'closeDate',
   'expected close date': 'closeDate',
   'stage': 'stage',
@@ -96,6 +102,16 @@ const DEFAULT_MAPPINGS: Record<string, keyof ColumnMapping> = {
   'description': 'description',
   'opportunity description': 'description',
 };
+
+/** Currency-ish cell → number, or null when the cell is absent/blank/unparseable. */
+function parseOptionalAmount(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return isFinite(raw) ? raw : null;
+  const cleaned = String(raw).replace(/USD\s*/i, '').replace(/[$,\s]/g, '').trim();
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  return isFinite(n) ? n : null;
+}
 
 function parseImportDate(raw: unknown): string {
   if (raw === null || raw === undefined || raw === '') return '';
@@ -314,6 +330,10 @@ export default function ImportSheet() {
             repId: '',
             repName: String(row[mapping.repName || ''] || 'Unassigned'),
             amount: parseFloat(row[mapping.amount || ''] || '0') || 0,
+            // null (not 0) when the column is absent or blank: "no quote has run" is a
+            // distinct state from "quoted at zero", and only null renders the neutral
+            // Unquoted badge instead of a mismatch flag.
+            amountMonthly: parseOptionalAmount(row[mapping.amountMonthly || '']),
             closeDate,
             stage: stageName,
             classification,

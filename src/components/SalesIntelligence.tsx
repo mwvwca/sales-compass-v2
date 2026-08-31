@@ -6,7 +6,8 @@ import { getStagePercentage } from '@/lib/utils';
 import { STALE_DAYS } from '@/lib/dealRisk';
 import { stageHistoryFor, daysSinceStageChange, compareStageStaleSignal, absentFromLatestImport } from '@/lib/stageStaleness';
 import { buildTeamRepNameSet, isTeamOwned } from '@/lib/repUtils';
-import { AlertTriangle, TrendingUp, TrendingDown, Target, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
+import { reconcileQuote, quoteDrift, formatDivisor, QUOTE_STATE_BADGE, type QuoteReconciliation } from '@/lib/quoteReconciliation';
+import { AlertTriangle, TrendingUp, TrendingDown, Target, ChevronDown, ChevronRight, Calendar, Scale } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface Props {
@@ -21,6 +22,19 @@ interface RiskFlag {
   repName: string;
   level: 'high' | 'medium' | 'low';
   reasons: string[];
+}
+
+/** One deal's Amount-vs-Monthly reconciliation, ready to render. */
+interface QuoteCheck {
+  oppId: string;
+  oppName: string;
+  repName: string;
+  /** Closed/rejected deals stay listed for data-quality reporting but are excluded from
+   *  every open-pipeline rollup and from risk scoring. */
+  resolved: boolean;
+  recon: QuoteReconciliation;
+  /** Which field moved last across import history, when observable. */
+  driftNote: string | null;
 }
 
 interface WinLossStat {
@@ -73,6 +87,55 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
   };
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  // Cents matter in the reconciliation panel — the agreement tolerance is $0.02, so a
+  // whole-dollar render would make a real disagreement look like a rounding artifact.
+  const fmtCents = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // ─── Amount vs Amount (Monthly) reconciliation ───
+  // Salesforce overwrites Amount with TCV on every quote build/re-run (a contract
+  // start-date edit is enough), and the AE must then manually reset Amount to ACV and
+  // manually update Monthly. A disagreement between Monthly × 12 and Amount therefore
+  // always means a manual step was skipped — but it does NOT say which field is wrong,
+  // so neither value is treated as authoritative anywhere below.
+  //
+  // Team-ownership is gated here, at render time, exactly like every other rep-facing
+  // signal: an off-roster owner generates no flag and no badge.
+  const quoteChecks = useMemo((): QuoteCheck[] => {
+    const out: QuoteCheck[] = [];
+    for (const opp of allOpps) {
+      if (!isTeamOwned(opp, teamRepNameSet)) continue;
+      const recon = reconcileQuote(opp);
+      if (recon.state === 'unknown') continue;
+      const drift = recon.state === 'quoted-mismatch' ? quoteDrift(stageHistoryFor(opp, snapshots)) : null;
+      out.push({
+        oppId: opp.id,
+        oppName: opp.name,
+        repName: opp.repName,
+        resolved: isResolved(opp),
+        recon,
+        driftNote: drift?.note ?? null,
+      });
+    }
+    return out;
+  }, [allOpps, snapshots, teamRepNameSet]);
+
+  // Mismatches only. Unquoted deals never appear here — a missing quote is a neutral
+  // state, not an error. Open deals first, then closed (kept for data-quality reporting).
+  const quoteMismatches = useMemo(
+    () => quoteChecks
+      .filter(c => c.recon.state === 'quoted-mismatch')
+      .sort((a, b) => Number(a.resolved) - Number(b.resolved)),
+    [quoteChecks],
+  );
+  /** Mismatch lookup for risk scoring — open deals only, so a closed deal scores nothing. */
+  const openMismatchById = useMemo(
+    () => new Map(quoteMismatches.filter(c => !c.resolved).map(c => [c.oppId, c])),
+    [quoteMismatches],
+  );
+  const unquotedCount = useMemo(
+    () => quoteChecks.filter(c => !c.resolved && c.recon.state === 'unquoted').length,
+    [quoteChecks],
+  );
 
   // ─── Deal Risk Scoring ───
   const riskFlags = useMemo((): RiskFlag[] => {
@@ -140,8 +203,23 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
         }
       }
 
+      // 6. Amount and Amount (Monthly) disagree — high severity in BOTH directions
+      // (Amount too high or too low), because either way a required manual step after a
+      // Salesforce re-quote was skipped and the deal's value is unreliable until an AE
+      // says which field is right. This loop already skipped resolved deals, so a closed
+      // deal never reaches risk scoring; it still appears in the reconciliation panel.
+      const mismatch = openMismatchById.get(opp.id);
+      if (mismatch) {
+        const { amount, amountMonthly, impliedDivisor } = mismatch.recon;
+        reasons.push(
+          `Amount (${fmt(amount ?? 0)}) and Monthly (${fmt(amountMonthly ?? 0)}) disagree` +
+          (impliedDivisor !== null ? ` — ${formatDivisor(impliedDivisor)}×, not 12×` : ''),
+        );
+      }
+
       if (reasons.length > 0) {
-        const level = reasons.length >= 3 ? 'high' : reasons.length >= 2 ? 'medium' : 'low';
+        // A quoted-mismatch is high severity on its own; other reasons still escalate by count.
+        const level = mismatch || reasons.length >= 3 ? 'high' : reasons.length >= 2 ? 'medium' : 'low';
         flags.push({ oppId: opp.id, oppName: opp.name, repName: opp.repName, level, reasons });
       }
     }
@@ -150,7 +228,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
       const order = { high: 0, medium: 1, low: 2 };
       return order[a.level] - order[b.level];
     });
-  }, [allOpps, snapshots, teamRepNameSet, latestImportDate]);
+  }, [allOpps, snapshots, teamRepNameSet, latestImportDate, openMismatchById]);
 
   // One-time visibility (whole book, team-owned only): old proxy vs new days-based rule and
   // overlap, plus how many stalled-firing deals the interim absence proxy relabels as
@@ -252,6 +330,14 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
       }
     }
 
+    // Amount/Monthly reconciliation — open deals only. Counted, never summed: the
+    // disagreement does not say which field is wrong, so there is no defensible dollar
+    // total to report and Monthly × 12 is never substituted for Amount.
+    const openMismatches = openMismatchById.size;
+    if (openMismatches > 0) {
+      recs.push({ type: 'warning', message: `${openMismatches} open deal(s) have Amount and Amount (Monthly) disagreeing. A manual step was skipped after a re-quote — have the AE confirm which field is right.` });
+    }
+
     // High risk deals
     const highRisk = riskFlags.filter(f => f.level === 'high');
     if (highRisk.length > 0) {
@@ -263,7 +349,7 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
     }
 
     return recs;
-  }, [allOpps, winLossStats, riskFlags]);
+  }, [allOpps, winLossStats, riskFlags, openMismatchById]);
 
   // ─── Close Date Prediction ───
   const closeDatePredictions = useMemo(() => {
@@ -393,6 +479,76 @@ export default function SalesIntelligence({ opportunities, selectedQuarter, sele
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Amount vs Amount (Monthly) reconciliation.
+            Both values are shown as disagreeing; neither is labelled correct, and
+            Monthly × 12 is displayed for comparison only — never used as an Amount. */}
+        {(quoteMismatches.length > 0 || unquotedCount > 0) && (
+          <div className="border border-border rounded-lg p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+              <Scale size={12} /> Amount / Monthly Reconciliation ({quoteMismatches.length})
+            </h4>
+
+            {quoteMismatches.length > 0 && (
+              <div className="space-y-2">
+                {quoteMismatches.map(c => {
+                  const { amount, amountMonthly, monthlyAnnualized, impliedDivisor, likelyCause } = c.recon;
+                  return (
+                    <div
+                      key={c.oppId}
+                      className={`px-3 py-2 rounded border text-xs ${
+                        c.resolved
+                          ? 'bg-secondary border-border text-muted-foreground'
+                          : 'text-negative bg-negative/10 border-negative/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-medium truncate">{c.oppName}</span>
+                        <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded shrink-0 ${QUOTE_STATE_BADGE['quoted-mismatch'].tone}`}>
+                          {QUOTE_STATE_BADGE['quoted-mismatch'].label}
+                        </span>
+                      </div>
+                      <div className="text-[11px] opacity-80 mb-1">{c.repName}</div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[11px]">
+                        <span>Amount {amount !== null ? fmtCents(amount) : '—'}</span>
+                        <span>Monthly {amountMonthly !== null ? fmtCents(amountMonthly) : '—'}</span>
+                        <span>Monthly × 12 {monthlyAnnualized !== null ? fmtCents(monthlyAnnualized) : '—'}</span>
+                        <span>divisor {impliedDivisor !== null ? `${formatDivisor(impliedDivisor)}×` : '—'}</span>
+                      </div>
+                      <div className="text-[11px] opacity-80 mt-1">
+                        These two values disagree; which one is correct is not determined here.
+                      </div>
+                      {likelyCause && (
+                        <div className="text-[11px] opacity-70 mt-0.5">Likely cause: {likelyCause}.</div>
+                      )}
+                      {c.driftNote && <div className="text-[11px] opacity-70 mt-0.5">{c.driftNote}</div>}
+                      {c.resolved && (
+                        <div className="text-[10px] uppercase tracking-wide mt-1 opacity-70">
+                          Closed — data quality only, excluded from pipeline and risk
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {unquotedCount > 0 && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-3">
+                <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${QUOTE_STATE_BADGE.unquoted.tone}`}>
+                  {QUOTE_STATE_BADGE.unquoted.label}
+                </span>
+                <span>{unquotedCount} open deal(s) have no Monthly value — no quote has run, so Amount is a registration-time estimate. Not an error.</span>
+              </div>
+            )}
+
+            <p className="text-[10px] text-muted-foreground mt-2">
+              Salesforce overwrites Amount with TCV on every quote build or re-run. The AE must
+              manually reset Amount to ACV and update Monthly; a disagreement means one of those
+              steps was skipped, not that either field is authoritative.
+            </p>
           </div>
         )}
 
