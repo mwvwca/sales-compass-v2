@@ -156,6 +156,15 @@ function cleanDealRegistrations(raw: unknown): DealRegistration[] {
   return arr.map((dr: any) => ({ ...dr, stageHistory: dr.stageHistory ?? [] }));
 }
 
+function cleanNewOwnerNotice(raw: unknown): NewOwnerNotice {
+  if (!raw || typeof raw !== 'object') return NO_NEW_OWNER_NOTICE;
+  const r = raw as Partial<NewOwnerNotice>;
+  return {
+    names: Array.isArray(r.names) ? r.names.filter(n => typeof n === 'string') : [],
+    detectedAt: typeof r.detectedAt === 'string' ? r.detectedAt : '',
+  };
+}
+
 /** Apply the slice-specific cleanup to a value hydrated from Supabase. */
 function normalizeHydratedField(field: string, value: unknown): unknown {
   switch (field) {
@@ -164,6 +173,9 @@ function normalizeHydratedField(field: string, value: unknown): unknown {
     case 'changelog': return cleanChangelog(value);
     case 'snapshots': return cleanSnapshots(value);
     case 'dealRegistrations': return cleanDealRegistrations(value);
+    // A legacy null (or a hydrated row written before this slice became non-nullable)
+    // must not re-enter state as null — that is what broke the batch upsert.
+    case 'newOwnerNotice': return cleanNewOwnerNotice(value);
     default: return value;
   }
 }
@@ -209,11 +221,17 @@ function pruneSnapshots(snapshots: OpportunitySnapshot[], limit: number): Opport
   return pruned;
 }
 
-/** Owner names an import added to the roster as 'not_team', awaiting user classification. */
+/** Owner names an import added to the roster as 'not_team', awaiting user classification.
+ *  Never null: an empty `names` array IS "no pending notice". Persisted slices must be
+ *  non-null because app_state.value is NOT NULL and one null row 400s the whole batch
+ *  upsert, breaking cloud sync for every other slice too. */
 export interface NewOwnerNotice {
   names: string[];
   detectedAt: string;
 }
+
+/** The "no pending notice" value. Used instead of null — see NewOwnerNotice. */
+export const NO_NEW_OWNER_NOTICE: NewOwnerNotice = { names: [], detectedAt: '' };
 
 interface ForecastState {
   reps: Rep[];
@@ -232,8 +250,9 @@ interface ForecastState {
   /** flagKey → ISO timestamp of when a one-time migration ran (account-following). */
   migrations: Record<string, string>;
   /** Owner names auto-added as 'not_team' by the most recent import, pending review.
-   *  null once dismissed. Persisted so it survives a reload. */
-  newOwnerNotice: NewOwnerNotice | null;
+   *  Empty `names` once dismissed — never null, see NewOwnerNotice. Persisted so it
+   *  survives a reload. */
+  newOwnerNotice: NewOwnerNotice;
 
 
   loading: boolean;
@@ -343,7 +362,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     managerQuotas: loadFromStorage<ManagerQuota[]>(STORAGE_KEYS.managerQuotas, []),
     weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
     migrations: loadFromStorage<Record<string, string>>(STORAGE_KEYS.migrations, {}),
-    newOwnerNotice: loadFromStorage<NewOwnerNotice | null>(STORAGE_KEYS.newOwnerNotice, null),
+    newOwnerNotice: loadFromStorage<NewOwnerNotice>(STORAGE_KEYS.newOwnerNotice, NO_NEW_OWNER_NOTICE) ?? NO_NEW_OWNER_NOTICE,
 
     loading: false,
   }));
@@ -667,20 +686,32 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     if (cloudWritable && userIdRef.current) {
       const userId = userIdRef.current;
       const rows: { user_id: string; key: string; value: Json }[] = [];
+      const sent: { storageKey: string; json: string }[] = [];
       for (const [field, storageKey] of Object.entries(STORAGE_KEYS)) {
         const value = (state as unknown as Record<string, unknown>)[field];
         const json = JSON.stringify(value);
-        if (lastSavedRef.current[storageKey] !== json) {
-          rows.push({ user_id: userId, key: storageKey, value: value as Json });
-          lastSavedRef.current[storageKey] = json;
+        if (lastSavedRef.current[storageKey] === json) continue;
+        // `app_state.value` is NOT NULL, and PostgREST maps a JS null to SQL NULL.
+        // One null row 400s the WHOLE batch upsert, taking every other slice's sync
+        // down with it — so a nullable slice must never reach the request. Slices are
+        // expected to be arrays/objects; this is a backstop, not the primary fix.
+        if (value === null || value === undefined) {
+          console.warn(`[Forecast] skipping cloud sync for "${storageKey}": value is ${value}. A persisted slice must never be null (app_state.value is NOT NULL).`);
+          continue;
         }
+        rows.push({ user_id: userId, key: storageKey, value: value as Json });
+        sent.push({ storageKey, json });
       }
       if (rows.length > 0) {
         supabase.from('app_state').upsert(rows, { onConflict: 'user_id,key' }).then(({ error }) => {
           if (error) {
             console.warn('[Forecast] cloud sync failed:', error.message);
             setCloudSyncError(new Date().toISOString());
+            // Leave the dirty-tracker untouched so these keys are re-sent on the next
+            // save. Marking them saved before the upsert resolved meant a failed sync
+            // was permanent: the key looked clean and never retried.
           } else {
+            for (const { storageKey, json } of sent) lastSavedRef.current[storageKey] = json;
             setCloudSyncError(null);
           }
         });
@@ -720,7 +751,7 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const dismissNewOwnerNotice = useCallback(() => {
-    setState(s => ({ ...s, newOwnerNotice: null }));
+    setState(s => ({ ...s, newOwnerNotice: NO_NEW_OWNER_NOTICE }));
   }, []);
 
   const deleteRep = useCallback((id: string) => {

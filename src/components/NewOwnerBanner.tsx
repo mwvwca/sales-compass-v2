@@ -11,7 +11,7 @@ import { UserPlus, X } from 'lucide-react';
  */
 export default function NewOwnerBanner() {
   const { newOwnerNotice, dismissNewOwnerNotice } = useForecast();
-  if (!newOwnerNotice || newOwnerNotice.names.length === 0) return null;
+  if (newOwnerNotice.names.length === 0) return null;
 
   const { names } = newOwnerNotice;
   const goToRoster = () => {
