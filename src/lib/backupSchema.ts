@@ -21,6 +21,7 @@ const opportunitySchema = z.object({
   repId: z.string(),
   repName: z.string().max(200),
   amount: z.number().finite().min(0),
+  amountMonthly: z.number().finite().nullable().optional(),
   closeDate: z.string(),
   stage: z.string().max(200),
   classification: classificationEnum,
@@ -180,6 +181,9 @@ const opportunitySnapshotSchema = z.object({
   importDate: z.string(),
   fileName: z.string().max(500),
   amount: z.number().finite(),
+  // Must be declared: this schema has no .passthrough(), so an undeclared key would be
+  // stripped on restore and the Amount-vs-Monthly drift history silently lost.
+  amountMonthly: z.number().finite().nullable().optional(),
   closeDate: z.string(),
   stage: z.string().max(200),
   classification: z.string().max(50),

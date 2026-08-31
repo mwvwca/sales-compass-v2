@@ -70,6 +70,13 @@ function snapshotSignature(s: OpportunitySnapshot): string {
   // amount / closeDate / stage / classification (forecast category) / repName (owner —
   // an ownership transfer is material) all stay: each is a genuine change. The snapshot
   // object still stores `name`; this only governs what counts as a change for de-dup.
+  //
+  // `amountMonthly` is excluded for the same reason as `name`: it is carried on the
+  // snapshot purely so the Amount-vs-Monthly reconciliation can see which field moved
+  // last. Including it would let a Monthly-only edit keep a snapshot that is otherwise
+  // redundant, re-inflating the per-record snapshot counts the rename fix healed (those
+  // counts feed the import-count staleness proxy). `amount` was already part of the
+  // signature and stays — an Amount change is a real change to the deal.
   return [s.amount, s.closeDate, s.stage, s.classification, s.repName].join('|');
 }
 

@@ -19,6 +19,11 @@ export interface Opportunity {
   repId: string;
   repName: string;
   amount: number;
+  /** Salesforce "Amount (Monthly) (converted)". null when the column is absent or blank —
+   *  a blank/zero value means no quote has ever run, so `amount` is a registration-time
+   *  estimate. Never substituted for `amount` in any display or total; see
+   *  lib/quoteReconciliation. */
+  amountMonthly?: number | null;
   closeDate: string;
   stage: string;
   classification: 'commit' | 'upside' | 'closed_won' | 'unclassified' | 'lost' | 'omitted' | 'rejected';
@@ -256,6 +261,10 @@ export interface OpportunitySnapshot {
   importDate: string;
   fileName: string;
   amount: number;
+  /** Salesforce "Amount (Monthly) (converted)" at this import. Optional because snapshots
+   *  written before this field existed do not carry it — `undefined` means "not observed",
+   *  which is distinct from an observed null/0. Deliberately NOT part of snapshotSignature. */
+  amountMonthly?: number | null;
   closeDate: string;
   stage: string;
   classification: string;

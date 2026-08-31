@@ -6,6 +6,8 @@ export interface ForecastRow {
   "Opportunity Name": string;
   "Opportunity Owner": string;
   Amount: string;
+  /** Salesforce "Amount (Monthly) (converted)"; "" when the export lacks the column. */
+  "Amount (Monthly)"?: string;
   "Close Date": string;
   Stage: string;
   Probability: string;
@@ -117,6 +119,23 @@ function findColumn(colMap: Record<string, number>, candidates: string[]): numbe
   })?.[1];
 }
 
+/**
+ * Exact (normalized) header lookup with NO substring fallback.
+ *
+ * `findColumn`'s fuzzy fallback is unsafe for the Monthly amount: its
+ * `normalizedCandidate.includes(key)` arm matches the plain "Amount" header against the
+ * candidate "amount monthly converted", so an export WITHOUT the Monthly column would
+ * silently resolve to the Amount column and every deal would read as quoted-clean.
+ */
+function findColumnExact(colMap: Record<string, number>, candidates: string[]): number | undefined {
+  const normalized = new Map(Object.entries(colMap).map(([header, index]) => [normalizeHeader(header), index]));
+  for (const candidate of candidates) {
+    const hit = normalized.get(normalizeHeader(candidate));
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
 export interface SkippedRow {
   rowNumber: number;
   rawValues: string[];
@@ -159,6 +178,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
   const oppNameCol = colMap["Opportunity Name"];
   const ownerCol = colMap["Opportunity Owner"];
   const amountCol = colMap["Amount"];
+  const amountMonthlyCol = findColumnExact(colMap, ["Amount (Monthly) (converted)", "Amount (Monthly)"]);
   const closeDateCol = colMap["Close Date"];
   const stageCol = colMap["Stage"];
   const forecastCategoryCol = colMap["Forecast Category"];
@@ -220,6 +240,7 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
       "Opportunity Name": String(row[oppNameCol] ?? "").trim(),
       "Opportunity Owner": String(row[ownerCol] ?? "").trim(),
       Amount: amountRaw,
+      "Amount (Monthly)": amountMonthlyCol !== undefined ? String(row[amountMonthlyCol] ?? "").trim() : "",
       "Close Date": excelDateToString(row[closeDateCol]),
       Stage: stage,
       Probability: probability,
@@ -238,13 +259,14 @@ export function transformOutputToForecast(workbook: XLSX.WorkBook): TransformRes
 
 export function createForecastWorkbook(rows: ForecastRow[], version: string): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows, {
-    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Close Date", "Stage", "Probability", "Forecast", "Upside", "Account Name", "Product", "Channel Account Manager", "Next Step", "Description"],
+    header: ["Opportunity ID", "Opportunity Name", "Opportunity Owner", "Amount", "Amount (Monthly)", "Close Date", "Stage", "Probability", "Forecast", "Upside", "Account Name", "Product", "Channel Account Manager", "Next Step", "Description"],
   });
 
   ws["!cols"] = [
     { wch: 20 },
     { wch: 55 },
     { wch: 20 },
+    { wch: 18 },
     { wch: 18 },
     { wch: 14 },
     { wch: 16 },

@@ -27,6 +27,14 @@ function forecastRowsToOpportunities(rows: ForecastRow[], fileName: string): Opp
       repId: '',
       repName: row["Opportunity Owner"] || 'Unassigned',
       amount: parseFloat(row.Amount?.replace(/[^0-9.-]/g, '') || '0') || 0,
+      // null, not 0, when the column is absent or blank — "no quote has run" must stay
+      // distinguishable from "quoted at zero" (see lib/quoteReconciliation).
+      amountMonthly: (() => {
+        const raw = row["Amount (Monthly)"]?.replace(/[^0-9.-]/g, '') ?? '';
+        if (!raw) return null;
+        const n = parseFloat(raw);
+        return isFinite(n) ? n : null;
+      })(),
       closeDate,
       stage: row.Stage || '',
       classification: isClosedWon ? 'closed_won' as const

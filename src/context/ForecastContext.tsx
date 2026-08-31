@@ -677,6 +677,12 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
           importDate,
           fileName,
           amount: o.amount,
+          // Snapshotted so the Amount-vs-Monthly reconciliation can tell which of the two
+          // fields moved last. Deliberately absent from snapshotSignature (see
+          // storageCompaction) — a Monthly-only change is a data-quality signal, not a
+          // change to the deal, so it must not resurrect otherwise-redundant snapshots.
+          // History accrues from this import forward; there is no retroactive backfill.
+          amountMonthly: o.amountMonthly ?? null,
           closeDate: o.closeDate,
           stage: o.stage,
           classification: existing ? existing.classification : o.classification,
@@ -747,6 +753,9 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
             closeDate: o.closeDate,
             stage: o.stage,
             amount: o.amount,
+            // Salesforce-sourced: always overwrite, including back to null when a later
+            // export drops the column or blanks the field.
+            amountMonthly: o.amountMonthly ?? null,
             accountName: o.accountName,
             productName: o.productName,
             channelAccountManager: o.channelAccountManager,

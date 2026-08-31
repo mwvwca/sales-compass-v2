@@ -26,6 +26,28 @@ function change(over: Partial<ChangeLogEntry> & { opportunityId: string; importD
 }
 
 describe('compactSnapshots', () => {
+  it('does not let a Monthly-only change inflate snapshot counts', () => {
+    // amountMonthly is carried on the snapshot but excluded from snapshotSignature, so a
+    // Monthly-only edit collapses exactly as an unchanged import does — no re-inflation of
+    // the per-record counts the rename fix healed.
+    const withMonthly = [
+      snap({ opportunityId: 'A', importDate: '2026-01-01', amountMonthly: 100 }),
+      snap({ opportunityId: 'A', importDate: '2026-01-08', amountMonthly: 999 }),
+      snap({ opportunityId: 'A', importDate: '2026-01-15', amountMonthly: 999 }),
+    ];
+    const withoutMonthly = withMonthly.map(({ amountMonthly, ...rest }) => rest);
+    expect(compactSnapshots(withMonthly)).toHaveLength(1);
+    expect(compactSnapshots(withMonthly)).toHaveLength(compactSnapshots(withoutMonthly).length);
+  });
+
+  it('still keeps a snapshot when Amount changes', () => {
+    const out = compactSnapshots([
+      snap({ opportunityId: 'A', importDate: '2026-01-01', amount: 1000, amountMonthly: 83.33 }),
+      snap({ opportunityId: 'A', importDate: '2026-01-08', amount: 3000, amountMonthly: 83.33 }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
   it('collapses consecutive identical snapshots for an opportunity', () => {
     const snaps = [
       snap({ opportunityId: 'A', importDate: '2026-01-01' }),
