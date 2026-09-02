@@ -30,6 +30,8 @@ import { applyIngestGate, buildKnownIdSet } from '@/lib/ingestGate';
 import { planWideImportPurge, applyWideImportPurge, purgeBreakdown, PURGE_MIN, PURGE_MAX } from '@/lib/wideImportPurge';
 import { cleanupOffTeamDrs, cleanupOffTeamOpps } from '@/lib/offTeamCleanup';
 import { compactForecastState, snapshotReductionByOpp } from '@/lib/storageCompaction';
+import { applyInvolvement, cleanInvolvement, type InvolvementEntry, type InvolvementMap } from '@/lib/involvement';
+import { cleanBriefingMeta, EMPTY_BRIEFING_META, type BriefingMeta } from '@/lib/bigDeals';
 
 const STORAGE_KEYS = {
   reps: 'forecast_reps',
@@ -45,6 +47,15 @@ const STORAGE_KEYS = {
   drBatches: 'forecast_dr_batches',
   managerQuotas: 'forecast_manager_quotas',
   weeklySnapshots: 'forecast_weekly_snapshots',
+  // Manager involvement per deal, keyed on Salesforce Opportunity ID. Deliberately its
+  // own slice: the import merge replaces every field on a stored opportunity from the
+  // incoming export, so involvement written onto the record would not survive Friday's
+  // import. Joined to the deal at render time. See lib/involvement.
+  involvement: 'forecast_involvement',
+  // Friday briefing state: last generation timestamp (the movement window), the cohort
+  // captured at that generation, the target/coverage settings and this period's rep
+  // commentary. See lib/bigDeals.
+  briefingMeta: 'forecast_briefing_meta',
   // Record of which one-time migrations have run, keyed by flag → ISO timestamp.
   // Persisted like every other slice (localStorage + Supabase app_state), so a
   // migration that ran on one device is not re-run on another device for the same
@@ -183,6 +194,10 @@ function normalizeHydratedField(field: string, value: unknown): unknown {
     // A legacy null (or a hydrated row written before this slice became non-nullable)
     // must not re-enter state as null — that is what broke the batch upsert.
     case 'newOwnerNotice': return cleanNewOwnerNotice(value);
+    // Object-shaped slices: a legacy null or a malformed value must never re-enter
+    // state as null — that is what breaks the batch upsert (app_state.value is NOT NULL).
+    case 'involvement': return cleanInvolvement(value);
+    case 'briefingMeta': return cleanBriefingMeta(value);
     default: return value;
   }
 }
@@ -260,6 +275,10 @@ interface ForecastState {
    *  Empty `names` once dismissed — never null, see NewOwnerNotice. Persisted so it
    *  survives a reload. */
   newOwnerNotice: NewOwnerNotice;
+  /** salesforceId → manager involvement on that deal. Empty object = nothing tracked. */
+  involvement: InvolvementMap;
+  /** Friday briefing state — window, captured cohort, settings, this period's rep notes. */
+  briefingMeta: BriefingMeta;
 
 
   loading: boolean;
@@ -320,6 +339,10 @@ interface ForecastContextValue extends ForecastState {
     weeklySnapshots?: WeeklySnapshot[];
   }) => void;
   captureWeeklySnapshot: () => WeeklySnapshot;
+  /** Set/patch manager involvement for one deal, keyed on its Salesforce id. */
+  setInvolvement: (salesforceId: string, patch: Partial<Pick<InvolvementEntry, 'status' | 'date' | 'note'>>) => void;
+  /** Patch the Friday briefing state (settings, window, captured cohort, rep notes). */
+  updateBriefingMeta: (patch: Partial<BriefingMeta>) => void;
 
 
   getOpportunityHistory: (opportunityId: string) => OpportunitySnapshot[];
@@ -373,6 +396,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     weeklySnapshots: loadFromStorage<WeeklySnapshot[]>(STORAGE_KEYS.weeklySnapshots, []),
     migrations: loadFromStorage<Record<string, string>>(STORAGE_KEYS.migrations, {}),
     newOwnerNotice: loadFromStorage<NewOwnerNotice>(STORAGE_KEYS.newOwnerNotice, NO_NEW_OWNER_NOTICE) ?? NO_NEW_OWNER_NOTICE,
+    involvement: cleanInvolvement(loadFromStorage<InvolvementMap>(STORAGE_KEYS.involvement, {})),
+    briefingMeta: cleanBriefingMeta(loadFromStorage<BriefingMeta>(STORAGE_KEYS.briefingMeta, EMPTY_BRIEFING_META)),
 
     loading: false,
   }));
@@ -729,6 +754,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     saveToStorage(STORAGE_KEYS.weeklySnapshots, state.weeklySnapshots);
     saveToStorage(STORAGE_KEYS.migrations, state.migrations);
     saveToStorage(STORAGE_KEYS.newOwnerNotice, state.newOwnerNotice);
+    saveToStorage(STORAGE_KEYS.involvement, state.involvement);
+    saveToStorage(STORAGE_KEYS.briefingMeta, state.briefingMeta);
 
 
     const sizeKB = getStorageSizeKB();
@@ -791,6 +818,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     state.weeklySnapshots,
     state.migrations,
     state.newOwnerNotice,
+    state.involvement,
+    state.briefingMeta,
   ]);
 
   const addRep = useCallback((rep: Rep) => {
@@ -1480,6 +1509,17 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
       .sort((a, b) => new Date(a.importDate).getTime() - new Date(b.importDate).getTime());
   }, [state.snapshots, state.opportunities]);
 
+  // Involvement is keyed on the Salesforce id and lives outside the opportunity record,
+  // so an import can never overwrite it (see lib/involvement).
+  const setInvolvement = useCallback((salesforceId: string, patch: Partial<Pick<InvolvementEntry, 'status' | 'date' | 'note'>>) => {
+    if (!salesforceId) return;
+    setState(s => ({ ...s, involvement: applyInvolvement(s.involvement, salesforceId, patch) }));
+  }, []);
+
+  const updateBriefingMeta = useCallback((patch: Partial<BriefingMeta>) => {
+    setState(s => ({ ...s, briefingMeta: { ...s.briefingMeta, ...patch } }));
+  }, []);
+
   const contextValue: ForecastContextValue = {
     ...state,
     cloudSyncError,
@@ -1514,6 +1554,8 @@ export function ForecastProvider({ children }: { children: React.ReactNode }) {
     setManagerQuota,
     getManagerQuota,
     captureWeeklySnapshot,
+    setInvolvement,
+    updateBriefingMeta,
     restoreFromBackup,
     getOpportunityHistory,
   };
