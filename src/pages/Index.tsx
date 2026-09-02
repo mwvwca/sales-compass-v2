@@ -19,19 +19,21 @@ import WeeklyBriefing, { PostImportBriefingBanner } from '@/components/WeeklyBri
 import RepScorecard from '@/components/RepScorecard';
 import DealRiskView from '@/components/DealRiskView';
 import DealView from '@/components/DealView';
+import BigDealsView from '@/components/BigDealsView';
 import { supabase } from '@/integrations/supabase/client';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search, Compass, MoreHorizontal, MoreVertical, Download, LogOut, Menu, ClipboardCheck } from 'lucide-react';
+import { BarChart3, Users, Upload, Skull, History, Layers, TrendingDown, Sparkles, AlertTriangle, Search, Compass, MoreHorizontal, MoreVertical, Download, LogOut, Menu, ClipboardCheck, Trophy } from 'lucide-react';
 
-type Tab = 'forecast' | 'goals' | 'scorecard' | 'deal-risk' | 'deal' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard' | 'inspection';
+type Tab = 'forecast' | 'goals' | 'scorecard' | 'big-deals' | 'deal-risk' | 'deal' | 'import' | 'lookback' | 'dr-pipeline' | 'dr-cleanup' | 'slips' | 'graveyard' | 'inspection';
 
 const TAB_META: Record<Tab, { label: string; icon: React.ReactNode }> = {
   forecast: { label: 'Forecast', icon: <BarChart3 size={14} /> },
   goals: { label: 'Goals', icon: <Users size={14} /> },
   scorecard: { label: '1:1s', icon: <Users size={14} /> },
+  'big-deals': { label: 'Big Deals', icon: <Trophy size={14} /> },
   'deal-risk': { label: 'Deal risk', icon: <AlertTriangle size={14} /> },
   'dr-pipeline': { label: 'DR Pipeline', icon: <Layers size={14} /> },
   'dr-cleanup': { label: 'Pipeline Cleanup', icon: <Sparkles size={14} /> },
@@ -46,7 +48,7 @@ const TAB_META: Record<Tab, { label: string; icon: React.ReactNode }> = {
 // Visible nav, in three groups separated by dividers; the rest live under "More".
 const VISIBLE_GROUPS: Tab[][] = [
   ['forecast', 'goals', 'scorecard'],
-  ['deal-risk', 'dr-pipeline', 'dr-cleanup'],
+  ['big-deals', 'deal-risk', 'dr-pipeline', 'dr-cleanup'],
   ['deal', 'import'],
 ];
 const OVERFLOW_TABS: Tab[] = ['inspection', 'lookback', 'slips', 'graveyard'];
@@ -293,6 +295,15 @@ const Index = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Per-rep attainment, forecast, pipeline health, at-risk deals and channel quality — for 1:1 prep.</p>
             </div>
             <RepScorecard />
+          </div>
+        )}
+        {tab === 'big-deals' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">Big Deals</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Every open deal closing this month at or above the threshold — where it stands, whether you're in it, and the Friday briefing built from it.</p>
+            </div>
+            <BigDealsView />
           </div>
         )}
         {tab === 'deal-risk' && (
